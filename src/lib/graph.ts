@@ -18,7 +18,6 @@ const FUNDING_FLOW_TYPES = new Set([
 
 const SPENDING_FLOW_TYPES = new Set(['school_expenditure']);
 
-const STATE_ID = 'state:cr';
 const MSMT_ID = 'msmt';
 export const TOP_SCHOOLS  = 30;
 export const TOP_FOUNDERS = 25;
