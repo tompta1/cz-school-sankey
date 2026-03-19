@@ -1,0 +1,32 @@
+{
+  "name": "cz-school-sankey-starter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview",
+    "etl:demo": "python3 etl/build_school_year.py --year 2025 --demo",
+    "etl:parse": "python3 etl/parse_msmt_xlsx.py --year 2025 --kraj Středočeský --top 25",
+    "etl:eu": "python3 etl/fetch_eu_grants.py --year 2025",
+    "etl:year": "python3 etl/build_school_year.py --year 2025",
+    "etl:full": "npm run etl:parse && npm run etl:eu && npm run etl:year"
+  },
+  "dependencies": {
+    "echarts": "^5.6.0",
+    "echarts-for-react": "^3.0.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
+  }
+}

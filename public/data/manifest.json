@@ -1,0 +1,17 @@
+{
+  "dataset": "cz-school-budget-sankey",
+  "years": [
+    {
+      "year": 2024,
+      "title": "School finance view 2024",
+      "file": "./data/sankey/2024.json",
+      "status": "pilot"
+    },
+    {
+      "year": 2025,
+      "title": "School finance view 2025",
+      "file": "./data/sankey/2025.json",
+      "status": "pilot"
+    }
+  ]
+}
