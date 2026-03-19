@@ -105,7 +105,6 @@ export function aggregateGraph(dataset: YearDataset): FilteredGraph {
   // EU: project_to_school flows, traced back to their programme via eu_project_support
   const projectToProgramme = new Map<string, string>();
   const euProgrammeToRegion = new Map<string, number>(); // key: `${progId}|${rid}`
-  let stateToMsmtAmount = 0;
 
   for (const link of dataset.links) {
     if (link.flowType === 'eu_project_support') {
@@ -114,9 +113,7 @@ export function aggregateGraph(dataset: YearDataset): FilteredGraph {
   }
 
   for (const link of dataset.links) {
-    if (link.flowType === 'state_to_ministry') {
-      stateToMsmtAmount += link.amountCzk;
-    } else if (link.flowType === 'direct_school_finance') {
+    if (link.flowType === 'direct_school_finance') {
       const rid = schoolToRegion.get(link.target);
       if (rid) msmtToRegion.set(rid, (msmtToRegion.get(rid) ?? 0) + link.amountCzk);
     } else if (link.flowType === 'school_expenditure') {
@@ -137,9 +134,6 @@ export function aggregateGraph(dataset: YearDataset): FilteredGraph {
 
   const syntheticLinks: SankeyLink[] = [];
 
-  if (stateToMsmtAmount > 0) {
-    syntheticLinks.push(syntheticLink(STATE_ID, MSMT_ID, stateToMsmtAmount, 'state_to_ministry', dataset.year));
-  }
   for (const [rid, amount] of msmtToRegion) {
     syntheticLinks.push(syntheticLink(MSMT_ID, rid, amount, 'direct_school_finance', dataset.year));
   }
@@ -189,15 +183,12 @@ export function drillRegion(dataset: YearDataset, regionName: string, offset = 0
   const founderToBucket = new Map<string, number>();
   const euProgrammeToFounder = new Map<string, number>();
   const projectToProgramme = new Map<string, string>();
-  let stateToMsmtAmount = 0;
 
   for (const link of dataset.links) {
     if (link.flowType === 'eu_project_support') projectToProgramme.set(link.target, link.source);
   }
   for (const link of dataset.links) {
-    if (link.flowType === 'state_to_ministry') {
-      stateToMsmtAmount += link.amountCzk;
-    } else if (link.flowType === 'direct_school_finance' && schoolsInRegion.has(link.target)) {
+    if (link.flowType === 'direct_school_finance' && schoolsInRegion.has(link.target)) {
       const fid = schoolToFounder.get(link.target);
       if (fid) msmtToFounder.set(fid, (msmtToFounder.get(fid) ?? 0) + link.amountCzk);
     } else if (link.flowType === 'school_expenditure' && schoolsInRegion.has(link.source)) {
@@ -224,8 +215,6 @@ export function drillRegion(dataset: YearDataset, regionName: string, offset = 0
   }
 
   const syntheticLinks: SankeyLink[] = [];
-  if (stateToMsmtAmount > 0)
-    syntheticLinks.push(syntheticLink(STATE_ID, MSMT_ID, stateToMsmtAmount, 'state_to_ministry', dataset.year));
 
   for (const [fid, amount] of msmtToFounder) {
     const target = bucket(fid);

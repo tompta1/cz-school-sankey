@@ -123,9 +123,9 @@ describe('filterGraph', () => {
 // ── aggregateGraph ────────────────────────────────────────────────────────────
 
 describe('aggregateGraph', () => {
-  it('preserves the state→MŠMT link', () => {
-    const l = aggregateGraph(dataset).links.find((l) => l.source === 'state:cr');
-    expect(l?.amountCzk).toBe(1_000_000);
+  it('starts at MŠMT — no state→MŠMT link emitted', () => {
+    const links = aggregateGraph(dataset).links;
+    expect(links.find((l) => l.source === 'state:cr')).toBeUndefined();
   });
 
   it('creates one MŠMT→region node per geographic region', () => {
