@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SankeyChartCard } from './components/SankeyChartCard';
-import { aggregateGraph, drillIntoNode } from './lib/graph';
+import { aggregateGraph, drillIntoNode, PREV_WINDOW_ID, NEXT_WINDOW_ID, TOP_SCHOOLS } from './lib/graph';
 import { formatCompactCzk } from './lib/format';
 import type { DrilldownEntry, HoverInfo, InstitutionSummary, Manifest, YearDataset } from './types';
 
@@ -66,17 +66,19 @@ export default function App() {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, []);
 
-  const currentNodeId = drilldownStack.at(-1)?.nodeId ?? null;
+  const currentEntry  = drilldownStack.at(-1);
+  const currentNodeId = currentEntry?.nodeId ?? null;
+  const currentOffset = currentEntry?.offset ?? 0;
 
   const graph = useMemo(() => {
     if (!dataset) return null;
-    return currentNodeId ? drillIntoNode(dataset, currentNodeId) : aggregateGraph(dataset);
-  }, [dataset, currentNodeId]);
+    return currentNodeId ? drillIntoNode(dataset, currentNodeId, currentOffset) : aggregateGraph(dataset);
+  }, [dataset, currentNodeId, currentOffset]);
 
   const prevGraph = useMemo(() => {
     if (!prevDataset) return null;
-    return currentNodeId ? drillIntoNode(prevDataset, currentNodeId) : aggregateGraph(prevDataset);
-  }, [prevDataset, currentNodeId]);
+    return currentNodeId ? drillIntoNode(prevDataset, currentNodeId, currentOffset) : aggregateGraph(prevDataset);
+  }, [prevDataset, currentNodeId, currentOffset]);
 
   const searchResults = useMemo<InstitutionSummary[]>(() => {
     if (!dataset || searchQuery.trim().length < 2) return [];
@@ -91,6 +93,16 @@ export default function App() {
   }, [dataset, searchQuery]);
 
   function handleNodeClick(nodeId: string) {
+    if (nodeId === PREV_WINDOW_ID || nodeId === NEXT_WINDOW_ID) {
+      setDrilldownStack((prev) => {
+        const last = prev.at(-1);
+        if (!last) return prev;
+        const PAGE = nodeId === PREV_WINDOW_ID ? -TOP_SCHOOLS : TOP_SCHOOLS;
+        const newOffset = Math.max(0, (last.offset ?? 0) + PAGE);
+        return [...prev.slice(0, -1), { ...last, offset: newOffset }];
+      });
+      return;
+    }
     if (nodeId.startsWith('synthetic:')) return;
     const node = graph?.nodes.find((n) => n.id === nodeId) ?? dataset?.nodes.find((n) => n.id === nodeId);
     if (!node || node.category === 'state' || node.category === 'ministry') return;

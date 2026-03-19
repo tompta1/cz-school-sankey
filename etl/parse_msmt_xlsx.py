@@ -58,6 +58,23 @@ KRAJ_ICOS: frozenset[str] = frozenset({
     "70890749",  # Kraj Vysočina
 })
 
+KRAJ_NAME_TO_ICO: dict[str, str] = {
+    "Praha":           "00064581",
+    "Středočeský":     "70891095",
+    "Jihočeský":       "70890650",
+    "Plzeňský":        "70890366",
+    "Karlovarský":     "70891168",
+    "Ústecký":         "70892156",
+    "Liberecký":       "70891508",
+    "Královéhradecký": "70889546",
+    "Pardubický":      "71004741",
+    "Olomoucký":       "60609460",
+    "Moravskoslezský": "70890692",
+    "Jihomoravský":    "70888337",
+    "Zlínský":         "70891320",
+    "Vysočina":        "70890749",
+}
+
 KRAJ_NAMES: dict[str, str] = {
     "00064581": "Hlavní město Praha",
     "70891095": "Středočeský kraj",
@@ -115,7 +132,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--xlsx", default=None,
                         help="Path to the MŠMT XLSX file. "
                              "Defaults to etl/data/raw/<year>/msmt_<year>_raw.xlsx")
+    parser.add_argument("--founder-lookup", default=None,
+                        help="Path to a school_entities.csv from another year to use as "
+                             "founder fallback when ICO_ZRIZ column is absent (e.g. 2024 XLSX).")
     return parser.parse_args()
+
+
+def load_founder_lookup(csv_path: str) -> dict[str, dict]:
+    """Load ico -> {founder_ico, founder_name, founder_type} from a school_entities.csv."""
+    lookup: dict[str, dict] = {}
+    with open(csv_path, newline="", encoding="utf-8-sig") as fh:
+        for row in csv.DictReader(fh):
+            ico = row.get("ico", "").strip()
+            founder_id = row.get("founder_id", "").strip()
+            founder_ico = founder_id.removeprefix("founder:").strip()
+            if ico and founder_ico:
+                lookup[ico] = {
+                    "founder_ico": founder_ico,
+                    "founder_name": row.get("founder_name", ""),
+                    "founder_type": row.get("founder_type", "obec"),
+                }
+    return lookup
 
 
 def load_rows(xlsx_path: Path, year: int) -> list[dict[str, object]]:
@@ -139,7 +176,7 @@ def load_rows(xlsx_path: Path, year: int) -> list[dict[str, object]]:
     return records
 
 
-def build_csvs(records: list[dict], year: int, kraj_filter: str | None, top_n: int) -> tuple[list[dict], list[dict]]:
+def build_csvs(records: list[dict], year: int, kraj_filter: str | None, top_n: int, founder_lookup: dict[str, dict] | None = None) -> tuple[list[dict], list[dict]]:
     if kraj_filter:
         records = [r for r in records if (r.get("KRAJ") or "").startswith(kraj_filter)]
 
@@ -157,6 +194,17 @@ def build_csvs(records: list[dict], year: int, kraj_filter: str | None, top_n: i
         if not ico:
             continue
 
+        # 2025+ XLSX has ICO_ZRIZ; 2024 and earlier only have a ZRIZ type code
+        # (2 = obec/kraj ÚSC, 7 = kraj-funded school — not just Praha).
+        # Resolve via external lookup first, then KRAJ-name fallback for ZRIZ=7.
+        if not ico_zriz:
+            zriz_code = r.get("ZRIZ")
+            if founder_lookup and ico in founder_lookup:
+                ico_zriz = founder_lookup[ico]["founder_ico"]
+            elif zriz_code == 7:
+                # Kraj-funded but not in lookup: derive founder from region name
+                kraj_name = (r.get("KRAJ") or "").strip()
+                ico_zriz = KRAJ_NAME_TO_ICO.get(kraj_name, "")
         founder_type = "kraj" if ico_zriz in KRAJ_ICOS else "obec"
         founder_name = KRAJ_NAMES.get(ico_zriz) or f"Zřizovatel IČO {ico_zriz}"
         founder_id = f"founder:{ico_zriz}"
@@ -245,7 +293,10 @@ def main() -> None:
     records = load_rows(xlsx_path, year)
     print(f"  {len(records)} school entities loaded")
 
-    entities, allocations = build_csvs(records, year, args.kraj, args.top)
+    founder_lookup = load_founder_lookup(args.founder_lookup) if args.founder_lookup else None
+    if founder_lookup:
+        print(f"  Loaded founder lookup with {len(founder_lookup)} entries from {args.founder_lookup}")
+    entities, allocations = build_csvs(records, year, args.kraj, args.top, founder_lookup)
     print(f"  After filter/top: {len(entities)} schools")
 
     out_dir = RAW_ROOT / str(year)

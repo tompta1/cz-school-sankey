@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateGraph, drillFounder, drillIntoNode, drillRegion, filterGraph } from '../graph';
+import { aggregateGraph, drillFounder, drillIntoNode, drillRegion, filterGraph, NEXT_WINDOW_ID, PREV_WINDOW_ID } from '../graph';
 import type { InstitutionSummary, SankeyLink, SankeyNode, YearDataset } from '../../types';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -214,7 +214,7 @@ describe('drillRegion', () => {
     };
     const g = drillRegion(manyDataset, 'Středočeský');
     const ids = new Set(g.nodes.map((n) => n.id));
-    expect(ids.has('synthetic:others')).toBe(true);
+    expect(ids.has('synthetic:next-window')).toBe(true);
   });
 });
 
@@ -376,8 +376,8 @@ describe('drillFounder', () => {
     const g = drillFounder(bigDataset, 'Big Obec');
     const nodeIds = new Set(g.nodes.map((n) => n.id));
 
-    // Ostatní školy node must be present
-    expect(nodeIds.has('synthetic:other-schools')).toBe(true);
+    // next-window node must be present when schools exceed TOP_SCHOOLS
+    expect(nodeIds.has('synthetic:next-window')).toBe(true);
     // No more than TOP_SCHOOLS (30) individual school nodes
     const schoolCount = g.nodes.filter((n) => n.category === 'school_entity').length;
     expect(schoolCount).toBeLessThanOrEqual(30);
@@ -415,9 +415,219 @@ describe('drillFounder', () => {
     };
 
     const g = drillFounder(ds, 'Obec X');
-    // The 31st school (sc30, amount 10_000) must be in Ostatní
-    const othersLink = g.links.find((l) => l.source === 'synthetic:other-schools');
-    expect(othersLink).toBeDefined();
-    expect(othersLink!.amountCzk).toBe(8_000); // spending link for sc30
+    // The 31st school (lowest rank) must be aggregated into next-window
+    const nextLinks = g.links.filter((l) => l.source === 'synthetic:next-window');
+    expect(nextLinks.length).toBeGreaterThan(0);
+    // spending total for the 31st school: (31-30)*8_000 = 8_000
+    const spendingLink = nextLinks.find((l) => l.target === 'bucket:wages');
+    expect(spendingLink).toBeDefined();
+    expect(spendingLink!.amountCzk).toBe(8_000);
+  });
+});
+
+// ── EU flow tests ─────────────────────────────────────────────────────────────
+
+// Shared EU fixture: one EU programme with one project → school:s1
+const euNodes: SankeyNode[] = [
+  ...nodes,
+  { id: 'eu_prog:OPZ', name: 'OP Zaměstnanost', category: 'eu_programme', level: 0 },
+  { id: 'eu_proj:P1',  name: 'Project 1',       category: 'eu_project',   level: 1 },
+];
+const euLinks: SankeyLink[] = [
+  ...links,
+  link('eu_prog:OPZ', 'eu_proj:P1',  50_000, 'eu_project_support'),
+  link('eu_proj:P1',  'school:s1',   50_000, 'project_to_school', { institutionId: 'school:s1' }),
+];
+const euDataset: YearDataset = {
+  year: 2025, currency: 'CZK', title: 'EU test',
+  nodes: euNodes, links: euLinks, institutions, sources: [],
+};
+
+describe('EU flows — aggregateGraph', () => {
+  it('produces an eu_project_support link from the programme to the region', () => {
+    const g = aggregateGraph(euDataset);
+    const euLink = g.links.find(
+      (l) => l.source === 'eu_prog:OPZ' && l.target === 'region:Středočeský'
+    );
+    expect(euLink).toBeDefined();
+    expect(euLink!.amountCzk).toBe(50_000);
+  });
+
+  it('does not include the raw project node in the aggregate view', () => {
+    const ids = aggregateGraph(euDataset).nodes.map((n) => n.id);
+    expect(ids).not.toContain('eu_proj:P1');
+  });
+
+  it('includes the EU programme node in the aggregate view', () => {
+    const ids = aggregateGraph(euDataset).nodes.map((n) => n.id);
+    expect(ids).toContain('eu_prog:OPZ');
+  });
+});
+
+describe('EU flows — drillRegion', () => {
+  it('produces an eu_project_support link from programme to the founder', () => {
+    const g = drillRegion(euDataset, 'Středočeský');
+    const euLink = g.links.find(
+      (l) => l.source === 'eu_prog:OPZ' && l.target === 'founder:muni1'
+    );
+    expect(euLink).toBeDefined();
+    expect(euLink!.amountCzk).toBe(50_000);
+  });
+
+  it('does not include raw project nodes at region drill level', () => {
+    const ids = drillRegion(euDataset, 'Středočeský').nodes.map((n) => n.id);
+    expect(ids).not.toContain('eu_proj:P1');
+  });
+});
+
+describe('EU flows — drillFounder', () => {
+  it('produces an eu_project_support link from programme directly to the school', () => {
+    const g = drillFounder(euDataset, 'Municipality A');
+    const euLink = g.links.find(
+      (l) => l.source === 'eu_prog:OPZ' && l.target === 'school:s1'
+    );
+    expect(euLink).toBeDefined();
+    expect(euLink!.amountCzk).toBe(50_000);
+  });
+
+  it('does not include raw project nodes at founder drill level', () => {
+    const ids = drillFounder(euDataset, 'Municipality A').nodes.map((n) => n.id);
+    expect(ids).not.toContain('eu_proj:P1');
+  });
+
+  it('EU school with no other links still appears when in window', () => {
+    const g = drillFounder(euDataset, 'Municipality A');
+    const ids = new Set([...g.links.map((l) => l.source), ...g.links.map((l) => l.target)]);
+    expect(ids.has('school:s1')).toBe(true);
+  });
+});
+
+// ── sliding window navigation tests ──────────────────────────────────────────
+
+function makeWindowDataset(numSchools: number, founderName = 'Big Obec'): YearDataset {
+  const schoolNodes: SankeyNode[] = Array.from({ length: numSchools }, (_, i) => ({
+    id: `school:w${i}`, name: `School W${i}`, category: 'school_entity' as const, level: 2,
+  }));
+  const inst: InstitutionSummary[] = Array.from({ length: numSchools }, (_, i) => ({
+    id: `school:w${i}`, name: `School W${i}`, founderName, region: 'Jihomoravský',
+  }));
+  const ls: SankeyLink[] = [
+    ...Array.from({ length: numSchools }, (_, i) =>
+      link('msmt', `school:w${i}`, (numSchools - i) * 10_000, 'direct_school_finance', { institutionId: `school:w${i}` })
+    ),
+    ...Array.from({ length: numSchools }, (_, i) =>
+      link(`school:w${i}`, 'bucket:wages', (numSchools - i) * 8_000, 'school_expenditure', { institutionId: `school:w${i}` })
+    ),
+  ];
+  return {
+    year: 2025, currency: 'CZK', title: 'Window test', sources: [],
+    nodes: [
+      { id: 'msmt', name: 'MŠMT', category: 'ministry', level: 1 },
+      { id: 'bucket:wages', name: 'Wages', category: 'cost_bucket', level: 3 },
+      ...schoolNodes,
+    ],
+    links: ls, institutions: inst,
+  };
+}
+
+describe('sliding window — drillFounder', () => {
+  const ds = makeWindowDataset(65); // 65 schools, TOP_SCHOOLS=30
+
+  it('offset=0: next-window present, prev-window absent', () => {
+    const g = drillFounder(ds, 'Big Obec', 0);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect(ids.has(NEXT_WINDOW_ID)).toBe(true);
+    expect(ids.has(PREV_WINDOW_ID)).toBe(false);
+  });
+
+  it('offset=30: both prev-window and next-window present', () => {
+    const g = drillFounder(ds, 'Big Obec', 30);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect(ids.has(PREV_WINDOW_ID)).toBe(true);
+    expect(ids.has(NEXT_WINDOW_ID)).toBe(true);
+  });
+
+  it('offset=60: prev-window present, next-window absent (only 5 left)', () => {
+    const g = drillFounder(ds, 'Big Obec', 60);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect(ids.has(PREV_WINDOW_ID)).toBe(true);
+    expect(ids.has(NEXT_WINDOW_ID)).toBe(false);
+  });
+
+  it('window school count does not exceed TOP_SCHOOLS for any offset', () => {
+    for (const offset of [0, 10, 30, 60]) {
+      const g = drillFounder(ds, 'Big Obec', offset);
+      const count = g.nodes.filter((n) => n.category === 'school_entity').length;
+      expect(count).toBeLessThanOrEqual(30);
+    }
+  });
+
+  it('different offsets show different school windows (no overlap)', () => {
+    const g0 = drillFounder(ds, 'Big Obec', 0);
+    const g30 = drillFounder(ds, 'Big Obec', 30);
+    const schools0 = new Set(g0.nodes.filter((n) => n.category === 'school_entity').map((n) => n.id));
+    const schools30 = new Set(g30.nodes.filter((n) => n.category === 'school_entity').map((n) => n.id));
+    const overlap = [...schools0].filter((id) => schools30.has(id));
+    expect(overlap).toHaveLength(0);
+  });
+
+  it('prev-window node name contains correct count', () => {
+    const g = drillFounder(ds, 'Big Obec', 30);
+    const prevNode = g.nodes.find((n) => n.id === PREV_WINDOW_ID);
+    expect(prevNode?.name).toContain('30');
+  });
+});
+
+describe('sliding window — drillRegion', () => {
+  // Build a region dataset with 30 founders (26 > TOP_FOUNDERS=25)
+  const numFounders = 30;
+  const regionNodes: SankeyNode[] = [
+    { id: 'state:cr', name: 'State budget', category: 'state', level: 0 },
+    { id: 'msmt', name: 'MŠMT', category: 'ministry', level: 1 },
+    { id: 'bucket:wages', name: 'Wages', category: 'cost_bucket', level: 3 },
+    ...Array.from({ length: numFounders }, (_, i) => ({
+      id: `founder:rf${i}`, name: `Founder RF${i}`, category: 'municipality' as const, level: 1,
+    })),
+    ...Array.from({ length: numFounders }, (_, i) => ({
+      id: `school:rs${i}`, name: `School RS${i}`, category: 'school_entity' as const, level: 2,
+    })),
+  ];
+  const regionInst: InstitutionSummary[] = Array.from({ length: numFounders }, (_, i) => ({
+    id: `school:rs${i}`, name: `School RS${i}`,
+    founderName: `Founder RF${i}`, region: 'Plzeňský',
+  }));
+  const regionLinks: SankeyLink[] = [
+    link('state:cr', 'msmt', 3_000_000, 'state_to_ministry'),
+    ...Array.from({ length: numFounders }, (_, i) =>
+      link('msmt', `school:rs${i}`, (numFounders - i) * 10_000, 'direct_school_finance', { institutionId: `school:rs${i}` })
+    ),
+    ...Array.from({ length: numFounders }, (_, i) =>
+      link(`school:rs${i}`, 'bucket:wages', (numFounders - i) * 8_000, 'school_expenditure', { institutionId: `school:rs${i}` })
+    ),
+  ];
+  const regionDs: YearDataset = {
+    year: 2025, currency: 'CZK', title: 'Region window test', sources: [],
+    nodes: regionNodes, links: regionLinks, institutions: regionInst,
+  };
+
+  it('offset=0: next-window present for founders exceeding TOP_FOUNDERS', () => {
+    const g = drillRegion(regionDs, 'Plzeňský', 0);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect(ids.has(NEXT_WINDOW_ID)).toBe(true);
+    expect(ids.has(PREV_WINDOW_ID)).toBe(false);
+  });
+
+  it('offset=25: prev-window present', () => {
+    const g = drillRegion(regionDs, 'Plzeňský', 25);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect(ids.has(PREV_WINDOW_ID)).toBe(true);
+  });
+
+  it('window contains at most TOP_FOUNDERS individual founders', () => {
+    const g = drillRegion(regionDs, 'Plzeňský', 0);
+    const founderCount = g.nodes.filter(
+      (n) => n.category === 'municipality' || n.category === 'region'
+    ).length;
+    expect(founderCount).toBeLessThanOrEqual(25);
   });
 });

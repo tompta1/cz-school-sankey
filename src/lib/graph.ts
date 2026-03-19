@@ -20,7 +20,17 @@ const SPENDING_FLOW_TYPES = new Set(['school_expenditure']);
 
 const STATE_ID = 'state:cr';
 const MSMT_ID = 'msmt';
-const TOP_FOUNDERS = 25;
+export const TOP_SCHOOLS  = 30;
+export const TOP_FOUNDERS = 25;
+export const PREV_WINDOW_ID = 'synthetic:prev-window';
+export const NEXT_WINDOW_ID = 'synthetic:next-window';
+
+function prevWindowNode(count: number, label: string): SankeyNode {
+  return { id: PREV_WINDOW_ID, name: `↑ ${count} more ${label}`, category: 'other', level: 2 };
+}
+function nextWindowNode(count: number, label: string): SankeyNode {
+  return { id: NEXT_WINDOW_ID, name: `↓ ${count} more ${label}`, category: 'other', level: 2 };
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -157,42 +167,33 @@ export function aggregateGraph(dataset: YearDataset): FilteredGraph {
 }
 
 // ── drillRegion ───────────────────────────────────────────────────────────────
-// Second level: MŠMT → top N founders in a region → Cost buckets
-// Founders beyond TOP_FOUNDERS are collapsed into "Ostatní".
+// Second level: MŠMT → windowed founders in a region → Cost buckets
 
-const OTHERS_ID = 'synthetic:others';
-const OTHERS_NODE: SankeyNode = { id: OTHERS_ID, name: 'Ostatní zřizovatelé', category: 'other', level: 1 };
-
-const TOP_SCHOOLS = 30;
-const OTHERS_SCHOOLS_ID = 'synthetic:other-schools';
-const OTHERS_SCHOOLS_NODE: SankeyNode = { id: OTHERS_SCHOOLS_ID, name: 'Ostatní školy', category: 'other', level: 2 };
-
-export function drillRegion(dataset: YearDataset, regionName: string): FilteredGraph {
+export function drillRegion(dataset: YearDataset, regionName: string, offset = 0): FilteredGraph {
   const schoolsInRegion = new Set(
     dataset.institutions.filter((i) => i.region === regionName).map((i) => i.id)
   );
 
-  // Build founder lookup from dataset nodes
   const founderById = new Map(dataset.nodes
     .filter((n) => n.category === 'municipality' || n.category === 'region')
     .map((n) => [n.id, n]));
 
-  // Map institutionId → founderId
   const schoolToFounder = new Map<string, string>();
-  const founderNameMap = new Map<string, string>();
   for (const inst of dataset.institutions) {
     if (!schoolsInRegion.has(inst.id)) continue;
     const founderNode = [...founderById.values()].find((n) => n.name === inst.founderName);
-    if (founderNode) {
-      schoolToFounder.set(inst.id, founderNode.id);
-      founderNameMap.set(founderNode.id, founderNode.name);
-    }
+    if (founderNode) schoolToFounder.set(inst.id, founderNode.id);
   }
 
   const msmtToFounder = new Map<string, number>();
   const founderToBucket = new Map<string, number>();
+  const euProgrammeToFounder = new Map<string, number>();
+  const projectToProgramme = new Map<string, string>();
   let stateToMsmtAmount = 0;
 
+  for (const link of dataset.links) {
+    if (link.flowType === 'eu_project_support') projectToProgramme.set(link.target, link.source);
+  }
   for (const link of dataset.links) {
     if (link.flowType === 'state_to_ministry') {
       stateToMsmtAmount += link.amountCzk;
@@ -201,54 +202,57 @@ export function drillRegion(dataset: YearDataset, regionName: string): FilteredG
       if (fid) msmtToFounder.set(fid, (msmtToFounder.get(fid) ?? 0) + link.amountCzk);
     } else if (link.flowType === 'school_expenditure' && schoolsInRegion.has(link.source)) {
       const fid = schoolToFounder.get(link.source);
-      if (fid) {
-        const key = `${fid}|${link.target}`;
-        founderToBucket.set(key, (founderToBucket.get(key) ?? 0) + link.amountCzk);
-      }
+      if (fid) founderToBucket.set(`${fid}|${link.target}`, (founderToBucket.get(`${fid}|${link.target}`) ?? 0) + link.amountCzk);
+    } else if (link.flowType === 'project_to_school' && schoolsInRegion.has(link.target)) {
+      const fid = schoolToFounder.get(link.target);
+      const progId = projectToProgramme.get(link.source);
+      if (fid && progId) euProgrammeToFounder.set(`${progId}|${fid}`, (euProgrammeToFounder.get(`${progId}|${fid}`) ?? 0) + link.amountCzk);
     }
   }
 
-  // Sort founders by MŠMT inflow, split into top N and others
   const sorted = [...msmtToFounder.entries()].sort((a, b) => b[1] - a[1]);
-  const topIds = new Set(sorted.slice(0, TOP_FOUNDERS).map(([id]) => id));
-  const hasOthers = sorted.length > TOP_FOUNDERS;
+  const windowIds = new Set(sorted.slice(offset, offset + TOP_FOUNDERS).map(([id]) => id));
+  const prevIds   = new Set(sorted.slice(0, offset).map(([id]) => id));
+  const nextIds   = new Set(sorted.slice(offset + TOP_FOUNDERS).map(([id]) => id));
+  const prevCount = prevIds.size;
+  const nextCount = nextIds.size;
+
+  function bucket(fid: string): string {
+    if (windowIds.has(fid)) return fid;
+    if (prevIds.has(fid))   return PREV_WINDOW_ID;
+    return NEXT_WINDOW_ID;
+  }
 
   const syntheticLinks: SankeyLink[] = [];
-
-  if (stateToMsmtAmount > 0) {
+  if (stateToMsmtAmount > 0)
     syntheticLinks.push(syntheticLink(STATE_ID, MSMT_ID, stateToMsmtAmount, 'state_to_ministry', dataset.year));
-  }
 
-  let othersInflow = 0;
   for (const [fid, amount] of msmtToFounder) {
-    if (topIds.has(fid)) {
-      syntheticLinks.push(syntheticLink(MSMT_ID, fid, amount, 'direct_school_finance', dataset.year));
-    } else {
-      othersInflow += amount;
-    }
+    const target = bucket(fid);
+    if (target === PREV_WINDOW_ID && !prevCount) continue;
+    if (target === NEXT_WINDOW_ID && !nextCount) continue;
+    syntheticLinks.push(syntheticLink(MSMT_ID, target, amount, 'direct_school_finance', dataset.year));
   }
-  if (hasOthers && othersInflow > 0) {
-    syntheticLinks.push(syntheticLink(MSMT_ID, OTHERS_ID, othersInflow, 'direct_school_finance', dataset.year));
-  }
-
-  const othersBuckets = new Map<string, number>();
   for (const [key, amount] of founderToBucket) {
     const [fid, bucketId] = key.split('|');
-    if (topIds.has(fid)) {
-      syntheticLinks.push(syntheticLink(fid, bucketId, amount, 'school_expenditure', dataset.year));
-    } else {
-      othersBuckets.set(bucketId, (othersBuckets.get(bucketId) ?? 0) + amount);
-    }
+    const src = bucket(fid);
+    if (src === PREV_WINDOW_ID && !prevCount) continue;
+    if (src === NEXT_WINDOW_ID && !nextCount) continue;
+    syntheticLinks.push(syntheticLink(src, bucketId, amount, 'school_expenditure', dataset.year));
   }
-  if (hasOthers) {
-    for (const [bucketId, amount] of othersBuckets) {
-      syntheticLinks.push(syntheticLink(OTHERS_ID, bucketId, amount, 'school_expenditure', dataset.year));
-    }
+  for (const [key, amount] of euProgrammeToFounder) {
+    const [progId, fid] = key.split('|');
+    const target = bucket(fid);
+    if (target === PREV_WINDOW_ID && !prevCount) continue;
+    if (target === NEXT_WINDOW_ID && !nextCount) continue;
+    syntheticLinks.push(syntheticLink(progId, target, amount, 'eu_project_support', dataset.year));
   }
 
   const usedIds = nodeIdsFromLinks(syntheticLinks);
   const realNodes = dataset.nodes.filter((n) => usedIds.has(n.id));
-  const nodes = hasOthers ? [...realNodes, OTHERS_NODE] : realNodes;
+  const nodes: SankeyNode[] = [...realNodes];
+  if (prevCount) nodes.push(prevWindowNode(prevCount, 'founders'));
+  if (nextCount) nodes.push(nextWindowNode(nextCount, 'founders'));
 
   return { nodes, links: syntheticLinks, ...computeTotals(syntheticLinks), observedShare: 1 };
 }
@@ -258,69 +262,88 @@ export function drillRegion(dataset: YearDataset, regionName: string): FilteredG
 // Caps at TOP_SCHOOLS to keep ECharts manageable; the rest collapse into
 // "Ostatní školy".
 
-export function drillFounder(dataset: YearDataset, founderName: string): FilteredGraph {
+export function drillFounder(dataset: YearDataset, founderName: string, offset = 0): FilteredGraph {
   const institutionIds = new Set(
     dataset.institutions.filter((i) => i.founderName === founderName).map((i) => i.id)
   );
 
-  // Rank schools by MŠMT inflow
   const schoolInflow = new Map<string, number>();
   for (const link of dataset.links) {
-    if (link.flowType === 'direct_school_finance' && institutionIds.has(link.target)) {
+    if (link.flowType === 'direct_school_finance' && institutionIds.has(link.target))
       schoolInflow.set(link.target, (schoolInflow.get(link.target) ?? 0) + link.amountCzk);
-    }
   }
 
   const sorted = [...schoolInflow.entries()].sort((a, b) => b[1] - a[1]);
-  const topIds = new Set(sorted.slice(0, TOP_SCHOOLS).map(([id]) => id));
-  const hasOthers = sorted.length > TOP_SCHOOLS;
+  const windowIds = new Set(sorted.slice(offset, offset + TOP_SCHOOLS).map(([id]) => id));
+  const prevIds   = new Set(sorted.slice(0, offset).map(([id]) => id));
+  const nextIds   = new Set(sorted.slice(offset + TOP_SCHOOLS).map(([id]) => id));
+  const prevCount = prevIds.size;
+  const nextCount = nextIds.size;
 
-  const msmtToSchool = new Map<string, number>();
-  const schoolToBucket = new Map<string, number>();
-  const othersBuckets = new Map<string, number>();
+  function bucket(schoolId: string): string {
+    if (windowIds.has(schoolId)) return schoolId;
+    if (prevIds.has(schoolId))   return PREV_WINDOW_ID;
+    return NEXT_WINDOW_ID;
+  }
+
+  const projectToProgramme = new Map<string, string>();
+  for (const link of dataset.links) {
+    if (link.flowType === 'eu_project_support') projectToProgramme.set(link.target, link.source);
+  }
+
+  const msmtToSchool      = new Map<string, number>();
+  const schoolToBucket    = new Map<string, number>();
+  const euProgToSchool    = new Map<string, number>();
 
   for (const link of dataset.links) {
     if (link.flowType === 'direct_school_finance' && institutionIds.has(link.target)) {
-      const targetId = topIds.has(link.target) ? link.target : OTHERS_SCHOOLS_ID;
-      msmtToSchool.set(targetId, (msmtToSchool.get(targetId) ?? 0) + link.amountCzk);
+      const target = bucket(link.target);
+      if (target === PREV_WINDOW_ID && !prevCount) continue;
+      if (target === NEXT_WINDOW_ID && !nextCount) continue;
+      msmtToSchool.set(target, (msmtToSchool.get(target) ?? 0) + link.amountCzk);
     } else if (link.flowType === 'school_expenditure' && institutionIds.has(link.source)) {
-      if (topIds.has(link.source)) {
-        const key = `${link.source}|${link.target}`;
-        schoolToBucket.set(key, (schoolToBucket.get(key) ?? 0) + link.amountCzk);
-      } else {
-        othersBuckets.set(link.target, (othersBuckets.get(link.target) ?? 0) + link.amountCzk);
-      }
+      const src = bucket(link.source);
+      if (src === PREV_WINDOW_ID && !prevCount) continue;
+      if (src === NEXT_WINDOW_ID && !nextCount) continue;
+      const key = `${src}|${link.target}`;
+      schoolToBucket.set(key, (schoolToBucket.get(key) ?? 0) + link.amountCzk);
+    } else if (link.flowType === 'project_to_school' && institutionIds.has(link.target)) {
+      const progId = projectToProgramme.get(link.source);
+      if (!progId) continue;
+      const target = bucket(link.target);
+      if (target === PREV_WINDOW_ID && !prevCount) continue;
+      if (target === NEXT_WINDOW_ID && !nextCount) continue;
+      const key = `${progId}|${target}`;
+      euProgToSchool.set(key, (euProgToSchool.get(key) ?? 0) + link.amountCzk);
     }
   }
 
   const syntheticLinks: SankeyLink[] = [];
-
-  for (const [schoolId, amount] of msmtToSchool) {
+  for (const [schoolId, amount] of msmtToSchool)
     syntheticLinks.push(syntheticLink(MSMT_ID, schoolId, amount, 'direct_school_finance', dataset.year));
-  }
   for (const [key, amount] of schoolToBucket) {
-    const [schoolId, bucketId] = key.split('|');
-    syntheticLinks.push(syntheticLink(schoolId, bucketId, amount, 'school_expenditure', dataset.year));
+    const [src, bucketId] = key.split('|');
+    syntheticLinks.push(syntheticLink(src, bucketId, amount, 'school_expenditure', dataset.year));
   }
-  if (hasOthers) {
-    for (const [bucketId, amount] of othersBuckets) {
-      syntheticLinks.push(syntheticLink(OTHERS_SCHOOLS_ID, bucketId, amount, 'school_expenditure', dataset.year));
-    }
+  for (const [key, amount] of euProgToSchool) {
+    const [progId, schoolId] = key.split('|');
+    syntheticLinks.push(syntheticLink(progId, schoolId, amount, 'eu_project_support', dataset.year));
   }
 
   const usedIds = nodeIdsFromLinks(syntheticLinks);
   const realNodes = dataset.nodes.filter((n) => usedIds.has(n.id));
-  const nodes = hasOthers ? [...realNodes, OTHERS_SCHOOLS_NODE] : realNodes;
+  const nodes: SankeyNode[] = [...realNodes];
+  if (prevCount) nodes.push(prevWindowNode(prevCount, 'schools'));
+  if (nextCount) nodes.push(nextWindowNode(nextCount, 'schools'));
 
   return { nodes, links: syntheticLinks, ...computeTotals(syntheticLinks), observedShare: 1 };
 }
 
 // ── drillIntoNode ─────────────────────────────────────────────────────────────
 
-export function drillIntoNode(dataset: YearDataset, nodeId: string): FilteredGraph {
-  // Synthetic geographic region → show founders in that region
+export function drillIntoNode(dataset: YearDataset, nodeId: string, offset = 0): FilteredGraph {
   if (nodeId.startsWith('region:')) {
-    return drillRegion(dataset, nodeId.replace('region:', ''));
+    return drillRegion(dataset, nodeId.replace('region:', ''), offset);
   }
 
   const node = dataset.nodes.find((n) => n.id === nodeId);
@@ -342,7 +365,7 @@ export function drillIntoNode(dataset: YearDataset, nodeId: string): FilteredGra
       (l) => l.institutionId === nodeId || l.source === nodeId || l.target === nodeId
     );
   } else if (category === 'municipality' || category === 'region') {
-    return drillFounder(dataset, node.name);
+    return drillFounder(dataset, node.name, offset);
   } else if (category === 'cost_bucket') {
     const toBucket = dataset.links.filter((l) => l.target === nodeId);
     const schoolIds = new Set(toBucket.map((l) => l.source));

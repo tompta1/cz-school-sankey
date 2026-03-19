@@ -95,4 +95,5 @@ export interface HoverInfo {
 export interface DrilldownEntry {
   nodeId: string;
   label: string;
+  offset?: number;
 }
