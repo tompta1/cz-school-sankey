@@ -9,3 +9,6 @@ dist/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+etl/data/monitor_cache/
+etl/data/msmt_registry_cache/
+etl/data/dotaceeu_cache/
