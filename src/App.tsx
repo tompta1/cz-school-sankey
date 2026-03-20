@@ -20,6 +20,7 @@ export default function App() {
   const [drilldownStack, setDrilldownStack] = useState<DrilldownEntry[]>([]);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const [prevActive, setPrevActive] = useState(false);
+  const [perPupil, setPerPupil] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -153,6 +154,13 @@ export default function App() {
               {drilldownStack.map((e) => e.label).join(' › ')}
             </span>
           ) : null}
+          <button
+            className={`year-toggle-btn${perPupil ? ' year-toggle-btn--active' : ''}`}
+            onClick={() => setPerPupil((v) => !v)}
+            title="Toggle per-pupil view (RSSZ registered capacity)"
+          >
+            {perPupil ? 'Kč/pupil' : 'total'}
+          </button>
           {prevGraph && prevYear && (
             <button className="year-toggle-btn" onClick={() => setPrevActive((v) => !v)}>
               {prevActive ? prevYear : curYear}
@@ -193,6 +201,7 @@ export default function App() {
           prevNodes={prevGraph?.nodes}
           prevLinks={prevGraph?.links}
           prevActive={prevActive}
+          perPupil={perPupil}
           onNodeClick={handleNodeClick}
           onNodeHover={setHoverInfo}
           onLinkHover={setHoverInfo}

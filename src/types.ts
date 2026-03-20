@@ -53,6 +53,7 @@ export interface InstitutionSummary {
   founderType?: string;
   municipality?: string;
   region?: string;
+  capacity?: number;
 }
 
 export interface YearDataset {

@@ -41,6 +41,10 @@ ARES_NAMES_PATH = ROOT / "etl" / "data" / "ares_names.json"
 # MŠMT LKOD FTP base for RSSZ JSON-LD files.
 # Dataset e9c07729 = "Rejstřík škol a školských zařízení pro rok 2025 - celá ČR"
 # Dataset 1e789608 = "Rejstřík škol a školských zařízení - celá ČR (31.12.2024)"
+# Capacity unit codes in RSSZ skolyAZarizeni[].kapacity[].mernaJednotka
+# 01 = žáci/studenti (ZŠ, SŠ), 04 = děti (MŠ), 05 = studenti (VOŠ)
+PUPIL_CAPACITY_CODES = {"01", "04", "05"}
+
 REGISTRY_URLS: dict[int, str] = {
     2025: "https://lkod-ftp.msmt.gov.cz/00022985/e9c07729-877e-4af0-be4a-9d36e45806ae/rssz-cela-cr-2025-12-31.jsonld",
     2024: "https://lkod-ftp.msmt.gov.cz/00022985/1e789608-0836-48be-b6df-658dc43d43fa/RSSZ-cela-CR-2024-12-31.jsonld",
@@ -170,6 +174,30 @@ def build_lookups(
     return school_lookup, founder_lookup
 
 
+def build_capacity_lookup(entities: list[dict]) -> dict[str, int]:
+    """Return {ico → total pupil capacity} summed across all school units.
+
+    Uses mernaJednotka codes 01 (žáci/studenti), 04 (děti/MŠ), 05 (studenti/VOŠ).
+    Both padded ("01") and unpadded ("1") forms are accepted — the 2024 RSSZ
+    uses unpadded codes while 2025 uses zero-padded codes.
+    Covers ~95% of school legal entities in the RSSZ.
+    """
+    lookup: dict[str, int] = {}
+    for entity in entities:
+        ico = normalize_ico(entity.get("ico", ""))
+        if not ico:
+            continue
+        capacity = sum(
+            (k.get("nejvyssiPovolenyPocet") or 0)
+            for s in entity.get("skolyAZarizeni", [])
+            for k in s.get("kapacity", [])
+            if str(k.get("mernaJednotka", "")).lstrip("0") in {"1", "4", "5"}
+        )
+        if capacity > 0:
+            lookup[ico] = capacity
+    return lookup
+
+
 def merge_into_ares(
     school_lookup: dict[str, dict],
     founder_lookup: dict[str, dict],
@@ -225,8 +253,9 @@ def update_school_entities_csv(
     year: int,
     school_lookup: dict[str, dict],
     founder_lookup: dict[str, dict],
+    capacity_lookup: dict[str, int] | None = None,
 ) -> tuple[int, int]:
-    """Rewrite school_entities.csv with registry names and municipalities.
+    """Rewrite school_entities.csv with registry names, municipalities, and capacity.
 
     Returns (schools_renamed, founders_renamed).
     """
@@ -239,8 +268,11 @@ def update_school_entities_csv(
     with path.open("r", encoding="utf-8-sig", newline="") as fh:
         rows = list(csv.DictReader(fh))
     fieldnames = list(rows[0].keys()) if rows else []
+    if capacity_lookup is not None and "capacity" not in fieldnames:
+        fieldnames.append("capacity")
 
     schools_renamed = founders_renamed = 0
+    capacities_set = 0
 
     for row in rows:
         ico = normalize_ico(row.get("ico", ""))
@@ -275,11 +307,19 @@ def update_school_entities_csv(
                 row["founder_name"] = f_name
                 founders_renamed += 1
 
+        # Set capacity from RSSZ registry
+        if capacity_lookup is not None and ico:
+            cap = capacity_lookup.get(ico)
+            if cap:
+                row["capacity"] = str(cap)
+                capacities_set += 1
+
     with path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 
+    print(f"  {capacities_set} school capacity values set from RSSZ")
     return schools_renamed, founders_renamed
 
 
@@ -289,11 +329,13 @@ def main() -> None:
     jsonld_path = resolve_jsonld(args)
     entities = load_registry(jsonld_path)
     school_lookup, founder_lookup = build_lookups(entities)
+    capacity_lookup = build_capacity_lookup(entities)
 
     print(
         f"Registry lookups built:\n"
         f"  {len(school_lookup)} school entities with names\n"
-        f"  {len(founder_lookup)} unique founders with names"
+        f"  {len(founder_lookup)} unique founders with names\n"
+        f"  {len(capacity_lookup)} school entities with pupil capacity"
     )
 
     schools_updated, founders_updated, total = merge_into_ares(school_lookup, founder_lookup)
@@ -305,7 +347,7 @@ def main() -> None:
     )
 
     if args.update_csv:
-        s, f = update_school_entities_csv(args.year, school_lookup, founder_lookup)
+        s, f = update_school_entities_csv(args.year, school_lookup, founder_lookup, capacity_lookup)
         print(
             f"\nUpdated school_entities.csv:\n"
             f"  {s} school names updated\n"

@@ -48,6 +48,7 @@ class Institution:
     founder_type: str | None
     municipality: str | None
     region: str | None
+    capacity: int | None
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,6 +75,8 @@ def read_institutions(year: int) -> list[Institution]:
 
     institutions: list[Institution] = []
     for row in read_csv_rows(path):
+        raw_cap = row.get("capacity") or ""
+        capacity = int(raw_cap) if raw_cap.isdigit() else None
         institutions.append(
             Institution(
                 institution_id=row["institution_id"],
@@ -84,6 +87,7 @@ def read_institutions(year: int) -> list[Institution]:
                 founder_type=row.get("founder_type") or None,
                 municipality=row.get("municipality") or None,
                 region=row.get("region") or None,
+                capacity=capacity,
             )
         )
     return institutions
@@ -190,6 +194,7 @@ def build_from_csv(year: int) -> dict[str, Any]:
                 2,
                 ico=institution.ico,
                 founderType=institution.founder_type,
+                metadata={"capacity": institution.capacity} if institution.capacity else None,
             )
         )
         if institution.founder_id and institution.founder_name:
@@ -355,6 +360,7 @@ def build_from_csv(year: int) -> dict[str, Any]:
                 "founderType": institution.founder_type,
                 "municipality": institution.municipality,
                 "region": institution.region,
+                **({"capacity": institution.capacity} if institution.capacity else {}),
             }
             for institution in institutions
         ],

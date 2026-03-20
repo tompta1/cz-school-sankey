@@ -24,6 +24,11 @@ export function formatCompactCzk(value: number): string {
   return formatCzk(value);
 }
 
+export function formatPerPupil(czk: number): string {
+  const rounded = Math.round(czk);
+  return `${new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 0 }).format(rounded)} Kč/pupil`;
+}
+
 export function titleCase(input: string): string {
   return input
     .replaceAll('_', ' ')

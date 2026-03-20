@@ -1,7 +1,7 @@
 import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 
-import { formatCompactCzk } from '../lib/format';
+import { formatCompactCzk, formatPerPupil } from '../lib/format';
 import type { HoverInfo, SankeyLink, SankeyNode } from '../types';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   prevNodes?: SankeyNode[];
   prevLinks?: SankeyLink[];
   prevActive?: boolean;
+  perPupil?: boolean;
   onNodeClick: (nodeId: string) => void;
   onNodeHover: (info: HoverInfo | null) => void;
   onLinkHover: (info: HoverInfo | null) => void;
@@ -33,8 +34,14 @@ function buildActiveOption(
   nodes: SankeyNode[],
   links: SankeyLink[],
   idToDisplay: Map<string, string>,
+  perPupil: boolean,
+  capacityMap: Map<string, number>,
 ) {
   const nodeGap = nodes.length > 35 ? 4 : nodes.length > 20 ? 8 : 14;
+
+  const linkCapacity = (l: SankeyLink): number | null =>
+    perPupil && l.institutionId ? (capacityMap.get(l.institutionId) ?? null) : null;
+
   return {
     backgroundColor: 'transparent',
     tooltip: {
@@ -42,14 +49,19 @@ function buildActiveOption(
       formatter(params: unknown) {
         const p = params as { dataType: string; data: Record<string, unknown> };
         if (p.dataType === 'edge') {
-          const { source, target, amountCzk } =
-            p.data as { source: string; target: string; amountCzk: number };
-          return `<strong>${idToDisplay.get(source) ?? source} → ${idToDisplay.get(target) ?? target}</strong><br/>${formatCompactCzk(amountCzk)}`;
+          const { source, target, amountCzk, capacity } =
+            p.data as { source: string; target: string; amountCzk: number; capacity: number | null };
+          const amt = perPupil && capacity ? formatPerPupil(amountCzk / capacity) : formatCompactCzk(amountCzk);
+          return `<strong>${idToDisplay.get(source) ?? source} → ${idToDisplay.get(target) ?? target}</strong><br/>${amt}`;
         }
         const nodeId = (p.data as { name: string }).name;
         const displayName = idToDisplay.get(nodeId) ?? nodeId;
         const total = links.filter((l) => l.target === nodeId).reduce((s, l) => s + l.amountCzk, 0);
-        return `<strong>${displayName}</strong>${total > 0 ? `<br/>${formatCompactCzk(total)} inflow` : ''}`;
+        if (total === 0) return `<strong>${displayName}</strong>`;
+        const cap = perPupil ? (capacityMap.get(nodeId) ?? null) : null;
+        const totalFmt = cap ? formatPerPupil(total / cap) : formatCompactCzk(total);
+        const suffix = cap ? ` inflow<br/><small style="color:#94a3b8">${cap} pupils (RSSZ capacity)</small>` : ' inflow';
+        return `<strong>${displayName}</strong><br/>${totalFmt}${suffix}`;
       },
       backgroundColor: 'rgba(8,16,30,0.92)',
       borderColor: 'rgba(148,163,184,0.2)',
@@ -77,18 +89,27 @@ function buildActiveOption(
         name: n.id,
         itemStyle: { color: COLOR[n.category] ?? COLOR.other, borderColor: '#0b1220', borderWidth: 1 },
       })),
-      links: links.map((l) => ({
-        source: l.source,
-        target: l.target,
-        value: l.amountCzk,
-        amountCzk: l.amountCzk,
-        lineStyle: { opacity: l.certainty === 'observed' ? 0.55 : 0.28 },
-      })),
+      links: links.map((l) => {
+        const cap = linkCapacity(l);
+        return {
+          source: l.source,
+          target: l.target,
+          value: cap ? l.amountCzk / cap : l.amountCzk,
+          amountCzk: l.amountCzk,
+          capacity: cap,
+          lineStyle: { opacity: l.certainty === 'observed' ? 0.55 : 0.28 },
+        };
+      }),
     }],
   };
 }
 
-function buildGhostOption(nodes: SankeyNode[], links: SankeyLink[]) {
+function buildGhostOption(
+  nodes: SankeyNode[],
+  links: SankeyLink[],
+  perPupil: boolean,
+  capacityMap: Map<string, number>,
+) {
   const nodeGap = nodes.length > 35 ? 4 : nodes.length > 20 ? 8 : 14;
   return {
     backgroundColor: 'transparent',
@@ -107,16 +128,19 @@ function buildGhostOption(nodes: SankeyNode[], links: SankeyLink[]) {
         name: n.id,
         itemStyle: { color: '#94a3b8', opacity: 0.22, borderWidth: 0 },
       })),
-      links: links.map((l) => ({
-        source: l.source,
-        target: l.target,
-        value: l.amountCzk,
-      })),
+      links: links.map((l) => {
+        const cap = perPupil && l.institutionId ? (capacityMap.get(l.institutionId) ?? null) : null;
+        return {
+          source: l.source,
+          target: l.target,
+          value: cap ? l.amountCzk / cap : l.amountCzk,
+        };
+      }),
     }],
   };
 }
 
-export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive = false, onNodeClick, onNodeHover, onLinkHover }: Props) {
+export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive = false, perPupil = false, onNodeClick, onNodeHover, onLinkHover }: Props) {
   const curRef  = useRef<HTMLDivElement>(null);
   const prevRef = useRef<HTMLDivElement>(null);
 
@@ -132,6 +156,11 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
     const el = curRef.current;
     if (!el) return;
     const idToDisplay = new Map(nodes.map((n) => [n.id, n.name]));
+    const capacityMap = new Map(
+      nodes
+        .filter((n) => n.category === 'school_entity' && typeof n.metadata?.capacity === 'number')
+        .map((n) => [n.id, n.metadata!.capacity as number]),
+    );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
     if (!prevActive) {
@@ -152,19 +181,26 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     chart.setOption<any>(
-      prevActive ? buildGhostOption(nodes, links) : buildActiveOption(nodes, links, idToDisplay),
+      prevActive
+        ? buildGhostOption(nodes, links, perPupil, capacityMap)
+        : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap),
     );
 
     const ro = new ResizeObserver(() => chart.resize());
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
-  }, [nodes, links, prevActive]);
+  }, [nodes, links, prevActive, perPupil]);
 
   // Previous-year chart
   useEffect(() => {
     const el = prevRef.current;
     if (!el || !prevNodes || !prevLinks) return;
     const idToDisplay = new Map(prevNodes.map((n) => [n.id, n.name]));
+    const capacityMap = new Map(
+      prevNodes
+        .filter((n) => n.category === 'school_entity' && typeof n.metadata?.capacity === 'number')
+        .map((n) => [n.id, n.metadata!.capacity as number]),
+    );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
     if (prevActive) {
@@ -185,13 +221,15 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     chart.setOption<any>(
-      prevActive ? buildActiveOption(prevNodes, prevLinks, idToDisplay) : buildGhostOption(prevNodes, prevLinks),
+      prevActive
+        ? buildActiveOption(prevNodes, prevLinks, idToDisplay, perPupil, capacityMap)
+        : buildGhostOption(prevNodes, prevLinks, perPupil, capacityMap),
     );
 
     const ro = new ResizeObserver(() => chart.resize());
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
-  }, [prevNodes, prevLinks, prevActive]);
+  }, [prevNodes, prevLinks, prevActive, perPupil]);
 
   const curHeight  = Math.min(Math.max(500, nodes.length * 38), 16_000);
   const prevHeight = prevNodes ? Math.min(Math.max(500, prevNodes.length * 38), 16_000) : 0;
