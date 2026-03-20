@@ -1,0 +1,12 @@
+.claude
+.git
+.github
+.neon
+.pytest_cache
+.vercel
+db
+dist
+docs
+etl
+scripts
+public/data
