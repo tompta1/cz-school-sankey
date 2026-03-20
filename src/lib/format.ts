@@ -10,15 +10,15 @@ export function formatCompactCzk(value: number): string {
   const absolute = Math.abs(value);
 
   if (absolute >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1)} bn CZK`;
+    return `${(value / 1_000_000_000).toFixed(1)} mld. Kč`;
   }
 
   if (absolute >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)} m CZK`;
+    return `${(value / 1_000_000).toFixed(1)} mil. Kč`;
   }
 
   if (absolute >= 1_000) {
-    return `${(value / 1_000).toFixed(1)} k CZK`;
+    return `${(value / 1_000).toFixed(1)} tis. Kč`;
   }
 
   return formatCzk(value);
@@ -26,7 +26,7 @@ export function formatCompactCzk(value: number): string {
 
 export function formatPerPupil(czk: number): string {
   const rounded = Math.round(czk);
-  return `${new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 0 }).format(rounded)} Kč/pupil`;
+  return `${new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: 0 }).format(rounded)} Kč/žák/rok`;
 }
 
 export function titleCase(input: string): string {

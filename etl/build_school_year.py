@@ -152,6 +152,9 @@ def build_from_csv(year: int) -> dict[str, Any]:
     founder_rows = (
         read_csv_rows(year_dir / "founder_support.csv") if (year_dir / "founder_support.csv").exists() else []
     )
+    state_budget_rows = (
+        read_csv_rows(year_dir / "state_budget.csv") if (year_dir / "state_budget.csv").exists() else []
+    )
 
     nodes: list[dict[str, Any]] = [
         node("state:cr", "State budget", "state", 0),
@@ -344,6 +347,35 @@ def build_from_csv(year: int) -> dict[str, Any]:
             )
         )
 
+    for row in state_budget_rows:
+        node_id = row.get("node_id") or ""
+        node_name = row.get("node_name") or node_id
+        node_category = row.get("node_category") or "other"
+        flow_type = row.get("flow_type") or "state_revenue"
+        amount = row_amount(row, "amount_czk")
+        basis = row.get("basis") or "realized"
+        certainty = row.get("certainty") or "observed"
+        source_url = row.get("source_url") or None
+        if not node_id or amount <= 0:
+            continue
+        ensure_node(node(node_id, node_name, node_category, 0))
+        if flow_type == "state_revenue":
+            links.append(
+                link(
+                    node_id, "state:cr", amount, year,
+                    "state_revenue", basis, certainty, "local.state_budget",
+                    sourceUrl=source_url,
+                )
+            )
+        elif flow_type == "state_to_other":
+            links.append(
+                link(
+                    "state:cr", node_id, amount, year,
+                    "state_to_other", basis, certainty, "local.state_budget",
+                    sourceUrl=source_url,
+                )
+            )
+
     dataset = {
         "year": year,
         "currency": "CZK",
@@ -383,6 +415,12 @@ def build_from_csv(year: int) -> dict[str, Any]:
                 "coverage": "Municipal or regional support; often inferred",
                 "confidence": "medium",
             },
+            *([{
+                "id": "local-state-budget",
+                "label": "MONITOR PBSR – state budget revenues",
+                "coverage": "SR revenue categories and residual non-MŠMT expenditure",
+                "confidence": "high",
+            }] if state_budget_rows else []),
         ],
     }
     return dataset

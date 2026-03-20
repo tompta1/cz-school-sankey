@@ -92,7 +92,7 @@
     "municipality": "Praha"
   },
   "00064581": {
-    "name": "Školní jídelna mateřské školy, Praha 10, Starodubečská 506",
+    "name": "Hlavní město Praha",
     "municipality": "Praha 10 - Dubeč"
   },
   "00066702": {
@@ -176,7 +176,7 @@
     "municipality": "Třeboň"
   },
   "00075370": {
-    "name": "3O. mateřská škola Plzeň, Na průhonu 9",
+    "name": "Statutární město Plzeň",
     "municipality": "Plzeň"
   },
   "00077119": {
@@ -8648,7 +8648,7 @@
     "municipality": "Kostelec"
   },
   "00286168": {
-    "name": "Základní škola Krahulčí, okres Jihlava",
+    "name": "Obec Krahulčí",
     "municipality": "Telč"
   },
   "00286192": {
@@ -8656,7 +8656,7 @@
     "municipality": "Luka nad Jihlavou"
   },
   "00286265": {
-    "name": "Základní škola Mrákotín, okres Jihlava",
+    "name": "Městys Mrákotín",
     "municipality": "Mrákotín 114"
   },
   "00286303": {
@@ -8672,7 +8672,7 @@
     "municipality": "Pavlov"
   },
   "00286435": {
-    "name": "Základní škola Hrbov , okres Jihlava",
+    "name": "Město Polná",
     "municipality": "Polná"
   },
   "00286460": {
@@ -8688,7 +8688,7 @@
     "municipality": "Stará Říše"
   },
   "00286656": {
-    "name": "Základní škola Stonařov, okres Jihlava",
+    "name": "Městys Stonařov",
     "municipality": "Stonařov 242"
   },
   "00286672": {
@@ -10804,7 +10804,7 @@
     "municipality": "Hustopeče nad Bečvou"
   },
   "00301345": {
-    "name": "Základní škola a mateřská škola Jindřichov",
+    "name": "Obec Jindřichov",
     "municipality": "Hranice"
   },
   "00301370": {
@@ -15060,7 +15060,7 @@
     "municipality": "Lipník nad Bečvou"
   },
   "00845451": {
-    "name": "Školní jídelna Ostrava-Zábřeh, Tylova 37",
+    "name": "Statutární město Ostrava",
     "municipality": "Ostrava-Zábřeh"
   },
   "00846279": {
@@ -16988,7 +16988,7 @@
     "municipality": "Tetčice"
   },
   "44992785": {
-    "name": "Školní jídelna mateřské školy, Brno, Hněvkovského 62",
+    "name": "Statutární město Brno",
     "municipality": "Brno"
   },
   "44993463": {
@@ -21780,7 +21780,7 @@
     "municipality": "Klimkovice"
   },
   "60609460": {
-    "name": "Speciální základní škola při dětské ozdravovně, Vojtěchov 2",
+    "name": "Olomoucký kraj",
     "municipality": "Vojtěchov 2"
   },
   "60610069": {
@@ -29432,11 +29432,11 @@
     "municipality": "Stará Paka"
   },
   "70890366": {
-    "name": "Zvláštní škola Město Touškov, okres Plzeň-sever",
+    "name": "Plzeňský kraj",
     "municipality": "Město Touškov"
   },
   "70890650": {
-    "name": "Speciální základní škola a Mateřská škola při nemocnici, České Budějovice, Boženy Němcové 54",
+    "name": "Jihočeský kraj",
     "municipality": "České Budějovice"
   },
   "70890692": {
@@ -29504,7 +29504,7 @@
     "municipality": "Lípa"
   },
   "70892156": {
-    "name": "Mateřská škola Dášenka Krupka, Karla Čapka 271",
+    "name": "Ústecký kraj",
     "municipality": "Krupka"
   },
   "70892547": {

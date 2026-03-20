@@ -1,0 +1,6 @@
+node_id,node_name,node_category,flow_type,amount_czk,basis,certainty,source_url
+income:taxes,Daňové a pojistné příjmy,other,state_revenue,1596000000000,realized,inferred,https://monitor.statnipokladna.gov.cz
+income:eu,Přijaté transfery EU,other,state_revenue,130000000000,realized,inferred,https://monitor.statnipokladna.gov.cz
+income:nontax,Ostatní příjmy SR,other,state_revenue,8000000000,realized,inferred,https://monitor.statnipokladna.gov.cz
+income:debt,Financování dluhem,other,state_revenue,143000000000,realized,inferred,https://monitor.statnipokladna.gov.cz
+state:other,Ostatní výdaje SR,other,state_to_other,1624000000000,realized,inferred,https://monitor.statnipokladna.gov.cz

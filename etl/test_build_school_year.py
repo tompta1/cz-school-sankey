@@ -346,3 +346,91 @@ class TestSlugify:
         result = etl.slugify("Středočeský kraj")
         assert result  # non-empty
         assert "-" in result or result.isalpha()
+
+
+# ---------------------------------------------------------------------------
+# ares_names.json quality gate
+# ---------------------------------------------------------------------------
+
+# School-entity keywords that must not appear in founder names.
+# "prostřední" is excluded because it is a place-name component
+# (Prostřední Bečva, Prostřední Poříčí), not a school keyword.
+_SCHOOL_KEYWORDS = [
+    "základní škola",
+    "střední škola",
+    "mateřská škola",
+    "školní jídelna",
+    "gymnázium",
+    "konzervatoř",
+    "speciální škola",
+    "zvláštní škola",
+    "učiliště",
+]
+
+# Known-bad IČOs that were fixed — tested individually so regressions are obvious.
+_FIXED_ICOS = {
+    "00064581": "Hlavní město Praha",
+    "00075370": "Statutární město Plzeň",
+    "00286168": "Obec Krahulčí",
+    "00286265": "Městys Mrákotín",
+    "00286435": "Město Polná",
+    "00286656": "Městys Stonařov",
+    "00301345": "Obec Jindřichov",
+    "00845451": "Statutární město Ostrava",
+    "44992785": "Statutární město Brno",
+    "60609460": "Olomoucký kraj",
+    "70890366": "Plzeňský kraj",
+    "70890650": "Jihočeský kraj",
+    "70892156": "Ústecký kraj",
+}
+
+ARES_NAMES_PATH = Path(__file__).resolve().parents[1] / "etl" / "data" / "ares_names.json"
+
+
+@pytest.fixture(scope="module")
+def ares_names() -> dict:
+    if not ARES_NAMES_PATH.exists():
+        pytest.skip("ares_names.json not present")
+    return json.loads(ARES_NAMES_PATH.read_text(encoding="utf-8"))
+
+
+class TestAresNamesQuality:
+    def test_fixed_icos_have_correct_names(self, ares_names):
+        """Previously-broken IČOs must now map to the correct government entity."""
+        for ico, expected in _FIXED_ICOS.items():
+            actual = ares_names.get(ico, {}).get("name", "")
+            assert actual == expected, (
+                f"IČO {ico}: expected {expected!r}, got {actual!r}"
+            )
+
+    def test_no_founder_ico_has_school_entity_name(self, ares_names):
+        """Founder IČOs used in school_entities.csv must not resolve to school-type names.
+
+        This catches ARES lookup collisions where a municipality IČO is
+        accidentally mapped to a school or canteen name.
+        """
+        # Collect all founder IČOs actually used in source CSVs
+        founder_icos: set[str] = set()
+        raw_root = Path(__file__).resolve().parents[1] / "etl" / "data" / "raw"
+        for year_dir in raw_root.iterdir():
+            csv_path = year_dir / "school_entities.csv"
+            if not csv_path.exists():
+                continue
+            with csv_path.open(encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    fid = row.get("founder_id", "")
+                    if fid.startswith("founder:"):
+                        founder_icos.add(fid.removeprefix("founder:").zfill(8))
+
+        violations: list[str] = []
+        for ico in founder_icos:
+            name = ares_names.get(ico, {}).get("name", "").lower()
+            for kw in _SCHOOL_KEYWORDS:
+                if kw in name:
+                    violations.append(f"IČO {ico}: {ares_names[ico]['name']!r} (matched {kw!r})")
+                    break
+
+        assert not violations, (
+            f"Founder IČOs with school-entity names in ares_names.json "
+            f"(fix by updating ares_names.json):\n" + "\n".join(violations)
+        )

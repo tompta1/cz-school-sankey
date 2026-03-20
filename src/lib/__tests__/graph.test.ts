@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateGraph, drillFounder, drillIntoNode, drillRegion, filterGraph, NEXT_WINDOW_ID, PREV_WINDOW_ID } from '../graph';
+import { aggregateGraph, drillEU, drillFounder, drillFounderType, drillIntoNode, drillRegion, EU_ALL_ID, filterGraph, FOUNDERS_KRAJ, FOUNDERS_OBEC, NEXT_WINDOW_ID, PREV_WINDOW_ID, TOP_FOUNDERS } from '../graph';
 import type { InstitutionSummary, SankeyLink, SankeyNode, YearDataset } from '../../types';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -41,12 +41,12 @@ const links: SankeyLink[] = [
   link('school:s3', 'bucket:ops',      50_000, 'school_expenditure',    { institutionId: 'school:s3' }),
 ];
 
-// s1+s2 are in "Středočeský" region, founder: Municipality A
-// s3 is in "Praha" region, founder: Středočeský kraj (kraj-as-founder)
+// s1+s2 are in "Středočeský" region, founder: Municipality A (obec)
+// s3 is in "Praha" region, founder: Středočeský kraj (kraj)
 const institutions: InstitutionSummary[] = [
-  { id: 'school:s1', name: 'School 1', ico: 's1', founderName: 'Municipality A', region: 'Středočeský' },
-  { id: 'school:s2', name: 'School 2', ico: 's2', founderName: 'Municipality A', region: 'Středočeský' },
-  { id: 'school:s3', name: 'School 3', ico: 's3', founderName: 'Středočeský kraj', region: 'Praha' },
+  { id: 'school:s1', name: 'School 1', ico: 's1', founderName: 'Municipality A', founderType: 'obec', region: 'Středočeský' },
+  { id: 'school:s2', name: 'School 2', ico: 's2', founderName: 'Municipality A', founderType: 'obec', region: 'Středočeský' },
+  { id: 'school:s3', name: 'School 3', ico: 's3', founderName: 'Středočeský kraj', founderType: 'kraj', region: 'Praha' },
 ];
 
 const dataset: YearDataset = {
@@ -123,9 +123,11 @@ describe('filterGraph', () => {
 // ── aggregateGraph ────────────────────────────────────────────────────────────
 
 describe('aggregateGraph', () => {
-  it('starts at MŠMT — no state→MŠMT link emitted', () => {
+  it('includes state→MŠMT link (state:cr is now visible at top level)', () => {
     const links = aggregateGraph(dataset).links;
-    expect(links.find((l) => l.source === 'state:cr')).toBeUndefined();
+    const stateLink = links.find((l) => l.source === 'state:cr' && l.target === 'msmt');
+    expect(stateLink).toBeDefined();
+    expect(stateLink!.amountCzk).toBe(1_000_000);
   });
 
   it('creates one MŠMT→region node per geographic region', () => {
@@ -444,10 +446,10 @@ const euDataset: YearDataset = {
 };
 
 describe('EU flows — aggregateGraph', () => {
-  it('produces an eu_project_support link from the programme to the region', () => {
+  it('produces an eu_project_support link from eu:all to the region', () => {
     const g = aggregateGraph(euDataset);
     const euLink = g.links.find(
-      (l) => l.source === 'eu_prog:OPZ' && l.target === 'region:Středočeský'
+      (l) => l.source === EU_ALL_ID && l.target === 'region:Středočeský'
     );
     expect(euLink).toBeDefined();
     expect(euLink!.amountCzk).toBe(50_000);
@@ -458,9 +460,10 @@ describe('EU flows — aggregateGraph', () => {
     expect(ids).not.toContain('eu_proj:P1');
   });
 
-  it('includes the EU programme node in the aggregate view', () => {
+  it('includes the eu:all aggregate node (not individual programme) in the aggregate view', () => {
     const ids = aggregateGraph(euDataset).nodes.map((n) => n.id);
-    expect(ids).toContain('eu_prog:OPZ');
+    expect(ids).toContain(EU_ALL_ID);
+    expect(ids).not.toContain('eu_prog:OPZ');
   });
 });
 
@@ -578,6 +581,322 @@ describe('sliding window — drillFounder', () => {
   });
 });
 
+// ── aggregateGraph — state budget passthrough + per-pupil capacity ────────────
+
+describe('aggregateGraph — state budget', () => {
+  const stateNodes: SankeyNode[] = [
+    ...nodes,
+    { id: 'income:taxes',  name: 'Daňové příjmy',       category: 'other', level: 0 },
+    { id: 'income:eu',     name: 'Přijaté transfery EU', category: 'other', level: 0 },
+    { id: 'state:other',   name: 'Ostatní výdaje SR',    category: 'other', level: 3 },
+  ];
+  const stateLinks: SankeyLink[] = [
+    ...links,
+    link('income:taxes', 'state:cr', 1_800_000_000, 'state_revenue',    { basis: 'realized' }),
+    link('income:eu',    'state:cr',   200_000_000, 'state_revenue',    { basis: 'realized' }),
+    link('state:cr',     'state:other', 400_000_000, 'state_to_other',  { basis: 'realized', certainty: 'inferred' }),
+  ];
+  const stateDataset: YearDataset = {
+    year: 2025, currency: 'CZK', title: 'State budget test',
+    nodes: stateNodes, links: stateLinks, institutions, sources: [],
+  };
+
+  it('passes through state_revenue links unchanged', () => {
+    const g = aggregateGraph(stateDataset);
+    const taxLink = g.links.find((l) => l.source === 'income:taxes' && l.target === 'state:cr');
+    expect(taxLink?.amountCzk).toBe(1_800_000_000);
+  });
+
+  it('passes through state_to_other link unchanged', () => {
+    const g = aggregateGraph(stateDataset);
+    const otherLink = g.links.find((l) => l.source === 'state:cr' && l.target === 'state:other');
+    expect(otherLink).toBeDefined();
+  });
+
+  it('includes income source nodes', () => {
+    const ids = aggregateGraph(stateDataset).nodes.map((n) => n.id);
+    expect(ids).toContain('income:taxes');
+    expect(ids).toContain('income:eu');
+  });
+});
+
+describe('aggregateGraph — per-pupil capacity on region nodes', () => {
+  // s1 capacity=100, s2 capacity=80 → Středočeský total=180
+  // s3 capacity=60 → Praha total=60
+  const capInstitutions: InstitutionSummary[] = [
+    { id: 'school:s1', name: 'School 1', founderType: 'obec', region: 'Středočeský', capacity: 100 },
+    { id: 'school:s2', name: 'School 2', founderType: 'obec', region: 'Středočeský', capacity: 80 },
+    { id: 'school:s3', name: 'School 3', founderType: 'kraj', region: 'Praha',        capacity: 60 },
+  ];
+  const capDataset: YearDataset = { ...dataset, institutions: capInstitutions };
+
+  it('region nodes carry summed capacity in metadata', () => {
+    const g = aggregateGraph(capDataset);
+    const sc = g.nodes.find((n) => n.id === 'region:Středočeský');
+    const pr = g.nodes.find((n) => n.id === 'region:Praha');
+    expect(sc?.metadata?.capacity).toBe(180); // 100+80
+    expect(pr?.metadata?.capacity).toBe(60);
+  });
+
+  it('region nodes without any institution capacity have no metadata', () => {
+    const g = aggregateGraph(dataset); // original institutions have no capacity
+    const sc = g.nodes.find((n) => n.id === 'region:Středočeský');
+    expect(sc?.metadata?.capacity).toBeUndefined();
+  });
+});
+
+// ── Founder aggregate fixture ─────────────────────────────────────────────────
+
+// founderDataset: s1+s2 founded by Municipality A (obec), s3 founded by Středočeský kraj (kraj)
+// Adds founder_support links so aggregateGraph can produce founders:kraj + founders:obec nodes
+const founderNodes: SankeyNode[] = [
+  ...nodes,
+  { id: 'founder:muni1',   name: 'Municipality A',   category: 'municipality', level: 1 },
+  { id: 'founder:region1', name: 'Středočeský kraj',  category: 'region',       level: 1 },
+];
+const founderLinks: SankeyLink[] = [
+  ...links,
+  link('founder:muni1',   'school:s1', 80_000, 'founder_support', { institutionId: 'school:s1' }),
+  link('founder:muni1',   'school:s2', 60_000, 'founder_support', { institutionId: 'school:s2' }),
+  link('founder:region1', 'school:s3', 40_000, 'founder_support', { institutionId: 'school:s3' }),
+];
+const founderDataset: YearDataset = {
+  year: 2025, currency: 'CZK', title: 'Founder test',
+  nodes: founderNodes, links: founderLinks, institutions, sources: [],
+};
+
+// ── aggregateGraph — founder aggregates ───────────────────────────────────────
+
+describe('aggregateGraph — founder aggregates', () => {
+  it('emits founders:obec → region link when obec founder_support exists', () => {
+    const g = aggregateGraph(founderDataset);
+    const l = g.links.find((l) => l.source === FOUNDERS_OBEC && l.target === 'region:Středočeský');
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(140_000); // 80k + 60k
+  });
+
+  it('emits founders:kraj → region link when kraj founder_support exists', () => {
+    const g = aggregateGraph(founderDataset);
+    const l = g.links.find((l) => l.source === FOUNDERS_KRAJ && l.target === 'region:Praha');
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(40_000);
+  });
+
+  it('includes founders:obec and founders:kraj nodes', () => {
+    const ids = aggregateGraph(founderDataset).nodes.map((n) => n.id);
+    expect(ids).toContain(FOUNDERS_OBEC);
+    expect(ids).toContain(FOUNDERS_KRAJ);
+  });
+
+  it('omits founders:obec node when no obec support present', () => {
+    // Dataset with only kraj founder_support
+    const ds: YearDataset = {
+      ...founderDataset,
+      links: [
+        ...links,
+        link('founder:region1', 'school:s3', 40_000, 'founder_support', { institutionId: 'school:s3' }),
+      ],
+    };
+    const ids = aggregateGraph(ds).nodes.map((n) => n.id);
+    expect(ids).not.toContain(FOUNDERS_OBEC);
+    expect(ids).toContain(FOUNDERS_KRAJ);
+  });
+
+  it('MŠMT region sums are unaffected by founder flows', () => {
+    const g = aggregateGraph(founderDataset);
+    const sc = g.links.find((l) => l.source === 'msmt' && l.target === 'region:Středočeský');
+    expect(sc?.amountCzk).toBe(750_000); // same as without founders
+  });
+});
+
+// ── drillEU ───────────────────────────────────────────────────────────────────
+
+describe('drillEU', () => {
+  it('shows individual EU programme nodes (not eu:all)', () => {
+    const ids = drillEU(euDataset).nodes.map((n) => n.id);
+    expect(ids).toContain('eu_prog:OPZ');
+    expect(ids).not.toContain(EU_ALL_ID);
+  });
+
+  it('produces programme → region links (skipping project intermediate)', () => {
+    const g = drillEU(euDataset);
+    const l = g.links.find((l) => l.source === 'eu_prog:OPZ' && l.target === 'region:Středočeský');
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(50_000);
+  });
+
+  it('does not include raw project nodes', () => {
+    const ids = drillEU(euDataset).nodes.map((n) => n.id);
+    expect(ids).not.toContain('eu_proj:P1');
+  });
+
+  it('creates synthetic region nodes for all regions receiving EU funds', () => {
+    const ids = drillEU(euDataset).nodes.map((n) => n.id);
+    expect(ids).toContain('region:Středočeský');
+  });
+
+  it('returns empty links when no EU flows exist', () => {
+    expect(drillEU(dataset).links).toHaveLength(0);
+  });
+
+  it('aggregates multiple programmes to the same region as separate links', () => {
+    const nodes2: SankeyNode[] = [
+      ...euNodes,
+      { id: 'eu_prog:IROP', name: 'IROP', category: 'eu_programme', level: 0 },
+      { id: 'eu_proj:P2',   name: 'Project 2', category: 'eu_project', level: 1 },
+    ];
+    const links2: SankeyLink[] = [
+      ...euLinks,
+      link('eu_prog:IROP', 'eu_proj:P2', 30_000, 'eu_project_support'),
+      link('eu_proj:P2', 'school:s1', 30_000, 'project_to_school', { institutionId: 'school:s1' }),
+    ];
+    const ds2: YearDataset = { ...euDataset, nodes: nodes2, links: links2 };
+    const g = drillEU(ds2);
+    const opzLink  = g.links.find((l) => l.source === 'eu_prog:OPZ'  && l.target === 'region:Středočeský');
+    const iropLink = g.links.find((l) => l.source === 'eu_prog:IROP' && l.target === 'region:Středočeský');
+    expect(opzLink?.amountCzk).toBe(50_000);
+    expect(iropLink?.amountCzk).toBe(30_000);
+  });
+});
+
+// ── drillFounderType ──────────────────────────────────────────────────────────
+
+describe('drillFounderType — obec', () => {
+  it('shows individual obec founder nodes', () => {
+    const g = drillFounderType(founderDataset, 'obec');
+    const ids = g.nodes.map((n) => n.id);
+    expect(ids).toContain('founder:muni1');
+  });
+
+  it('does not include kraj founders', () => {
+    const g = drillFounderType(founderDataset, 'obec');
+    const ids = g.nodes.map((n) => n.id);
+    expect(ids).not.toContain('founder:region1');
+  });
+
+  it('emits founders:obec → founder link with correct total', () => {
+    const g = drillFounderType(founderDataset, 'obec');
+    const l = g.links.find((l) => l.source === FOUNDERS_OBEC && l.target === 'founder:muni1');
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(140_000); // 80k + 60k
+  });
+
+  it('includes the founders:obec aggregate node', () => {
+    const ids = drillFounderType(founderDataset, 'obec').nodes.map((n) => n.id);
+    expect(ids).toContain(FOUNDERS_OBEC);
+  });
+});
+
+describe('drillFounderType — kraj', () => {
+  it('shows individual kraj founder nodes', () => {
+    const g = drillFounderType(founderDataset, 'kraj');
+    const ids = g.nodes.map((n) => n.id);
+    expect(ids).toContain('founder:region1');
+  });
+
+  it('does not include obec founders', () => {
+    const g = drillFounderType(founderDataset, 'kraj');
+    const ids = g.nodes.map((n) => n.id);
+    expect(ids).not.toContain('founder:muni1');
+  });
+
+  it('emits founders:kraj → founder link with correct total', () => {
+    const g = drillFounderType(founderDataset, 'kraj');
+    const l = g.links.find((l) => l.source === FOUNDERS_KRAJ && l.target === 'founder:region1');
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(40_000);
+  });
+
+  it('shows next-window node when founders exceed TOP_FOUNDERS', () => {
+    const manyInst: InstitutionSummary[] = Array.from({ length: TOP_FOUNDERS + 5 }, (_, i) => ({
+      id: `school:ft${i}`, name: `School FT${i}`, founderName: `Kraj ${i}`, founderType: 'kraj',
+      region: 'Jihomoravský',
+    }));
+    const manyNodes: SankeyNode[] = [
+      { id: 'msmt', name: 'MŠMT', category: 'ministry', level: 1 },
+      ...Array.from({ length: TOP_FOUNDERS + 5 }, (_, i) => ({
+        id: `founder:k${i}`, name: `Kraj ${i}`, category: 'region' as const, level: 1,
+      })),
+      ...Array.from({ length: TOP_FOUNDERS + 5 }, (_, i) => ({
+        id: `school:ft${i}`, name: `School FT${i}`, category: 'school_entity' as const, level: 2,
+      })),
+    ];
+    const manyLinks: SankeyLink[] = Array.from({ length: TOP_FOUNDERS + 5 }, (_, i) =>
+      link(`founder:k${i}`, `school:ft${i}`, (TOP_FOUNDERS + 5 - i) * 1_000, 'founder_support',
+        { institutionId: `school:ft${i}` })
+    );
+    const ds: YearDataset = {
+      year: 2025, currency: 'CZK', title: 'Many kraj', sources: [],
+      nodes: manyNodes, links: manyLinks, institutions: manyInst,
+    };
+    const g = drillFounderType(ds, 'kraj', 0);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect(ids.has(NEXT_WINDOW_ID)).toBe(true);
+    expect(ids.has(PREV_WINDOW_ID)).toBe(false);
+  });
+
+  it('shows both window nodes at offset=TOP_FOUNDERS when total > 2×TOP_FOUNDERS', () => {
+    const total = TOP_FOUNDERS * 2 + 3;
+    const manyInst: InstitutionSummary[] = Array.from({ length: total }, (_, i) => ({
+      id: `school:fw${i}`, name: `School FW${i}`, founderName: `Kraj ${i}`, founderType: 'kraj',
+      region: 'Jihomoravský',
+    }));
+    const manyNodes: SankeyNode[] = [
+      { id: 'msmt', name: 'MŠMT', category: 'ministry', level: 1 },
+      ...Array.from({ length: total }, (_, i) => ({
+        id: `founder:w${i}`, name: `Kraj ${i}`, category: 'region' as const, level: 1,
+      })),
+      ...Array.from({ length: total }, (_, i) => ({
+        id: `school:fw${i}`, name: `School FW${i}`, category: 'school_entity' as const, level: 2,
+      })),
+    ];
+    const manyLinks: SankeyLink[] = Array.from({ length: total }, (_, i) =>
+      link(`founder:w${i}`, `school:fw${i}`, (total - i) * 1_000, 'founder_support',
+        { institutionId: `school:fw${i}` })
+    );
+    const ds: YearDataset = {
+      year: 2025, currency: 'CZK', title: 'Many kraj 2', sources: [],
+      nodes: manyNodes, links: manyLinks, institutions: manyInst,
+    };
+    const g = drillFounderType(ds, 'kraj', TOP_FOUNDERS);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect(ids.has(PREV_WINDOW_ID)).toBe(true);
+    expect(ids.has(NEXT_WINDOW_ID)).toBe(true);
+  });
+});
+
+// ── drillIntoNode routing for new aggregate nodes ─────────────────────────────
+
+describe('drillIntoNode — new aggregate node routing', () => {
+  it('routes eu:all to drillEU (shows individual programmes)', () => {
+    const g = drillIntoNode(euDataset, EU_ALL_ID);
+    const ids = g.nodes.map((n) => n.id);
+    expect(ids).toContain('eu_prog:OPZ');
+    expect(ids).not.toContain(EU_ALL_ID);
+  });
+
+  it('routes founders:kraj to drillFounderType kraj', () => {
+    const g = drillIntoNode(founderDataset, FOUNDERS_KRAJ);
+    const ids = g.nodes.map((n) => n.id);
+    expect(ids).toContain('founder:region1');
+    expect(ids).not.toContain('founder:muni1');
+  });
+
+  it('routes founders:obec to drillFounderType obec', () => {
+    const g = drillIntoNode(founderDataset, FOUNDERS_OBEC);
+    const ids = g.nodes.map((n) => n.id);
+    expect(ids).toContain('founder:muni1');
+    expect(ids).not.toContain('founder:region1');
+  });
+
+  it('founders:kraj routing not misrouted to drillFounder (category=region)', () => {
+    // FOUNDERS_KRAJ has category 'region' — must not fall through to drillFounder
+    const g = drillIntoNode(founderDataset, FOUNDERS_KRAJ);
+    // drillFounder('Regional founders (kraj)') would return empty; drillFounderType returns real data
+    expect(g.links.length).toBeGreaterThan(0);
+  });
+});
+
 describe('sliding window — drillRegion', () => {
   // Build a region dataset with 30 founders (26 > TOP_FOUNDERS=25)
   const numFounders = 30;
@@ -629,5 +948,156 @@ describe('sliding window — drillRegion', () => {
       (n) => n.category === 'municipality' || n.category === 'region'
     ).length;
     expect(founderCount).toBeLessThanOrEqual(25);
+  });
+});
+
+// ── per-pupil capacity propagation ───────────────────────────────────────────
+// Shared capacity fixture: institutions with capacity set
+const capInst: InstitutionSummary[] = [
+  { id: 'school:s1', name: 'School 1', founderName: 'Municipality A', founderType: 'obec', region: 'Středočeský', capacity: 100 },
+  { id: 'school:s2', name: 'School 2', founderName: 'Municipality A', founderType: 'obec', region: 'Středočeský', capacity: 80 },
+  { id: 'school:s3', name: 'School 3', founderName: 'Středočeský kraj', founderType: 'kraj', region: 'Praha',      capacity: 60 },
+];
+// School nodes with metadata.capacity (as build_school_year.py emits them)
+const capNodes: SankeyNode[] = [
+  { id: 'state:cr',        name: 'State budget',    category: 'state',        level: 0 },
+  { id: 'msmt',            name: 'MŠMT',            category: 'ministry',     level: 1 },
+  { id: 'founder:muni1',   name: 'Municipality A',  category: 'municipality', level: 1 },
+  { id: 'founder:region1', name: 'Středočeský kraj', category: 'region',      level: 1 },
+  { id: 'school:s1', name: 'School 1', category: 'school_entity', level: 2, metadata: { capacity: 100 } },
+  { id: 'school:s2', name: 'School 2', category: 'school_entity', level: 2, metadata: { capacity: 80  } },
+  { id: 'school:s3', name: 'School 3', category: 'school_entity', level: 2, metadata: { capacity: 60  } },
+  { id: 'bucket:wages', name: 'Wages',      category: 'cost_bucket', level: 3 },
+  { id: 'bucket:ops',   name: 'Operations', category: 'cost_bucket', level: 3 },
+];
+const capDatasetFull: YearDataset = { ...dataset, nodes: capNodes, institutions: capInst };
+
+describe('per-pupil — aggregateGraph: state:cr and msmt get total capacity', () => {
+  it('state:cr carries total capacity = 240 (100+80+60)', () => {
+    const g = aggregateGraph(capDatasetFull);
+    const stateCr = g.nodes.find((n) => n.id === 'state:cr');
+    expect(stateCr?.metadata?.capacity).toBe(240);
+  });
+
+  it('msmt carries the same total capacity', () => {
+    const g = aggregateGraph(capDatasetFull);
+    const msmt = g.nodes.find((n) => n.id === 'msmt');
+    expect(msmt?.metadata?.capacity).toBe(240);
+  });
+
+  it('region nodes carry per-region capacity', () => {
+    const g = aggregateGraph(capDatasetFull);
+    const sc = g.nodes.find((n) => n.id === 'region:Středočeský');
+    const pr = g.nodes.find((n) => n.id === 'region:Praha');
+    expect(sc?.metadata?.capacity).toBe(180);
+    expect(pr?.metadata?.capacity).toBe(60);
+  });
+});
+
+describe('per-pupil — drillRegion: founder nodes carry per-founder capacity', () => {
+  it('founder node has capacity = sum of its schools in region', () => {
+    const g = drillRegion(capDatasetFull, 'Středočeský');
+    const muni1 = g.nodes.find((n) => n.id === 'founder:muni1');
+    expect(muni1?.metadata?.capacity).toBe(180); // s1(100) + s2(80)
+  });
+
+  it('window nodes carry capacity of their aggregated founders', () => {
+    // Build a region with more founders than TOP_FOUNDERS
+    const n = 30;
+    const manyInst: InstitutionSummary[] = Array.from({ length: n }, (_, i) => ({
+      id: `school:rw${i}`, name: `School RW${i}`,
+      founderName: `Founder RW${i}`, founderType: 'obec', region: 'Plzeňský',
+      capacity: 50,
+    }));
+    const manyNodes: SankeyNode[] = [
+      { id: 'msmt', name: 'MŠMT', category: 'ministry', level: 1 },
+      { id: 'bucket:wages', name: 'Wages', category: 'cost_bucket', level: 3 },
+      ...Array.from({ length: n }, (_, i) => ({
+        id: `founder:rw${i}`, name: `Founder RW${i}`, category: 'municipality' as const, level: 1,
+      })),
+      ...Array.from({ length: n }, (_, i) => ({
+        id: `school:rw${i}`, name: `School RW${i}`, category: 'school_entity' as const, level: 2,
+        metadata: { capacity: 50 },
+      })),
+    ];
+    const manyLinks: SankeyLink[] = [
+      ...Array.from({ length: n }, (_, i) =>
+        link('msmt', `school:rw${i}`, (n - i) * 10_000, 'direct_school_finance', { institutionId: `school:rw${i}` })
+      ),
+      ...Array.from({ length: n }, (_, i) =>
+        link(`school:rw${i}`, 'bucket:wages', (n - i) * 8_000, 'school_expenditure', { institutionId: `school:rw${i}` })
+      ),
+    ];
+    const ds: YearDataset = { year: 2025, currency: 'CZK', title: 'T', sources: [], nodes: manyNodes, links: manyLinks, institutions: manyInst };
+    const g = drillRegion(ds, 'Plzeňský', 0);
+    const nextNode = g.nodes.find((n) => n.id === NEXT_WINDOW_ID);
+    // 5 overflow founders × 50 capacity each = 250
+    expect(nextNode?.metadata?.capacity).toBe(250);
+  });
+});
+
+describe('per-pupil — drillFounder: school nodes keep individual capacity; window nodes aggregate', () => {
+  it('school nodes in window retain their own metadata.capacity', () => {
+    const g = drillFounder(capDatasetFull, 'Municipality A');
+    const s1 = g.nodes.find((n) => n.id === 'school:s1');
+    const s2 = g.nodes.find((n) => n.id === 'school:s2');
+    expect(s1?.metadata?.capacity).toBe(100);
+    expect(s2?.metadata?.capacity).toBe(80);
+  });
+
+  it('next-window node carries sum of overflow school capacities', () => {
+    const n = 35; // more than TOP_SCHOOLS=30
+    const inst: InstitutionSummary[] = Array.from({ length: n }, (_, i) => ({
+      id: `school:fw${i}`, name: `School FW${i}`, founderName: 'Big Obec',
+      founderType: 'obec', region: 'Jihomoravský', capacity: 40,
+    }));
+    const schoolNodes: SankeyNode[] = Array.from({ length: n }, (_, i) => ({
+      id: `school:fw${i}`, name: `School FW${i}`, category: 'school_entity' as const,
+      level: 2, metadata: { capacity: 40 },
+    }));
+    const ls: SankeyLink[] = [
+      ...Array.from({ length: n }, (_, i) =>
+        link('msmt', `school:fw${i}`, (n - i) * 10_000, 'direct_school_finance', { institutionId: `school:fw${i}` })
+      ),
+      ...Array.from({ length: n }, (_, i) =>
+        link(`school:fw${i}`, 'bucket:wages', (n - i) * 8_000, 'school_expenditure', { institutionId: `school:fw${i}` })
+      ),
+    ];
+    const ds: YearDataset = {
+      year: 2025, currency: 'CZK', title: 'T', sources: [],
+      nodes: [{ id: 'msmt', name: 'MŠMT', category: 'ministry', level: 1 }, { id: 'bucket:wages', name: 'Wages', category: 'cost_bucket', level: 3 }, ...schoolNodes],
+      links: ls, institutions: inst,
+    };
+    const g = drillFounder(ds, 'Big Obec', 0);
+    const nextNode = g.nodes.find((n) => n.id === NEXT_WINDOW_ID);
+    // 5 overflow schools × 40 capacity = 200
+    expect(nextNode?.metadata?.capacity).toBe(200);
+  });
+});
+
+describe('per-pupil — drillFounderType: founder nodes carry per-founder capacity', () => {
+  const founderCapNodes: SankeyNode[] = [
+    ...capNodes,
+    { id: 'founder:muni1',   name: 'Municipality A',  category: 'municipality', level: 1 },
+    { id: 'founder:region1', name: 'Středočeský kraj', category: 'region',       level: 1 },
+  ];
+  const founderCapLinks: SankeyLink[] = [
+    ...links,
+    link('founder:muni1',   'school:s1', 80_000, 'founder_support', { institutionId: 'school:s1' }),
+    link('founder:muni1',   'school:s2', 60_000, 'founder_support', { institutionId: 'school:s2' }),
+    link('founder:region1', 'school:s3', 40_000, 'founder_support', { institutionId: 'school:s3' }),
+  ];
+  const founderCapDataset: YearDataset = { ...dataset, nodes: founderCapNodes, links: founderCapLinks, institutions: capInst };
+
+  it('obec founder node has capacity = sum of its schools', () => {
+    const g = drillFounderType(founderCapDataset, 'obec');
+    const muni1 = g.nodes.find((n) => n.id === 'founder:muni1');
+    expect(muni1?.metadata?.capacity).toBe(180); // s1(100) + s2(80)
+  });
+
+  it('kraj founder node has capacity = its school capacity', () => {
+    const g = drillFounderType(founderCapDataset, 'kraj');
+    const region1 = g.nodes.find((n) => n.id === 'founder:region1');
+    expect(region1?.metadata?.capacity).toBe(60); // s3(60)
   });
 });

@@ -23,6 +23,7 @@ export default function App() {
   const [perPupil, setPerPupil] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function App() {
     function onPointerDown(e: PointerEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setSearchOpen(false);
+        setSearchExpanded(false);
       }
     }
     document.addEventListener('pointerdown', onPointerDown);
@@ -117,12 +119,13 @@ export default function App() {
   function handleSearchSelect(inst: InstitutionSummary) {
     setSearchQuery('');
     setSearchOpen(false);
+    setSearchExpanded(false);
     setDrilldownStack([{ nodeId: inst.id, label: inst.name }]);
   }
 
-  if (loading && !dataset) return <div className="centered">Loading…</div>;
-  if (error && !dataset) return <div className="centered error">Error: {error}</div>;
-  if (!manifest || !dataset || !graph) return <div className="centered">No data.</div>;
+  if (loading && !dataset) return <div className="centered">Načítání…</div>;
+  if (error && !dataset) return <div className="centered error">Chyba: {error}</div>;
+  if (!manifest || !dataset || !graph) return <div className="centered">Žádná data.</div>;
 
   const curYear  = dataset.year;
   const prevYear = prevDataset?.year;
@@ -133,63 +136,75 @@ export default function App() {
   return (
     <>
       <div className="topbar">
-        <div className="topbar__left">
-          {drilldownStack.length > 0 ? (
-            <button className="back-btn" onClick={handleBack}>← {backLabel}</button>
-          ) : (
-            <span className="topbar__title">Czech school finance</span>
-          )}
-        </div>
-
-        <div className="topbar__hover">
-          {hoverInfo ? (
-            <>
-              <span className="topbar__hover-label">{hoverInfo.label}</span>
-              {hoverInfo.amount !== null && (
-                <span className="topbar__hover-amount">{formatCompactCzk(hoverInfo.amount)}</span>
-              )}
-            </>
-          ) : drilldownStack.length > 0 ? (
-            <span className="topbar__hover-context">
-              {drilldownStack.map((e) => e.label).join(' › ')}
-            </span>
-          ) : null}
-          <button
-            className={`year-toggle-btn${perPupil ? ' year-toggle-btn--active' : ''}`}
-            onClick={() => setPerPupil((v) => !v)}
-            title="Toggle per-pupil view (RSSZ registered capacity)"
-          >
-            {perPupil ? 'Kč/pupil' : 'total'}
-          </button>
-          {prevGraph && prevYear && (
-            <button className="year-toggle-btn" onClick={() => setPrevActive((v) => !v)}>
-              {prevActive ? prevYear : curYear}
-            </button>
-          )}
-        </div>
-
-        <div className="topbar__right">
-          <div className="search-wrap" ref={searchRef}>
-            <input
-              className="search-input"
-              type="search"
-              placeholder="Search school…"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
-              onFocus={() => setSearchOpen(true)}
-            />
-            {searchOpen && searchResults.length > 0 && (
-              <ul className="search-dropdown">
-                {searchResults.map((inst) => (
-                  <li key={inst.id} className="search-result" onPointerDown={() => handleSearchSelect(inst)}>
-                    <span className="search-result__name">{inst.name}</span>
-                    <span className="search-result__meta">
-                      {[inst.municipality, inst.region].filter(Boolean).join(', ')}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+        <div className="topbar__main">
+          <div className="topbar__left">
+            {drilldownStack.length > 0 ? (
+              <button className="back-btn" onClick={handleBack}>← {backLabel}</button>
+            ) : (
+              <span className="topbar__title">Finance českého školství</span>
             )}
+          </div>
+
+          <div className="topbar__hover">
+            {hoverInfo ? (
+              <>
+                <span className="topbar__hover-label">{hoverInfo.label}</span>
+                {hoverInfo.amount !== null && (
+                  <span className="topbar__hover-amount">{formatCompactCzk(hoverInfo.amount)}</span>
+                )}
+              </>
+            ) : drilldownStack.length > 0 ? (
+              <span className="topbar__hover-context">
+                {drilldownStack.map((e) => e.label).join(' › ')}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="topbar__controls">
+            <button
+              className={`year-toggle-btn${perPupil ? ' year-toggle-btn--active' : ''}`}
+              onClick={() => setPerPupil((v) => !v)}
+              title="Přepnout pohled Kč/žák (kapacita RSSZ)"
+            >
+              {perPupil ? 'Kč/žák/rok' : 'celkem'}
+            </button>
+            {prevGraph && prevYear && (
+              <button className="year-toggle-btn" onClick={() => setPrevActive((v) => !v)}>
+                {prevActive ? prevYear : curYear}
+              </button>
+            )}
+            <button
+              className="search-icon-btn"
+              onClick={() => setSearchExpanded((v) => !v)}
+              aria-label="Hledat školu"
+            >
+              {searchExpanded ? '✕' : '⌕'}
+            </button>
+          </div>
+
+          <div className={`topbar__search${searchExpanded ? ' topbar__search--open' : ''}`} ref={searchRef}>
+            <div className="search-wrap">
+              <input
+                className="search-input"
+                type="search"
+                placeholder="Hledat školu…"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+                onFocus={() => { setSearchOpen(true); setSearchExpanded(true); }}
+              />
+              {searchOpen && searchResults.length > 0 && (
+                <ul className="search-dropdown">
+                  {searchResults.map((inst) => (
+                    <li key={inst.id} className="search-result" onPointerDown={() => handleSearchSelect(inst)}>
+                      <span className="search-result__name">{inst.name}</span>
+                      <span className="search-result__meta">
+                        {[inst.municipality, inst.region].filter(Boolean).join(', ')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       </div>

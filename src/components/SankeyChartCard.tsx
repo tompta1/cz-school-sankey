@@ -28,7 +28,11 @@ const COLOR: Record<string, string> = {
   other:         '#6b7280',
 };
 
-const LAYOUT = { top: 20, right: 200, bottom: 20, left: 200 };
+function chartLayout(containerWidth: number) {
+  if (containerWidth < 480) return { top: 16, right: 68, bottom: 16, left: 68 };
+  if (containerWidth < 768) return { top: 18, right: 110, bottom: 18, left: 110 };
+  return { top: 20, right: 200, bottom: 20, left: 200 };
+}
 
 function buildActiveOption(
   nodes: SankeyNode[],
@@ -36,16 +40,35 @@ function buildActiveOption(
   idToDisplay: Map<string, string>,
   perPupil: boolean,
   capacityMap: Map<string, number>,
+  containerWidth: number,
 ) {
+  const mobile = containerWidth < 640;
+  const maxLabelLen = mobile ? 18 : 26;
+  const labelFontSize = mobile ? 10 : 11;
   const nodeGap = nodes.length > 35 ? 4 : nodes.length > 20 ? 8 : 14;
 
-  const linkCapacity = (l: SankeyLink): number | null =>
-    perPupil && l.institutionId ? (capacityMap.get(l.institutionId) ?? null) : null;
+  const linkCapacity = (l: SankeyLink): number | null => {
+    if (!perPupil) return null;
+    if (l.institutionId) return capacityMap.get(l.institutionId) ?? null;
+    // Aggregate links (no institutionId): scale by the region node's total capacity
+    return capacityMap.get(l.target) ?? capacityMap.get(l.source) ?? null;
+  };
+
+  // In per-pupil mode sort links descending by Kč/žák so higher-value flows
+  // appear at the top and ECharts orders nodes accordingly.
+  const orderedLinks = perPupil
+    ? [...links].sort((a, b) => {
+        const capA = linkCapacity(a);
+        const capB = linkCapacity(b);
+        return (capB ? b.amountCzk / capB : b.amountCzk) - (capA ? a.amountCzk / capA : a.amountCzk);
+      })
+    : links;
 
   return {
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'item',
+      confine: true,
       formatter(params: unknown) {
         const p = params as { dataType: string; data: Record<string, unknown> };
         if (p.dataType === 'edge') {
@@ -60,7 +83,7 @@ function buildActiveOption(
         if (total === 0) return `<strong>${displayName}</strong>`;
         const cap = perPupil ? (capacityMap.get(nodeId) ?? null) : null;
         const totalFmt = cap ? formatPerPupil(total / cap) : formatCompactCzk(total);
-        const suffix = cap ? ` inflow<br/><small style="color:#94a3b8">${cap} pupils (RSSZ capacity)</small>` : ' inflow';
+        const suffix = cap ? `<br/><small style="color:#94a3b8">${cap} žáků (RSSZ kapacita)</small>` : ' celkový příjem';
         return `<strong>${displayName}</strong><br/>${totalFmt}${suffix}`;
       },
       backgroundColor: 'rgba(8,16,30,0.92)',
@@ -70,26 +93,29 @@ function buildActiveOption(
     },
     series: [{
       type: 'sankey',
-      ...LAYOUT,
-      nodeWidth: 18,
+      ...chartLayout(containerWidth),
+      nodeWidth: mobile ? 14 : 18,
       nodeGap,
       layoutIterations: 64,
-      draggable: true,
+      draggable: !mobile,
       nodeAlign: 'justify',
       emphasis: { focus: 'adjacency', lineStyle: { opacity: 0.9 } },
       blur: { itemStyle: { opacity: 0.08 }, lineStyle: { opacity: 0.05 } },
       lineStyle: { color: 'source', opacity: 0.45, curveness: 0.5 },
       label: {
         color: '#cbd5e1',
-        fontSize: 11,
+        fontSize: labelFontSize,
         fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        formatter: (params: { name: string }) => idToDisplay.get(params.name) ?? params.name,
+        formatter: (params: { name: string }) => {
+          const name = idToDisplay.get(params.name) ?? params.name;
+          return name.length > maxLabelLen ? name.slice(0, maxLabelLen - 2) + '…' : name;
+        },
       },
       data: nodes.map((n) => ({
         name: n.id,
         itemStyle: { color: COLOR[n.category] ?? COLOR.other, borderColor: '#0b1220', borderWidth: 1 },
       })),
-      links: links.map((l) => {
+      links: orderedLinks.map((l) => {
         const cap = linkCapacity(l);
         return {
           source: l.source,
@@ -109,14 +135,16 @@ function buildGhostOption(
   links: SankeyLink[],
   perPupil: boolean,
   capacityMap: Map<string, number>,
+  containerWidth: number,
 ) {
+  const mobile = containerWidth < 640;
   const nodeGap = nodes.length > 35 ? 4 : nodes.length > 20 ? 8 : 14;
   return {
     backgroundColor: 'transparent',
     series: [{
       type: 'sankey',
-      ...LAYOUT,
-      nodeWidth: 18,
+      ...chartLayout(containerWidth),
+      nodeWidth: mobile ? 14 : 18,
       nodeGap,
       layoutIterations: 64,
       draggable: false,
@@ -129,7 +157,9 @@ function buildGhostOption(
         itemStyle: { color: '#94a3b8', opacity: 0.22, borderWidth: 0 },
       })),
       links: links.map((l) => {
-        const cap = perPupil && l.institutionId ? (capacityMap.get(l.institutionId) ?? null) : null;
+        const cap = perPupil
+          ? (l.institutionId ? capacityMap.get(l.institutionId) : capacityMap.get(l.target) ?? capacityMap.get(l.source)) ?? null
+          : null;
         return {
           source: l.source,
           target: l.target,
@@ -158,7 +188,7 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
     const idToDisplay = new Map(nodes.map((n) => [n.id, n.name]));
     const capacityMap = new Map(
       nodes
-        .filter((n) => n.category === 'school_entity' && typeof n.metadata?.capacity === 'number')
+        .filter((n) => typeof n.metadata?.capacity === 'number')
         .map((n) => [n.id, n.metadata!.capacity as number]),
     );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
@@ -179,14 +209,18 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
       chart.on('mouseout', () => onNodeHoverRef.current(null));
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    chart.setOption<any>(
-      prevActive
-        ? buildGhostOption(nodes, links, perPupil, capacityMap)
-        : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap),
-    );
+    const buildOption = (w: number) => prevActive
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? buildGhostOption(nodes, links, perPupil, capacityMap, w) as any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap, w) as any;
 
-    const ro = new ResizeObserver(() => chart.resize());
+    chart.setOption(buildOption(el.clientWidth));
+
+    const ro = new ResizeObserver(() => {
+      chart.setOption(buildOption(el.clientWidth));
+      chart.resize();
+    });
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
   }, [nodes, links, prevActive, perPupil]);
@@ -198,7 +232,7 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
     const idToDisplay = new Map(prevNodes.map((n) => [n.id, n.name]));
     const capacityMap = new Map(
       prevNodes
-        .filter((n) => n.category === 'school_entity' && typeof n.metadata?.capacity === 'number')
+        .filter((n) => typeof n.metadata?.capacity === 'number')
         .map((n) => [n.id, n.metadata!.capacity as number]),
     );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
@@ -219,14 +253,18 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
       chart.on('mouseout', () => onNodeHoverRef.current(null));
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    chart.setOption<any>(
-      prevActive
-        ? buildActiveOption(prevNodes, prevLinks, idToDisplay, perPupil, capacityMap)
-        : buildGhostOption(prevNodes, prevLinks, perPupil, capacityMap),
-    );
+    const buildOption = (w: number) => prevActive
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? buildActiveOption(prevNodes, prevLinks, idToDisplay, perPupil, capacityMap, w) as any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      : buildGhostOption(prevNodes, prevLinks, perPupil, capacityMap, w) as any;
 
-    const ro = new ResizeObserver(() => chart.resize());
+    chart.setOption(buildOption(el.clientWidth));
+
+    const ro = new ResizeObserver(() => {
+      chart.setOption(buildOption(el.clientWidth));
+      chart.resize();
+    });
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
   }, [prevNodes, prevLinks, prevActive, perPupil]);
