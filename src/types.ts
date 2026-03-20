@@ -56,6 +56,23 @@ export interface InstitutionSummary {
   capacity?: number;
 }
 
+export interface ApiGraph {
+  year: number;
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+}
+
+export interface ApiYearInfo {
+  year: number;
+  directSchoolFinanceRows: number;
+  schoolExpenditureRows: number;
+}
+
+export interface ApiYearsResponse {
+  domain: 'school';
+  years: ApiYearInfo[];
+}
+
 export interface YearDataset {
   year: number;
   currency: 'CZK';

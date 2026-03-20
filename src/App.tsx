@@ -1,20 +1,71 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { SankeyChartCard } from './components/SankeyChartCard';
-import { aggregateGraph, drillIntoNode, PREV_WINDOW_ID, NEXT_WINDOW_ID, TOP_SCHOOLS } from './lib/graph';
+import {
+  EU_ALL_ID,
+  FOUNDERS_KRAJ,
+  FOUNDERS_OBEC,
+  NEXT_WINDOW_ID,
+  PREV_WINDOW_ID,
+  TOP_FOUNDERS,
+  TOP_SCHOOLS,
+} from './lib/graph';
 import { formatCompactCzk } from './lib/format';
-import type { DrilldownEntry, HoverInfo, InstitutionSummary, Manifest, YearDataset } from './types';
+import type { ApiGraph, ApiYearsResponse, DrilldownEntry, HoverInfo, InstitutionSummary } from './types';
 
-function normalize(s: string): string {
-  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-}
+const ROOT_TITLE = 'Finance českého školství';
 
 const MAX_RESULTS = 8;
 
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw new Error(`${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+function buildGraphUrl(year: number, nodeId: string | null, offset: number): string {
+  const params = new URLSearchParams({ year: String(year) });
+  if (!nodeId) return `/api/graph/overview?${params.toString()}`;
+
+  if (nodeId === EU_ALL_ID) {
+    return `/api/graph/eu?${params.toString()}`;
+  }
+  if (nodeId === FOUNDERS_KRAJ || nodeId === FOUNDERS_OBEC) {
+    params.set('founderType', nodeId === FOUNDERS_KRAJ ? 'kraj' : 'obec');
+    params.set('offset', String(offset));
+    return `/api/graph/founders?${params.toString()}`;
+  }
+  if (nodeId.startsWith('region:')) {
+    params.set('region', nodeId.replace('region:', ''));
+    params.set('offset', String(offset));
+    return `/api/graph/region?${params.toString()}`;
+  }
+  if (nodeId.startsWith('founder:')) {
+    params.set('founderId', nodeId);
+    params.set('offset', String(offset));
+    return `/api/graph/founder?${params.toString()}`;
+  }
+
+  params.set('nodeId', nodeId);
+  params.set('offset', String(offset));
+  return `/api/graph/node?${params.toString()}`;
+}
+
+function pageSizeForNode(nodeId: string | null): number {
+  if (!nodeId) return TOP_SCHOOLS;
+  if (nodeId === FOUNDERS_KRAJ || nodeId === FOUNDERS_OBEC || nodeId.startsWith('region:')) {
+    return TOP_FOUNDERS;
+  }
+  return TOP_SCHOOLS;
+}
+
 export default function App() {
-  const [manifest, setManifest] = useState<Manifest | null>(null);
-  const [dataset, setDataset] = useState<YearDataset | null>(null);
-  const [prevDataset, setPrevDataset] = useState<YearDataset | null>(null);
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
+  const [previousYear, setPreviousYear] = useState<number | null>(null);
+  const [graph, setGraph] = useState<ApiGraph | null>(null);
+  const [prevGraph, setPrevGraph] = useState<ApiGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drilldownStack, setDrilldownStack] = useState<DrilldownEntry[]>([]);
@@ -22,41 +73,75 @@ export default function App() {
   const [prevActive, setPrevActive] = useState(false);
   const [perPupil, setPerPupil] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<InstitutionSummary[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
-    fetch('./data/manifest.json')
-      .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
-      .then((m: Manifest) => {
+    fetchJson<ApiYearsResponse>('/api/years')
+      .then((response) => {
         if (!active) return;
-        setManifest(m);
-        // Load the two most recent years
-        const sorted = [...m.years].sort((a, b) => a.year - b.year);
-        const cur = sorted.at(-1);
-        const prev = sorted.at(-2);
-        if (!cur) return;
-
-        const load = (file: string) =>
-          fetch(file).then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); });
-
-        setLoading(true);
-        load(cur.file)
-          .then((d: YearDataset) => { if (active) { setDataset(d); setError(null); } })
-          .catch((e) => { if (active) setError(String(e)); })
-          .finally(() => { if (active) setLoading(false); });
-
-        if (prev) {
-          load(prev.file)
-            .then((d: YearDataset) => { if (active) setPrevDataset(d); })
-            .catch(() => { if (active) setPrevDataset(null); });
-        }
+        const sorted = [...response.years].sort((a, b) => a.year - b.year);
+        const cur = sorted.at(-1)?.year ?? null;
+        const prev = sorted.at(-2)?.year ?? null;
+        setCurrentYear(cur);
+        setPreviousYear(prev);
+        setError(null);
       })
-      .catch((e) => { if (active) setError(String(e)); });
+      .catch((e) => {
+        if (active) {
+          setError(String(e));
+          setLoading(false);
+        }
+      });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!currentYear) return;
+    const controller = new AbortController();
+    const currentEntry = drilldownStack.at(-1);
+    const nodeId = currentEntry?.nodeId ?? null;
+    const offset = currentEntry?.offset ?? 0;
+
+    setLoading(true);
+    fetchJson<ApiGraph>(buildGraphUrl(currentYear, nodeId, offset), controller.signal)
+      .then((response) => {
+        setGraph(response);
+        setError(null);
+      })
+      .catch((e) => {
+        if (controller.signal.aborted) return;
+        setError(String(e));
+        setGraph(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [currentYear, drilldownStack]);
+
+  useEffect(() => {
+    if (!previousYear) {
+      setPrevGraph(null);
+      return;
+    }
+    const controller = new AbortController();
+    const currentEntry = drilldownStack.at(-1);
+    const nodeId = currentEntry?.nodeId ?? null;
+    const offset = currentEntry?.offset ?? 0;
+
+    fetchJson<ApiGraph>(buildGraphUrl(previousYear, nodeId, offset), controller.signal)
+      .then((response) => setPrevGraph(response))
+      .catch(() => {
+        if (!controller.signal.aborted) setPrevGraph(null);
+      });
+
+    return () => controller.abort();
+  }, [previousYear, drilldownStack]);
 
   useEffect(() => {
     function onPointerDown(e: PointerEvent) {
@@ -69,46 +154,50 @@ export default function App() {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, []);
 
-  const currentEntry  = drilldownStack.at(-1);
-  const currentNodeId = currentEntry?.nodeId ?? null;
-  const currentOffset = currentEntry?.offset ?? 0;
-
-  const graph = useMemo(() => {
-    if (!dataset) return null;
-    return currentNodeId ? drillIntoNode(dataset, currentNodeId, currentOffset) : aggregateGraph(dataset);
-  }, [dataset, currentNodeId, currentOffset]);
-
-  const prevGraph = useMemo(() => {
-    if (!prevDataset) return null;
-    return currentNodeId ? drillIntoNode(prevDataset, currentNodeId, currentOffset) : aggregateGraph(prevDataset);
-  }, [prevDataset, currentNodeId, currentOffset]);
-
-  const searchResults = useMemo<InstitutionSummary[]>(() => {
-    if (!dataset || searchQuery.trim().length < 2) return [];
-    const q = normalize(searchQuery.trim());
-    const results: InstitutionSummary[] = [];
-    for (const inst of dataset.institutions) {
-      if (results.length >= MAX_RESULTS) break;
-      if (normalize(`${inst.name} ${inst.municipality ?? ''} ${inst.region ?? ''}`).includes(q))
-        results.push(inst);
+  useEffect(() => {
+    if (!currentYear || searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      return;
     }
-    return results;
-  }, [dataset, searchQuery]);
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        year: String(currentYear),
+        q: searchQuery.trim(),
+        limit: String(MAX_RESULTS),
+      });
+      fetchJson<{ institutions: InstitutionSummary[] }>(
+        `/api/search/institutions?${params.toString()}`,
+        controller.signal,
+      )
+        .then((response) => setSearchResults(response.institutions))
+        .catch(() => {
+          if (!controller.signal.aborted) setSearchResults([]);
+        });
+    }, 120);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentYear, searchQuery]);
 
   function handleNodeClick(nodeId: string) {
     if (nodeId === PREV_WINDOW_ID || nodeId === NEXT_WINDOW_ID) {
       setDrilldownStack((prev) => {
         const last = prev.at(-1);
         if (!last) return prev;
-        const PAGE = nodeId === PREV_WINDOW_ID ? -TOP_SCHOOLS : TOP_SCHOOLS;
+        const pageSize = pageSizeForNode(last.nodeId);
+        const PAGE = nodeId === PREV_WINDOW_ID ? -pageSize : pageSize;
         const newOffset = Math.max(0, (last.offset ?? 0) + PAGE);
         return [...prev.slice(0, -1), { ...last, offset: newOffset }];
       });
       return;
     }
     if (nodeId.startsWith('synthetic:')) return;
-    const node = graph?.nodes.find((n) => n.id === nodeId) ?? dataset?.nodes.find((n) => n.id === nodeId);
-    if (!node || node.category === 'state' || node.category === 'ministry') return;
+    const node = graph?.nodes.find((n) => n.id === nodeId);
+    if (!node || node.category === 'state' || node.category === 'ministry' || node.category === 'other') return;
     setDrilldownStack((prev) => [...prev, { nodeId, label: node.name }]);
   }
 
@@ -123,15 +212,15 @@ export default function App() {
     setDrilldownStack([{ nodeId: inst.id, label: inst.name }]);
   }
 
-  if (loading && !dataset) return <div className="centered">Načítání…</div>;
-  if (error && !dataset) return <div className="centered error">Chyba: {error}</div>;
-  if (!manifest || !dataset || !graph) return <div className="centered">Žádná data.</div>;
+  if (loading && !graph) return <div className="centered">Načítání…</div>;
+  if (error && !graph) return <div className="centered error">Chyba: {error}</div>;
+  if (!currentYear || !graph) return <div className="centered">Žádná data.</div>;
 
-  const curYear  = dataset.year;
-  const prevYear = prevDataset?.year;
+  const curYear = currentYear;
+  const prevYear = previousYear;
   const backLabel = drilldownStack.length > 1
     ? drilldownStack.at(-2)!.label
-    : dataset.title;
+    : ROOT_TITLE;
 
   return (
     <>
@@ -141,7 +230,7 @@ export default function App() {
             {drilldownStack.length > 0 ? (
               <button className="back-btn" onClick={handleBack}>← {backLabel}</button>
             ) : (
-              <span className="topbar__title">Finance českého školství</span>
+              <span className="topbar__title">{ROOT_TITLE}</span>
             )}
           </div>
 

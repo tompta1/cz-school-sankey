@@ -2,7 +2,7 @@
 
 An open-source, fully static interactive visualisation of how public money flows through the Czech school system — from the state budget through MŠMT (Ministry of Education) and regional founders down to individual schools and cost categories. Designed for transparency, reproducibility, and zero-backend hosting on GitHub Pages.
 
-**Live demo:** [tompt.github.io/cz-school-sankey](https://tompt.github.io/cz-school-sankey)
+**Live demo:** [tompta1.github.io/cz-school-sankey](https://tompt.github.io/cz-school-sankey)
 
 ---
 
