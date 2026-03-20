@@ -1,7 +1,8 @@
-import { badRequest, json, methodNotAllowed } from '../_lib/http.js';
+import { badRequest, json, methodNotAllowed, preflight } from '../_lib/http.js';
 import { searchInstitutions } from '../_lib/school.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   if (req.method !== 'GET') return methodNotAllowed(res);
 
   const year = Number(req.query.year);

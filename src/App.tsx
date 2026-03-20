@@ -16,6 +16,11 @@ import type { ApiGraph, ApiYearsResponse, DrilldownEntry, HoverInfo, Institution
 const ROOT_TITLE = 'Finance českého školství';
 
 const MAX_RESULTS = 8;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+
+function buildApiUrl(path: string): string {
+  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+}
 
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
@@ -80,7 +85,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    fetchJson<ApiYearsResponse>('/api/years')
+    fetchJson<ApiYearsResponse>(buildApiUrl('/api/years'))
       .then((response) => {
         if (!active) return;
         const sorted = [...response.years].sort((a, b) => a.year - b.year);
@@ -107,7 +112,7 @@ export default function App() {
     const offset = currentEntry?.offset ?? 0;
 
     setLoading(true);
-    fetchJson<ApiGraph>(buildGraphUrl(currentYear, nodeId, offset), controller.signal)
+    fetchJson<ApiGraph>(buildApiUrl(buildGraphUrl(currentYear, nodeId, offset)), controller.signal)
       .then((response) => {
         setGraph(response);
         setError(null);
@@ -134,7 +139,7 @@ export default function App() {
     const nodeId = currentEntry?.nodeId ?? null;
     const offset = currentEntry?.offset ?? 0;
 
-    fetchJson<ApiGraph>(buildGraphUrl(previousYear, nodeId, offset), controller.signal)
+    fetchJson<ApiGraph>(buildApiUrl(buildGraphUrl(previousYear, nodeId, offset)), controller.signal)
       .then((response) => setPrevGraph(response))
       .catch(() => {
         if (!controller.signal.aborted) setPrevGraph(null);
@@ -168,7 +173,7 @@ export default function App() {
         limit: String(MAX_RESULTS),
       });
       fetchJson<{ institutions: InstitutionSummary[] }>(
-        `/api/search/institutions?${params.toString()}`,
+        buildApiUrl(`/api/search/institutions?${params.toString()}`),
         controller.signal,
       )
         .then((response) => setSearchResults(response.institutions))

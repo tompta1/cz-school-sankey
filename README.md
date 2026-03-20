@@ -1,8 +1,8 @@
 # Czech School Finance — Interactive Sankey Explorer
 
-An open-source, fully static interactive visualisation of how public money flows through the Czech school system — from the state budget through MŠMT (Ministry of Education) and regional founders down to individual schools and cost categories. Designed for transparency, reproducibility, and zero-backend hosting on GitHub Pages.
+An open-source interactive visualisation of how public money flows through the Czech school system — from the state budget through MŠMT (Ministry of Education) and regional founders down to individual schools and cost categories.
 
-**Live demo:** [tompta1.github.io/cz-school-sankey](https://tompt.github.io/cz-school-sankey)
+**Live demo:** [tompta1.github.io/cz-school-sankey](https://tompta1.github.io/cz-school-sankey)
 
 ---
 
@@ -67,12 +67,6 @@ python3 etl/fetch_eu_grants.py --year 2025
 python3 etl/build_school_year.py --year 2025
 ```
 
-To run with the bundled demo fixture (no raw XLSXes needed):
-
-```bash
-npm run etl:demo   # loads pre-built 2025 JSON fixture
-```
-
 ---
 
 ## Development
@@ -86,9 +80,11 @@ npm run etl:demo   # loads pre-built 2025 JSON fixture
 
 ```bash
 npm install
-npm run etl:demo   # hydrate public/data/ from the demo fixture
-npm run dev        # Vite dev server at http://localhost:5173
+vercel dev         # frontend + local /api/* functions
 ```
+
+If you want to run the Vite frontend against a remote API instead, set
+`VITE_API_BASE_URL` before `npm run dev`.
 
 ### Tests
 
@@ -110,26 +106,25 @@ The test suite covers:
 npm run build      # tsc + vite build → dist/
 ```
 
-GitHub Pages deployment is automated via `.github/workflows/deploy-pages.yml` on every push to `main`.
+GitHub Pages deployment is automated via [.github/workflows/deploy-pages.yml](/var/home/tom/Documents/Projects/cz-school-sankey/.github/workflows/deploy-pages.yml). The Pages build expects the repository variable `PAGES_API_BASE_URL` to point at the production Vercel API origin.
+
+Neon warehouse refresh is automated via [.github/workflows/refresh-neon-school-data.yml](/var/home/tom/Documents/Projects/cz-school-sankey/.github/workflows/refresh-neon-school-data.yml). That workflow expects the repository secret `NEON_DATABASE_URL`.
 
 ---
 
 ## Architecture
 
 ```
-src/
-├── App.tsx                   # Top-level state: dataset, drilldown stack, year toggle, search
-├── components/
-│   └── SankeyChartCard.tsx   # ECharts Sankey with ghost (prev-year) overlay
-├── lib/
-│   ├── graph.ts              # Pure graph transforms: filterGraph, aggregateGraph, drillRegion, drillFounder
-│   ├── format.ts             # CZK compact formatter
-│   └── __tests__/
-│       └── graph.test.ts     # Vitest unit tests
-└── types.ts                  # Shared TypeScript interfaces
+GitHub Pages frontend -> Vercel /api -> Neon Postgres
+                         ^
+                         |
+                   GitHub Actions ETL
 ```
 
-The UI is intentionally thin: all graph logic lives in pure functions in `graph.ts` that can be tested in isolation without a browser or ECharts.
+- GitHub Pages hosts the static React bundle.
+- Vercel serves read-only API endpoints from `api/`.
+- Neon stores the warehouse tables under `meta`, `raw`, `core`, and `mart`.
+- GitHub Actions refreshes the warehouse on demand or on a quarterly schedule.
 
 ---
 

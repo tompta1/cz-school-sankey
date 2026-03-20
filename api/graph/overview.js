@@ -1,7 +1,8 @@
-import { badRequest, json, methodNotAllowed, notFound } from '../_lib/http.js';
+import { badRequest, json, methodNotAllowed, notFound, preflight } from '../_lib/http.js';
 import { getSchoolOverviewGraph } from '../_lib/school.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   if (req.method !== 'GET') return methodNotAllowed(res);
 
   const year = Number(req.query.year);
