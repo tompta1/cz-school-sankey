@@ -13,7 +13,10 @@
     "etl:parse": "python3 etl/parse_msmt_xlsx.py --year 2025 --kraj Středočeský --top 25",
     "etl:eu": "python3 etl/fetch_eu_grants.py --year 2025",
     "etl:year": "python3 etl/build_school_year.py --year 2025",
-    "etl:full": "npm run etl:parse && npm run etl:eu && npm run etl:year"
+    "etl:founders": "python3 etl/fetch_founder_budgets.py --year 2025",
+    "etl:founders:columns": "python3 etl/fetch_founder_budgets.py --year 2025 --list-columns",
+    "etl:registry": "python3 etl/fetch_msmt_registry.py --year 2025 --update-csv",
+    "etl:full": "npm run etl:parse && npm run etl:eu && npm run etl:founders && npm run etl:registry && npm run etl:year"
   },
   "dependencies": {
     "echarts": "^5.6.0",

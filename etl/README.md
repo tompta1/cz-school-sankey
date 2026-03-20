@@ -66,8 +66,10 @@ One row per founder-to-school pass-through.
 | `institution_id` or `ico` | yes | join key |
 | `amount` | yes | CZK |
 | `basis` | no | defaults to `budgeted` |
-| `certainty` | no | defaults to `inferred` |
-| `note` | no | explain reconstruction method |
+| `certainty` | no | `observed` (FIN 2-01 PO) or `inferred` (FIN 2-12 M pro-rated) |
+| `note` | no | explains source dataset and reconstruction method |
+
+This file is produced by `fetch_founder_budgets.py` (see below).
 
 ## Suggested manual process
 
@@ -80,6 +82,49 @@ One row per founder-to-school pass-through.
 ```bash
 # Parse MŠMT XLSX into school_entities.csv and msmt_allocations.csv
 python3 etl/parse_msmt_xlsx.py --year 2025
+
+# Fetch founder budget transfers from MONITOR and produce founder_support.csv
+python3 etl/fetch_founder_budgets.py --year 2025
+
+# Inspect actual column headers (run this first if detection fails)
+python3 etl/fetch_founder_budgets.py --year 2025 --list-columns
+
+# Use a specific MONITOR period (YYYYMM)
+python3 etl/fetch_founder_budgets.py --year 2025 --period 202512
+
+# Use locally downloaded CSV files (skips network download)
+python3 etl/fetch_founder_budgets.py --year 2025 \
+    --fin12m path/to/fin2-12m.csv \
+    --finpo  path/to/fin2-01po.csv
+
+# Skip the per-school FIN 2-01 PO pass (produce only inferred aggregate rows)
+python3 etl/fetch_founder_budgets.py --year 2025 --no-po
+```
+
+### Founder budget pipeline notes
+
+`fetch_founder_budgets.py` runs two passes against MONITOR national extracts:
+
+**Pass 1 — FIN 2-01 PO** (school-level, observed):
+Downloads the FIN 2-01 PO national extract, filters for school IČOs in
+`school_entities.csv`, and extracts accounts 672/673
+("přijaté příspěvky/transfery od zřizovatele"). Rows produced this way are
+marked `certainty=observed, basis=realized`.
+
+**Pass 2 — FIN 2-12 M** (founder aggregate, inferred):
+Downloads the FIN 2-12 M national extract, filters for founder IČOs and
+education paragraphs §3100–§3299 with transfer items 5331/5336/6351
+(neinvestiční/investiční příspěvky zřízeným PO). The per-founder total is
+pro-rated across that founder's schools weighted by their MŠMT allocation
+share. These rows are marked `certainty=inferred, basis=realized`.
+
+Downloaded ZIPs are cached under `etl/data/monitor_cache/`. Re-run with
+`--no-cache` to force a fresh download.
+
+If column detection fails, run with `--list-columns` to print the actual
+headers and update the `*_COLS_*` lists at the top of the script.
+
+```bash
 
 # Fetch EU grants from DotaceEU and produce eu_projects.csv
 python3 etl/fetch_eu_grants.py --year 2025
