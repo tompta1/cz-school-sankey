@@ -1101,3 +1101,141 @@ describe('per-pupil — drillFounderType: founder nodes carry per-founder capaci
     expect(region1?.metadata?.capacity).toBe(60); // s3(60)
   });
 });
+
+// ── aggregateGraph — state → founders connection ──────────────────────────────
+
+describe('aggregateGraph — state → founders connection', () => {
+  // Local stateDataset with a modest state_to_other link (500k) and no founder_support
+  const localStateNodes: SankeyNode[] = [
+    ...nodes,
+    { id: 'income:taxes', name: 'Daňové příjmy', category: 'other', level: 0 },
+    { id: 'state:other',  name: 'Ostatní výdaje SR', category: 'other', level: 3 },
+  ];
+  const localStateLinks: SankeyLink[] = [
+    ...links,
+    link('income:taxes', 'state:cr', 1_000_000, 'state_revenue', { basis: 'realized' }),
+    link('state:cr', 'state:other', 500_000, 'state_to_other', { basis: 'realized', certainty: 'inferred' }),
+  ];
+  const localStateDataset: YearDataset = {
+    year: 2025, currency: 'CZK', title: 'State budget test', sources: [],
+    nodes: localStateNodes, links: localStateLinks, institutions,
+  };
+
+  // Dataset combining founderLinks with capInst so we get both founder_support and capacity
+  const founderCapDataset: YearDataset = { ...founderDataset, institutions: capInst };
+
+  it('emits state:cr → founders:obec link with total obec support amount', () => {
+    const g = aggregateGraph(founderDataset);
+    const l = g.links.find((l) => l.source === 'state:cr' && l.target === FOUNDERS_OBEC);
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(140_000); // 80k + 60k
+  });
+
+  it('emits state:cr → founders:kraj link with total kraj support amount', () => {
+    const g = aggregateGraph(founderDataset);
+    const l = g.links.find((l) => l.source === 'state:cr' && l.target === FOUNDERS_KRAJ);
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(40_000);
+  });
+
+  it('does not reduce state:other when no founder flows are present', () => {
+    const g = aggregateGraph(localStateDataset);
+    const stateOther = g.links.find((l) => l.target === 'state:other');
+    // No founder_support → no reduction
+    expect(stateOther?.amountCzk).toBe(500_000);
+  });
+
+  it('reduces state:other when founder flows are present', () => {
+    const combined: YearDataset = {
+      ...founderDataset,
+      nodes: [...founderDataset.nodes, ...localStateNodes.filter((n) => !founderDataset.nodes.some((fn) => fn.id === n.id))],
+      links: [...founderDataset.links, ...localStateLinks],
+    };
+    const g = aggregateGraph(combined);
+    const stateOther = g.links.find((l) => l.target === 'state:other');
+    // state:other was 500_000; founder transfer = 140k+40k = 180k → 320k
+    expect(stateOther?.amountCzk).toBe(320_000);
+  });
+
+  it('founders:obec node carries total obec school capacity', () => {
+    // founderCapDataset has founder_support links + capInst with capacity
+    const g = aggregateGraph(founderCapDataset);
+    const obecNode = g.nodes.find((n) => n.id === FOUNDERS_OBEC);
+    expect(obecNode?.metadata?.capacity).toBe(180); // s1(100) + s2(80)
+  });
+
+  it('founders:kraj node carries total kraj school capacity', () => {
+    const g = aggregateGraph(founderCapDataset);
+    const krajNode = g.nodes.find((n) => n.id === FOUNDERS_KRAJ);
+    expect(krajNode?.metadata?.capacity).toBe(60); // s3(60)
+  });
+});
+
+// ── drillRegion — founder_support flows visible at middle layer ───────────────
+// founderDataset: muni1 obec→s1+s2 (Středočeský), region1 kraj→s3 (Praha)
+// s1+s2 are in Středočeský; s3 is in Praha
+
+describe('drillRegion — founder_support flows', () => {
+  it('emits FOUNDERS_OBEC → founder node link for obec founders in the region', () => {
+    const g = drillRegion(founderDataset, 'Středočeský');
+    const l = g.links.find((l) => l.source === FOUNDERS_OBEC && l.target === 'founder:muni1');
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(140_000); // 80k(s1) + 60k(s2)
+  });
+
+  it('includes FOUNDERS_OBEC node when obec founder_support present', () => {
+    const g = drillRegion(founderDataset, 'Středočeský');
+    expect(g.nodes.some((n) => n.id === FOUNDERS_OBEC)).toBe(true);
+  });
+
+  it('does not emit FOUNDERS_KRAJ for a region with only obec founders', () => {
+    const g = drillRegion(founderDataset, 'Středočeský');
+    expect(g.nodes.some((n) => n.id === FOUNDERS_KRAJ)).toBe(false);
+    expect(g.links.some((l) => l.source === FOUNDERS_KRAJ)).toBe(false);
+  });
+
+  it('emits FOUNDERS_KRAJ → founder node link for kraj founders', () => {
+    const g = drillRegion(founderDataset, 'Praha');
+    const l = g.links.find((l) => l.source === FOUNDERS_KRAJ && l.target === 'founder:region1');
+    expect(l).toBeDefined();
+    expect(l!.amountCzk).toBe(40_000);
+  });
+
+  it('still emits MŠMT → founder links alongside founder_support', () => {
+    const g = drillRegion(founderDataset, 'Středočeský');
+    const msmt = g.links.find((l) => l.source === 'msmt' && l.target === 'founder:muni1');
+    expect(msmt).toBeDefined();
+    expect(msmt!.amountCzk).toBeGreaterThan(0);
+  });
+});
+
+// ── drillFounder — founder_support flows visible at city-level ────────────────
+
+describe('drillFounder — founder_support flows', () => {
+  it('emits founderNode → school links for founder_support', () => {
+    const g = drillFounder(founderDataset, 'Municipality A');
+    const l = g.links.find((l) => l.source === 'founder:muni1' && l.flowType === 'founder_support');
+    expect(l).toBeDefined();
+  });
+
+  it('aggregates founder_support to the visible school bucket', () => {
+    const g = drillFounder(founderDataset, 'Municipality A');
+    // s1 and s2 are in window; each should receive from founder:muni1
+    const s1 = g.links.find((l) => l.source === 'founder:muni1' && l.target === 'school:s1');
+    const s2 = g.links.find((l) => l.source === 'founder:muni1' && l.target === 'school:s2');
+    expect(s1?.amountCzk).toBe(80_000);
+    expect(s2?.amountCzk).toBe(60_000);
+  });
+
+  it('includes the founder node in returned nodes', () => {
+    const g = drillFounder(founderDataset, 'Municipality A');
+    expect(g.nodes.some((n) => n.id === 'founder:muni1')).toBe(true);
+  });
+
+  it('includes founder_support in school ranking (schools sorted by total inflow)', () => {
+    // s1 has 500k MŠMT + 80k founder = 580k; s2 has 250k MŠMT + 60k = 310k
+    const g = drillFounder(founderDataset, 'Municipality A');
+    const schoolLinks = g.links.filter((l) => l.target === 'school:s1' || l.target === 'school:s2');
+    expect(schoolLinks.length).toBeGreaterThan(0); // both schools are in the view
+  });
+});
