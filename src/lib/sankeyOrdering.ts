@@ -26,6 +26,74 @@ export function normalizationCapacity(
   return capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
 }
 
+export function normalizationGroup(link: SankeyLink): string | null {
+  if (
+    link.flowType === 'direct_school_finance' ||
+    link.flowType === 'school_expenditure' ||
+    link.flowType === 'founder_support' ||
+    link.flowType === 'eu_project_support' ||
+    link.flowType === 'state_to_founders'
+  ) {
+    return 'school_pupil';
+  }
+
+  if (
+    link.flowType === 'mv_police_region_allocated_cost' ||
+    link.flowType === 'mv_police_crime_class_allocated_cost'
+  ) {
+    return 'police_registered_case';
+  }
+
+  if (link.flowType === 'mv_fire_rescue_region_allocated_cost') {
+    return 'fire_rescue_intervention';
+  }
+
+  if (link.flowType === 'justice_branch_cost') {
+    if (link.target === 'justice:courts') return 'justice_resolved_case';
+    if (link.target === 'justice:prison-service') return 'justice_inmate';
+    return null;
+  }
+
+  if (link.flowType === 'social_benefit_group') {
+    if (link.target === 'social:benefit:pensions') return 'social_pension_recipient';
+    if (link.target === 'social:benefit:unemployment') return 'social_unemployment_recipient';
+    if (link.target === 'social:benefit:care-allowance') return 'social_care_recipient';
+    if (link.target === 'social:benefit:substitute-alimony') return 'social_substitute_alimony_recipient';
+    return null;
+  }
+
+  return null;
+}
+
+export function comparableNodeMetric(
+  nodeId: string,
+  links: SankeyLink[],
+  capacityMap: Map<string, number>,
+  perUnit: boolean,
+): { totalAmount: number; totalCapacity: number; group: string } | null {
+  if (!perUnit) return null;
+
+  const incomingLinks = links.filter((link) => link.target === nodeId);
+  if (!incomingLinks.length) return null;
+
+  let metricGroup: string | null = null;
+  let totalAmount = 0;
+  let totalCapacity = 0;
+
+  for (const link of incomingLinks) {
+    const capacity = normalizationCapacity(link, capacityMap, true);
+    const group = normalizationGroup(link);
+    if (!capacity || !group) return null;
+    if (metricGroup && metricGroup !== group) return null;
+    metricGroup = group;
+    totalAmount += link.amountCzk;
+    totalCapacity += capacity;
+  }
+
+  if (!metricGroup || totalCapacity <= 0) return null;
+  return { totalAmount, totalCapacity, group: metricGroup };
+}
+
 export function normalizedNodeWeight(
   nodeId: string,
   links: SankeyLink[],

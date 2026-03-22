@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizationCapacity, normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
+import { comparableNodeMetric, normalizationCapacity, normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
 import type { SankeyLink, SankeyNode } from '../../types';
 
 const nodes: SankeyNode[] = [
@@ -69,6 +69,48 @@ describe('sankeyOrdering', () => {
 
     expect(normalizationCapacity(schoolLink, capacityMap, true)).toBe(180);
     expect(normalizedValue(schoolLink.amountCzk, normalizationCapacity(schoolLink, capacityMap, true), true)).toBe(3000);
+    expect(comparableNodeMetric('bucket:pedagogical', [schoolLink], capacityMap, true)).toEqual({
+      totalAmount: 540000,
+      totalCapacity: 180,
+      group: 'school_pupil',
+    });
+  });
+
+  it('aggregates comparable node metrics as sum Kč over sum denominator', () => {
+    const capacityMap = new Map<string, number>([
+      ['region:a', 100],
+      ['region:b', 300],
+    ]);
+    const pedagogicalLinks: SankeyLink[] = [
+      {
+        source: 'region:a',
+        target: 'bucket:pedagogical',
+        value: 400000,
+        amountCzk: 400000,
+        year: 2025,
+        flowType: 'school_expenditure',
+        basis: 'allocated',
+        certainty: 'observed',
+        sourceDataset: 'test',
+      },
+      {
+        source: 'region:b',
+        target: 'bucket:pedagogical',
+        value: 600000,
+        amountCzk: 600000,
+        year: 2025,
+        flowType: 'school_expenditure',
+        basis: 'allocated',
+        certainty: 'observed',
+        sourceDataset: 'test',
+      },
+    ];
+
+    expect(comparableNodeMetric('bucket:pedagogical', pedagogicalLinks, capacityMap, true)).toEqual({
+      totalAmount: 1000000,
+      totalCapacity: 400,
+      group: 'school_pupil',
+    });
   });
 
   it('orders normalized mode by descending per-unit weight and pushes unsupported nodes down', () => {

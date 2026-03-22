@@ -336,7 +336,7 @@ export function AtlasDashboard() {
                 {viewStack.map((entry) => entry.label).join(' › ')}
               </span>
             ) : (
-              <span className="topbar__hover-context">Rok {selectedYear} · naklady</span>
+              <span className="topbar__hover-context">Rok {selectedYear} · {perPerson ? 'srovnávací metrika' : 'náklady'}</span>
             )}
           </div>
 
@@ -345,7 +345,7 @@ export function AtlasDashboard() {
               className={`year-toggle-btn${perPerson ? ' year-toggle-btn--active' : ''}`}
               onClick={() => setPerPerson((value) => !value)}
             >
-              {perPerson ? 'Kč/jednotku' : 'celkem'}
+              {perPerson ? 'Srovnávací metrika' : 'celkem'}
             </button>
             {years.map((year) => (
               <button
@@ -416,7 +416,8 @@ export function AtlasDashboard() {
           nodes={graph.nodes}
           links={graph.links}
           perPupil={perPerson}
-          perUnitLabel="jednotku"
+          perUnitLabel="srovnávací jednotku"
+          metricModeLabel="Srovnávací metrika"
           unitCountLabel="žáků / pacientů / příjemců / případů / klientů za rok"
           totalAmountLabel="celkové náklady"
           onNodeClick={handleNodeClick}

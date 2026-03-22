@@ -2,7 +2,7 @@ import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 
 import { formatCompactCzk, formatInteger, formatPerPupil, formatPerUnit } from '../lib/format';
-import { normalizationCapacity, normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
+import { comparableNodeMetric, normalizationCapacity, normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
 import type { HoverInfo, SankeyLink, SankeyNode } from '../types';
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
   prevActive?: boolean;
   perPupil?: boolean;
   perUnitLabel?: string;
+  metricModeLabel?: string;
   unitCountLabel?: string;
   totalAmountLabel?: string;
   onNodeClick: (nodeId: string) => void;
@@ -64,8 +65,8 @@ function maxLabelLengthForGraph(nodes: SankeyNode[], mobile: boolean): number {
   return mobile ? 20 : 28;
 }
 
-function unavailableMetricMarkup(perUnitLabel: string): string {
-  return `N/A<br/><small style="color:#94a3b8">Metoda ${perUnitLabel} není pro tento tok k dispozici</small>`;
+function unavailableMetricMarkup(metricModeLabel: string): string {
+  return `N/A<br/><small style="color:#94a3b8">${metricModeLabel} není pro tento tok k dispozici</small>`;
 }
 
 function buildActiveOption(
@@ -76,6 +77,7 @@ function buildActiveOption(
   capacityMap: Map<string, number>,
   containerWidth: number,
   perUnitLabel: string,
+  metricModeLabel: string,
   unitCountLabel: string,
   totalAmountLabel: string,
 ) {
@@ -103,7 +105,7 @@ function buildActiveOption(
           const amt = perPupil
             ? capacity
               ? (perUnitLabel === 'žák/rok' ? formatPerPupil(amountCzk / capacity) : formatPerUnit(amountCzk / capacity, perUnitLabel))
-              : unavailableMetricMarkup(perUnitLabel)
+              : unavailableMetricMarkup(metricModeLabel)
             : formatCompactCzk(amountCzk);
           return `<strong>${idToDisplay.get(source) ?? source} → ${idToDisplay.get(target) ?? target}</strong><br/>${amt}`;
         }
@@ -113,16 +115,25 @@ function buildActiveOption(
         const total = incomingLinks.reduce((s, l) => s + l.amountCzk, 0);
         if (total === 0) return `<strong>${displayName}</strong>`;
         const cap = perPupil ? (capacityMap.get(nodeId) ?? null) : null;
+        const aggregatedMetric = perPupil && !cap
+          ? comparableNodeMetric(nodeId, links, capacityMap, true)
+          : null;
         const supportsNodeMetric = !perPupil || incomingLinks.some((link) => linkCapacity(link));
         const totalFmt = perPupil
           ? cap && supportsNodeMetric
             ? (perUnitLabel === 'žák/rok' ? formatPerPupil(total / cap) : formatPerUnit(total / cap, perUnitLabel))
+            : aggregatedMetric
+              ? (perUnitLabel === 'žák/rok'
+                  ? formatPerPupil(aggregatedMetric.totalAmount / aggregatedMetric.totalCapacity)
+                  : formatPerUnit(aggregatedMetric.totalAmount / aggregatedMetric.totalCapacity, perUnitLabel))
             : 'N/A'
           : formatCompactCzk(total);
         const suffix = perPupil
           ? cap && supportsNodeMetric
             ? `<br/><small style="color:#94a3b8">${formatInteger(cap)} ${unitCountLabel}</small>`
-            : `<br/><small style="color:#94a3b8">Metoda ${perUnitLabel} není pro tento uzel k dispozici</small>`
+            : aggregatedMetric
+              ? `<br/><small style="color:#94a3b8">${formatInteger(aggregatedMetric.totalCapacity)} ${unitCountLabel}</small>`
+              : `<br/><small style="color:#94a3b8">${metricModeLabel} není pro tento uzel k dispozici</small>`
           : ` ${totalAmountLabel}`;
         return `<strong>${displayName}</strong><br/>${totalFmt}${suffix}`;
       },
@@ -220,6 +231,7 @@ export function SankeyChartCard({
   prevActive = false,
   perPupil = false,
   perUnitLabel = 'žák/rok',
+  metricModeLabel = 'Srovnávací metrika',
   unitCountLabel = 'žáků (RSSZ kapacita)',
   totalAmountLabel = 'celkový příjem',
   onNodeClick,
@@ -287,7 +299,7 @@ export function SankeyChartCard({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? buildGhostOption(nodes, links, perPupil, capacityMap, w) as any
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap, w, perUnitLabel, unitCountLabel, totalAmountLabel) as any;
+      : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap, w, perUnitLabel, metricModeLabel, unitCountLabel, totalAmountLabel) as any;
 
     chart.setOption(buildOption(el.clientWidth));
 
@@ -297,7 +309,7 @@ export function SankeyChartCard({
     });
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
-  }, [nodes, links, prevActive, perPupil, perUnitLabel, unitCountLabel, totalAmountLabel]);
+  }, [nodes, links, prevActive, perPupil, perUnitLabel, metricModeLabel, unitCountLabel, totalAmountLabel]);
 
   // Previous-year chart
   useEffect(() => {
@@ -349,7 +361,7 @@ export function SankeyChartCard({
     const buildOption = (w: number) => {
       if (prevActive) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return buildActiveOption(prevNodes, prevLinks, idToDisplay, perPupil, capacityMap, w, perUnitLabel, unitCountLabel, totalAmountLabel) as any;
+        return buildActiveOption(prevNodes, prevLinks, idToDisplay, perPupil, capacityMap, w, perUnitLabel, metricModeLabel, unitCountLabel, totalAmountLabel) as any;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return buildGhostOption(prevNodes, prevLinks, perPupil, capacityMap, w) as any;
@@ -363,7 +375,7 @@ export function SankeyChartCard({
     });
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
-  }, [prevNodes, prevLinks, prevActive, perPupil, perUnitLabel, unitCountLabel, totalAmountLabel]);
+  }, [prevNodes, prevLinks, prevActive, perPupil, perUnitLabel, metricModeLabel, unitCountLabel, totalAmountLabel]);
 
   const curHeight  = Math.min(Math.max(500, nodes.length * 38), 16_000);
   const prevHeight = prevNodes ? Math.min(Math.max(500, prevNodes.length * 38), 16_000) : 0;
