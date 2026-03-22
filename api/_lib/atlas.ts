@@ -1045,6 +1045,7 @@ function buildCombinedRootGraph(
   mvPoliceCrimeRows: MvPoliceCrimeAggregate[],
   mvFireRescueRows: MvFireRescueActivityAggregate[],
   justiceBudgetRows: Awaited<ReturnType<typeof getJusticeBudgetAggregates>>,
+  justiceActivityRows: Awaited<ReturnType<typeof getJusticeActivityAggregates>>,
   healthRows: HealthFinanceRow[],
   mzAggregate: HealthMzAggregate | null,
   adminEntities: HealthMzAdminEntity[],
@@ -1080,7 +1081,7 @@ function buildCombinedRootGraph(
 
   appendSocialBranch(nodes, links, year, socialRows, socialRecipientMetrics);
   appendMvBranch(nodes, links, year, mvBudgetRows, mvPoliceCrimeRows, mvFireRescueRows);
-  appendJusticeBranch(nodes, links, year, justiceBudgetRows);
+  appendJusticeBranch(nodes, links, year, justiceBudgetRows, justiceActivityRows);
 
   if (hospitalRows.length > 0) {
     const ownerGroups = buildOwnerGroups(hospitalRows);
@@ -2021,6 +2022,7 @@ export async function getAtlasOverview(year: number) {
     mvPoliceCrimeRows,
     mvFireRescueRows,
     justiceBudgetRows,
+    justiceActivityRows,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2035,6 +2037,7 @@ export async function getAtlasOverview(year: number) {
     getMvPoliceCrimeAggregates(year),
     getMvFireRescueActivityAggregates(year),
     getJusticeBudgetAggregates(year),
+    getJusticeActivityAggregates(year),
     getHealthFinanceRows(year),
     getHealthMzAggregate(year),
     getHealthMzAdminEntities(year),
@@ -2053,6 +2056,7 @@ export async function getAtlasOverview(year: number) {
     mvPoliceCrimeRows,
     mvFireRescueRows,
     justiceBudgetRows,
+    justiceActivityRows,
     healthRows,
     mzAggregate,
     adminEntities,

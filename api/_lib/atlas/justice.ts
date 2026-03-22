@@ -40,6 +40,14 @@ interface JusticeActivityAggregate {
   sourceDataset: string;
 }
 
+interface JusticeBranchRow {
+  id: string;
+  name: string;
+  amount: number;
+  capacity: number | null;
+  note: string;
+}
+
 const STATE_ID = 'state:cr';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 
@@ -112,6 +120,97 @@ function createJusticeBranchNode(
   };
 }
 
+function buildJusticeBranchRows(
+  budgetRows: JusticeBudgetAggregate[],
+  activityRows: JusticeActivityAggregate[],
+): JusticeBranchRow[] {
+  const courtsAmount = justiceAmountByCode(budgetRows, 'courts');
+  const justiceBlock = justiceAmountByCode(budgetRows, 'justice_block');
+  const prosecutionAmount = justiceAmountByCode(budgetRows, 'prosecution');
+  const prisonServiceAmount = justiceAmountByCode(budgetRows, 'prison_service');
+  const probationAmount = justiceAmountByCode(budgetRows, 'probation_service');
+  const socialAmount = justiceAmountByCode(budgetRows, 'social_and_prevention');
+  const adminAmount =
+    justiceAmountByCode(budgetRows, 'ministry_admin') +
+    justiceAmountByCode(budgetRows, 'justice_research') +
+    justiceAmountByCode(budgetRows, 'justice_other') +
+    justiceAmountByCode(budgetRows, 'residual_other');
+
+  const courtsCapacity = justiceActivityByCode(activityRows, 'courts_disposed_total');
+  const prisonCapacity = justiceActivityByCode(activityRows, 'prison_average_daily_inmates_total');
+
+  if (courtsAmount > 0) {
+    return [
+      {
+        id: 'justice:courts',
+        name: 'Soudy',
+        amount: courtsAmount,
+        capacity: courtsCapacity,
+        note: 'Výdaje soudnictví; metrika používá vyřízené věci v hlavních agendách soudů',
+      },
+      {
+        id: 'justice:prosecution',
+        name: 'Státní zastupitelství',
+        amount: prosecutionAmount,
+        capacity: null,
+        note: 'Výdaje státního zastupitelství',
+      },
+      {
+        id: 'justice:prison-service',
+        name: 'Vězeňská služba',
+        amount: prisonServiceAmount,
+        capacity: prisonCapacity,
+        note: 'Výdaje vězeňství; metrika používá průměrný denní stav vězněných osob',
+      },
+      {
+        id: 'justice:probation',
+        name: 'Probační a mediační služba',
+        amount: probationAmount,
+        capacity: null,
+        note: 'Výdaje Probační a mediační služby',
+      },
+      {
+        id: 'justice:social',
+        name: 'Sociální dávky a prevence',
+        amount: socialAmount,
+        capacity: null,
+        note: 'Sociální dávky, podpory a související prevenční výdaje kapitoly MSp',
+      },
+      {
+        id: 'justice:admin',
+        name: 'Správa a ostatní',
+        amount: adminAmount,
+        capacity: null,
+        note: 'Správa, výzkum, ostatní právní ochrana a reziduální výdaje kapitoly MSp',
+      },
+    ];
+  }
+
+  return [
+    {
+      id: 'justice:justice-block',
+      name: 'Justiční část',
+      amount: justiceBlock,
+      capacity: null,
+      note: 'Rozpočtový blok justiční části kapitoly MSp',
+    },
+    {
+      id: 'justice:prison-service',
+      name: 'Vězeňská služba',
+      amount: prisonServiceAmount,
+      capacity: null,
+      note: 'Ostatní výdaje vězeňské části',
+    },
+    {
+      id: 'justice:social',
+      name: 'Sociální dávky a prevence',
+      amount: socialAmount,
+      capacity: null,
+      note: 'Dávky důchodového pojištění, ostatní sociální dávky a prevenční programy kapitoly MSp',
+    },
+  ];
+}
+
 export async function getJusticeBudgetAggregates(year: number): Promise<JusticeBudgetAggregate[]> {
   const result = await query(
     `
@@ -175,6 +274,7 @@ export function appendJusticeBranch(
   links: AtlasLink[],
   year: number,
   justiceBudgetRows: JusticeBudgetAggregate[],
+  justiceActivityRows: JusticeActivityAggregate[],
 ): void {
   const justiceTotal = getJusticeTotal(justiceBudgetRows);
   if (justiceTotal <= 0) return;
@@ -191,6 +291,22 @@ export function appendJusticeBranch(
       'justice_budget_aggregates',
     ),
   );
+
+  for (const branch of buildJusticeBranchRows(justiceBudgetRows, justiceActivityRows)) {
+    if (branch.amount <= 0) continue;
+    addNode(nodes, createJusticeBranchNode(branch.id, branch.name, branch.capacity));
+    links.push(
+      makeLink(
+        JUSTICE_MINISTRY_ID,
+        branch.id,
+        branch.amount,
+        year,
+        'justice_branch_cost',
+        branch.note,
+        'justice_budget_aggregates',
+      ),
+    );
+  }
 }
 
 export function buildJusticeRootGraph(
@@ -201,95 +317,10 @@ export function buildJusticeRootGraph(
   const total = getJusticeTotal(budgetRows);
   if (total <= 0) return null;
 
-  const courtsAmount = justiceAmountByCode(budgetRows, 'courts');
-  const justiceBlock = justiceAmountByCode(budgetRows, 'justice_block');
-  const prosecutionAmount = justiceAmountByCode(budgetRows, 'prosecution');
-  const prisonServiceAmount = justiceAmountByCode(budgetRows, 'prison_service');
-  const probationAmount = justiceAmountByCode(budgetRows, 'probation_service');
-  const socialAmount = justiceAmountByCode(budgetRows, 'social_and_prevention');
-  const adminAmount =
-    justiceAmountByCode(budgetRows, 'ministry_admin') +
-    justiceAmountByCode(budgetRows, 'justice_research') +
-    justiceAmountByCode(budgetRows, 'justice_other') +
-    justiceAmountByCode(budgetRows, 'residual_other');
-
-  const courtsCapacity = justiceActivityByCode(activityRows, 'courts_disposed_total');
-  const prisonCapacity = justiceActivityByCode(activityRows, 'prison_average_daily_inmates_total');
-
   const nodes: AtlasNode[] = [createJusticeMinistryNode()];
   const links: AtlasLink[] = [];
 
-  const branchRows =
-    courtsAmount > 0
-      ? [
-          {
-            id: 'justice:courts',
-            name: 'Soudy',
-            amount: courtsAmount,
-            capacity: courtsCapacity,
-            note: 'Výdaje soudnictví; metrika používá vyřízené věci v hlavních agendách soudů',
-          },
-          {
-            id: 'justice:prosecution',
-            name: 'Státní zastupitelství',
-            amount: prosecutionAmount,
-            capacity: null,
-            note: 'Výdaje státního zastupitelství',
-          },
-          {
-            id: 'justice:prison-service',
-            name: 'Vězeňská služba',
-            amount: prisonServiceAmount,
-            capacity: prisonCapacity,
-            note: 'Výdaje vězeňství; metrika používá průměrný denní stav vězněných osob',
-          },
-          {
-            id: 'justice:probation',
-            name: 'Probační a mediační služba',
-            amount: probationAmount,
-            capacity: null,
-            note: 'Výdaje Probační a mediační služby',
-          },
-          {
-            id: 'justice:social',
-            name: 'Sociální dávky a prevence',
-            amount: socialAmount,
-            capacity: null,
-            note: 'Sociální dávky, podpory a související prevenční výdaje kapitoly MSp',
-          },
-          {
-            id: 'justice:admin',
-            name: 'Správa a ostatní',
-            amount: adminAmount,
-            capacity: null,
-            note: 'Správa, výzkum, ostatní právní ochrana a reziduální výdaje kapitoly MSp',
-          },
-        ]
-      : [
-          {
-            id: 'justice:justice-block',
-            name: 'Justiční část',
-            amount: justiceBlock,
-            capacity: null,
-            note: 'Rozpočtový blok justiční části kapitoly MSp',
-          },
-          {
-            id: 'justice:prison-service',
-            name: 'Vězeňská služba',
-            amount: prisonServiceAmount,
-            capacity: null,
-            note: 'Ostatní výdaje vězeňské části',
-          },
-          {
-            id: 'justice:social',
-            name: 'Sociální dávky a prevence',
-            amount: socialAmount,
-            capacity: null,
-            note: 'Dávky důchodového pojištění, ostatní sociální dávky a prevenční programy kapitoly MSp',
-          },
-        ];
-
-  for (const branch of branchRows) {
+  for (const branch of buildJusticeBranchRows(budgetRows, activityRows)) {
     if (branch.amount <= 0) continue;
     addNode(nodes, createJusticeBranchNode(branch.id, branch.name, branch.capacity));
     links.push(

@@ -67,12 +67,23 @@ describe('sankeyOrdering', () => {
     expect(orderedNodeIds.indexOf('low')).toBeLessThan(orderedNodeIds.indexOf('na'));
   });
 
-  it('suppresses synthetic allocated lower-level links in normalized mode', () => {
+  it('suppresses only synthetic allocated levels without a real denominator', () => {
     const capacityMap = new Map<string, number>([
       ['region', 100],
       ['class', 25],
     ]);
-    const allocatedLink: SankeyLink = {
+    const regionAllocatedLink: SankeyLink = {
+      source: 'police',
+      target: 'region',
+      value: 250000,
+      amountCzk: 250000,
+      year: 2025,
+      flowType: 'mv_police_region_allocated_cost',
+      basis: 'allocated',
+      certainty: 'inferred',
+      sourceDataset: 'test',
+    };
+    const classAllocatedLink: SankeyLink = {
       source: 'region',
       target: 'class',
       value: 250000,
@@ -84,7 +95,22 @@ describe('sankeyOrdering', () => {
       sourceDataset: 'test',
     };
 
-    expect(normalizationCapacity(allocatedLink, capacityMap, true)).toBeNull();
-    expect(normalizedValue(allocatedLink.amountCzk, normalizationCapacity(allocatedLink, capacityMap, true), true)).toBe(0);
+    expect(normalizationCapacity(regionAllocatedLink, capacityMap, true)).toBeNull();
+    expect(
+      normalizedValue(
+        regionAllocatedLink.amountCzk,
+        normalizationCapacity(regionAllocatedLink, capacityMap, true),
+        true,
+      ),
+    ).toBe(0);
+
+    expect(normalizationCapacity(classAllocatedLink, capacityMap, true)).toBe(25);
+    expect(
+      normalizedValue(
+        classAllocatedLink.amountCzk,
+        normalizationCapacity(classAllocatedLink, capacityMap, true),
+        true,
+      ),
+    ).toBe(10000);
   });
 });

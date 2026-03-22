@@ -2,7 +2,6 @@ import type { SankeyLink, SankeyNode } from '../types';
 
 const NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES = new Set([
   'mv_police_region_allocated_cost',
-  'mv_police_crime_class_allocated_cost',
   'mv_fire_rescue_region_allocated_cost',
   'health_outpatient_region_group',
   'health_outpatient_specialty_group',
@@ -62,11 +61,14 @@ export function orderSankeyGraph(
     : links;
 
   const orderedNodes = perUnit
-    ? [...nodes].sort(
-        (a, b) =>
+    ? [...nodes].sort((a, b) => {
+        if (a.level !== b.level) return a.level - b.level;
+        return (
           normalizedNodeWeight(b.id, orderedLinks, capacityMap, true) -
-          normalizedNodeWeight(a.id, orderedLinks, capacityMap, true),
-      )
+            normalizedNodeWeight(a.id, orderedLinks, capacityMap, true) ||
+          a.name.localeCompare(b.name, 'cs')
+        );
+      })
     : nodes;
 
   return { orderedNodes, orderedLinks };
