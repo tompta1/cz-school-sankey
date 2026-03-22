@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
+import { normalizationCapacity, normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
 import type { SankeyLink, SankeyNode } from '../../types';
 
 const nodes: SankeyNode[] = [
@@ -65,5 +65,26 @@ describe('sankeyOrdering', () => {
     const orderedNodeIds = orderedNodes.map((node) => node.id);
     expect(orderedNodeIds.indexOf('high')).toBeLessThan(orderedNodeIds.indexOf('low'));
     expect(orderedNodeIds.indexOf('low')).toBeLessThan(orderedNodeIds.indexOf('na'));
+  });
+
+  it('suppresses synthetic allocated lower-level links in normalized mode', () => {
+    const capacityMap = new Map<string, number>([
+      ['region', 100],
+      ['class', 25],
+    ]);
+    const allocatedLink: SankeyLink = {
+      source: 'region',
+      target: 'class',
+      value: 250000,
+      amountCzk: 250000,
+      year: 2025,
+      flowType: 'mv_police_crime_class_allocated_cost',
+      basis: 'allocated',
+      certainty: 'inferred',
+      sourceDataset: 'test',
+    };
+
+    expect(normalizationCapacity(allocatedLink, capacityMap, true)).toBeNull();
+    expect(normalizedValue(allocatedLink.amountCzk, normalizationCapacity(allocatedLink, capacityMap, true), true)).toBe(0);
   });
 });

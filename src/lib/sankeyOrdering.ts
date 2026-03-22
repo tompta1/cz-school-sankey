@@ -1,9 +1,29 @@
 import type { SankeyLink, SankeyNode } from '../types';
 
+const NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES = new Set([
+  'mv_police_region_allocated_cost',
+  'mv_police_crime_class_allocated_cost',
+  'mv_fire_rescue_region_allocated_cost',
+  'health_outpatient_region_group',
+  'health_outpatient_specialty_group',
+  'health_outpatient_provider_allocated_cost',
+]);
+
 export function normalizedValue(amountCzk: number, capacity: number | null, perUnit: boolean): number {
   if (!perUnit) return amountCzk;
   if (!capacity || capacity <= 0) return 0;
   return amountCzk / capacity;
+}
+
+export function normalizationCapacity(
+  link: SankeyLink,
+  capacityMap: Map<string, number>,
+  perUnit: boolean,
+): number | null {
+  if (!perUnit) return null;
+  if (NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES.has(link.flowType)) return null;
+  if (link.institutionId) return capacityMap.get(link.institutionId) ?? null;
+  return capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
 }
 
 export function normalizedNodeWeight(
@@ -15,17 +35,13 @@ export function normalizedNodeWeight(
   const incoming = links
     .filter((link) => link.target === nodeId)
     .reduce((sum, link) => {
-      const capacity = link.institutionId
-        ? capacityMap.get(link.institutionId) ?? null
-        : capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
+      const capacity = normalizationCapacity(link, capacityMap, perUnit);
       return sum + normalizedValue(link.amountCzk, capacity, perUnit);
     }, 0);
   const outgoing = links
     .filter((link) => link.source === nodeId)
     .reduce((sum, link) => {
-      const capacity = link.institutionId
-        ? capacityMap.get(link.institutionId) ?? null
-        : capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
+      const capacity = normalizationCapacity(link, capacityMap, perUnit);
       return sum + normalizedValue(link.amountCzk, capacity, perUnit);
     }, 0);
   return Math.max(incoming, outgoing);
@@ -37,16 +53,10 @@ export function orderSankeyGraph(
   capacityMap: Map<string, number>,
   perUnit: boolean,
 ): { orderedNodes: SankeyNode[]; orderedLinks: SankeyLink[] } {
-  const linkCapacity = (link: SankeyLink): number | null => {
-    if (!perUnit) return null;
-    if (link.institutionId) return capacityMap.get(link.institutionId) ?? null;
-    return capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
-  };
-
   const orderedLinks = perUnit
     ? [...links].sort((a, b) => {
-        const capA = linkCapacity(a);
-        const capB = linkCapacity(b);
+        const capA = normalizationCapacity(a, capacityMap, true);
+        const capB = normalizationCapacity(b, capacityMap, true);
         return normalizedValue(b.amountCzk, capB, true) - normalizedValue(a.amountCzk, capA, true);
       })
     : links;

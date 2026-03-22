@@ -137,7 +137,13 @@ function mvAmountByCode(rows: MvBudgetAggregate[], metricCode: string): number {
 }
 
 function mvNationalCrimeCount(rows: MvPoliceCrimeAggregate[], indicatorName: string): number | null {
-  const value = rows.find((row) => row.regionCode === 'CZ' && row.indicatorName === indicatorName)?.countValue ?? 0;
+  const value =
+    rows.find(
+      (row) =>
+        row.regionCode === 'CZ' &&
+        row.indicatorName === indicatorName &&
+        row.crimeClassCode === '0-999',
+    )?.countValue ?? 0;
   return value > 0 ? value : null;
 }
 

@@ -2,7 +2,7 @@ import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 
 import { formatCompactCzk, formatInteger, formatPerPupil, formatPerUnit } from '../lib/format';
-import { normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
+import { normalizationCapacity, normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
 import type { HoverInfo, SankeyLink, SankeyNode } from '../types';
 
 interface Props {
@@ -84,12 +84,7 @@ function buildActiveOption(
   const labelFontSize = mobile ? 10 : 11;
   const nodeGap = nodeGapForGraph(nodes, mobile);
 
-  const linkCapacity = (l: SankeyLink): number | null => {
-    if (!perPupil) return null;
-    if (l.institutionId) return capacityMap.get(l.institutionId) ?? null;
-    // Aggregate links (no institutionId): scale by the region node's total capacity
-    return capacityMap.get(l.target) ?? capacityMap.get(l.source) ?? null;
-  };
+  const linkCapacity = (l: SankeyLink): number | null => normalizationCapacity(l, capacityMap, perPupil);
 
   // In per-pupil mode sort links descending by Kč/žák so higher-value flows
   // appear at the top and ECharts orders nodes accordingly.
@@ -114,16 +109,18 @@ function buildActiveOption(
         }
         const nodeId = (p.data as { name: string }).name;
         const displayName = idToDisplay.get(nodeId) ?? nodeId;
-        const total = links.filter((l) => l.target === nodeId).reduce((s, l) => s + l.amountCzk, 0);
+        const incomingLinks = links.filter((l) => l.target === nodeId);
+        const total = incomingLinks.reduce((s, l) => s + l.amountCzk, 0);
         if (total === 0) return `<strong>${displayName}</strong>`;
         const cap = perPupil ? (capacityMap.get(nodeId) ?? null) : null;
+        const supportsNodeMetric = !perPupil || incomingLinks.some((link) => linkCapacity(link));
         const totalFmt = perPupil
-          ? cap
+          ? cap && supportsNodeMetric
             ? (perUnitLabel === 'žák/rok' ? formatPerPupil(total / cap) : formatPerUnit(total / cap, perUnitLabel))
             : 'N/A'
           : formatCompactCzk(total);
         const suffix = perPupil
-          ? cap
+          ? cap && supportsNodeMetric
             ? `<br/><small style="color:#94a3b8">${formatInteger(cap)} ${unitCountLabel}</small>`
             : `<br/><small style="color:#94a3b8">Metoda ${perUnitLabel} není pro tento uzel k dispozici</small>`
           : ` ${totalAmountLabel}`;
@@ -204,9 +201,7 @@ function buildGhostOption(
         itemStyle: { color: '#94a3b8', opacity: 0.22, borderWidth: 0 },
       })),
       links: links.map((l) => {
-        const cap = perPupil
-          ? (l.institutionId ? capacityMap.get(l.institutionId) : capacityMap.get(l.target) ?? capacityMap.get(l.source)) ?? null
-          : null;
+        const cap = normalizationCapacity(l, capacityMap, perPupil);
         return {
           source: l.source,
           target: l.target,
