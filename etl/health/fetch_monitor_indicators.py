@@ -75,21 +75,23 @@ def get_candidate_providers(conn: psycopg.Connection, limit: int | None) -> list
             lower(coalesce(care_field, '')) like '%%hygiena a epidemiologie%%'
             or lower(coalesce(facility_type_name, '')) like '%%zdravotní ústav%%'
             or lower(coalesce(provider_type, '')) like '%%zdravotní ústav%%'
-          ) as public_health_like
+          ) as public_health_like,
+          bool_or(
+            lower(coalesce(provider_type, '')) like '%%zdravotnická zachranná služba%%'
+          ) as zzs_like
         from mart.health_provider_directory
         where provider_ico is not null and provider_ico <> ''
         group by provider_ico
       )
-      select distinct
-        p.provider_ico,
-        coalesce(d.provider_name, p.provider_ico) as provider_name,
+      select
+        d.provider_ico,
+        coalesce(d.provider_name, d.provider_ico) as provider_name,
         d.region_name,
         coalesce(d.hospital_like, false) as hospital_like,
         coalesce(d.public_health_like, false) as public_health_like
-      from mart.health_claims_provider_yearly p
-      join provider_directory d using (provider_ico)
-      where d.hospital_like or d.public_health_like
-      order by provider_name, p.provider_ico
+      from provider_directory d
+      where d.hospital_like or d.public_health_like or d.zzs_like
+      order by provider_name, d.provider_ico
     """
     if limit is not None:
         sql += " limit %s"

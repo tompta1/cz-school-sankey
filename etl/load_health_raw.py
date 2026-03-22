@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
             "health_monitor_indicators",
             "health_mz_budget_entities",
             "health_financing_aggregates",
+            "health_zzs_activity_aggregates",
         ],
         help="Restrict loading to one or more dataset codes.",
     )
@@ -439,6 +440,20 @@ def health_financing_aggregate_rows(dataset_release_id: int, path: Path, rows: I
         )
 
 
+def zzs_activity_aggregate_rows(dataset_release_id: int, path: Path, rows: Iterable[dict[str, str]]) -> Iterable[tuple]:
+    payload = Jsonb({"local_path": str(path.relative_to(ROOT))})
+    for row in rows:
+        yield (
+            dataset_release_id,
+            int(row["reporting_year"]),
+            row["indicator_code"],
+            row["indicator_name"],
+            parse_decimal(row.get("count_value")),
+            row.get("source_url") or None,
+            payload,
+        )
+
+
 def load_claims_provider_specialty(cur: psycopg.Cursor, dataset_release_id: int, path: Path) -> int:
     payload = Jsonb({"local_path": str(path.relative_to(ROOT))})
     cur.execute(
@@ -686,6 +701,21 @@ DATASETS = [
             "payload",
         ],
         "build_rows": health_financing_aggregate_rows,
+    },
+    {
+        "dataset_code": "health_zzs_activity_aggregates",
+        "source_code": "uzis",
+        "table": "raw.health_zzs_activity_aggregate",
+        "columns": [
+            "dataset_release_id",
+            "reporting_year",
+            "indicator_code",
+            "indicator_name",
+            "count_value",
+            "source_url",
+            "payload",
+        ],
+        "build_rows": zzs_activity_aggregate_rows,
     },
 ]
 

@@ -424,6 +424,21 @@ create table if not exists raw.health_financing_aggregate (
 create index if not exists health_financing_aggregate_year_idx
   on raw.health_financing_aggregate (reporting_year, financing_subtype_code, provider_type_code, provider_subtype_code);
 
+create table if not exists raw.health_zzs_activity_aggregate (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  indicator_code text not null,
+  indicator_name text not null,
+  count_value numeric(20, 2) not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists health_zzs_activity_aggregate_year_indicator_idx
+  on raw.health_zzs_activity_aggregate (reporting_year, indicator_code);
+
 create table if not exists raw.social_mpsv_aggregate (
   raw_id bigserial primary key,
   dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
@@ -654,6 +669,28 @@ order by
   r.loaded_at desc,
   r.raw_id desc;
 
+create or replace view mart.health_zzs_activity_aggregate_latest as
+select distinct on (
+  r.reporting_year,
+  r.indicator_code
+)
+  r.reporting_year,
+  r.indicator_code,
+  r.indicator_name,
+  r.count_value,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.health_zzs_activity_aggregate r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.indicator_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
 create or replace view mart.social_mpsv_aggregate_latest as
 select distinct on (r.reporting_year, r.metric_group, r.metric_code)
   r.reporting_year,
@@ -793,7 +830,10 @@ with provider_directory as (
       lower(coalesce(facility_type_name, '')) like '%zdravotní ústav%'
       or lower(coalesce(provider_type, '')) like '%zdravotní ústav%'
       or lower(coalesce(provider_type, '')) like '%státní zdravotní ústav%'
-    ) as public_health_like
+    ) as public_health_like,
+    bool_or(
+      lower(coalesce(provider_type, '')) like '%zdravotnická zachranná služba%'
+    ) as zzs_like
   from mart.health_provider_directory
   group by provider_ico
 )
@@ -820,7 +860,8 @@ select
   coalesce(c.patient_count, 0) as patient_count,
   coalesce(c.contact_count, 0) as contact_count,
   m.source_url,
-  m.snapshot_label
+  m.snapshot_label,
+  coalesce(d.zzs_like, false) as zzs_like
 from mart.health_monitor_indicator_latest m
 left join provider_directory d using (provider_ico)
 left join mart.health_claims_provider_yearly c

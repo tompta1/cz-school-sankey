@@ -172,7 +172,7 @@ export interface AtlasProviderFinanceRow {
   providerType: string | null;
   regionName: string | null;
   founderType?: string | null;
-  focus: 'hospital' | 'public_health' | 'other';
+  focus: 'hospital' | 'public_health' | 'zzs' | 'other';
   ownerBranch?: 'region' | 'municipality' | 'central_state' | null;
   revenues: number;
   costs: number;

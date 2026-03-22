@@ -19,6 +19,7 @@ const ROOT_TITLE = 'Sjednoceny Sankey';
 const HEALTH_MINISTRY_ID = 'health:ministry:mzcr';
 const HEALTH_INSURANCE_ID = 'health:system:public-insurance';
 const HEALTH_PUBLIC_HEALTH_ID = 'health:public-health';
+const HEALTH_ZZS_ID = 'health:zzs';
 const MV_MINISTRY_ID = 'security:ministry:mv';
 const MV_POLICE_ID = 'security:police';
 const MAX_RESULTS = 8;
@@ -65,6 +66,7 @@ function isClickableSchoolNode(node: SankeyNode): boolean {
 function isClickableHealthNode(node: SankeyNode): boolean {
   if (node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID) return true;
   if (node.id === HEALTH_PUBLIC_HEALTH_ID) return true;
+  if (node.id === HEALTH_ZZS_ID) return true;
   if (node.id === 'health:outpatient:hp31' || node.id === 'health:outpatient:hp32') return true;
   if (node.id.startsWith('health:owner:')) return true;
   if (node.id.startsWith('health:region:')) return true;

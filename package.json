@@ -38,6 +38,8 @@
     "health:mz:load": "python3 etl/load_health_raw.py --dataset health_mz_budget_entities --database-url \"${DATABASE_URL}\"",
     "health:financing:pull": "python3 etl/health/fetch_czso_health_financing.py",
     "health:financing:load": "python3 etl/load_health_raw.py --dataset health_financing_aggregates --database-url \"${DATABASE_URL}\"",
+    "health:zzs:pull": "python3 etl/health/fetch_zzs_activity_aggregates.py",
+    "health:zzs:load": "python3 etl/load_health_raw.py --dataset health_zzs_activity_aggregates --database-url \"${DATABASE_URL}\"",
     "social:mpsv:pull": "python3 etl/social/fetch_mpsv_budget_aggregates.py",
     "social:mpsv:load": "python3 etl/load_social_raw.py --dataset social_mpsv_aggregates --database-url \"${DATABASE_URL}\"",
     "social:recipients:pull": "python3 etl/social/fetch_recipient_metrics.py --year 2024",
