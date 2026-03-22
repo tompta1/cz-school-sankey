@@ -345,7 +345,7 @@ export function AtlasDashboard() {
               className={`year-toggle-btn${perPerson ? ' year-toggle-btn--active' : ''}`}
               onClick={() => setPerPerson((value) => !value)}
             >
-              {perPerson ? 'Kč/osoba/rok' : 'celkem'}
+              {perPerson ? 'Kč/jednotku' : 'celkem'}
             </button>
             {years.map((year) => (
               <button
@@ -416,8 +416,8 @@ export function AtlasDashboard() {
           nodes={graph.nodes}
           links={graph.links}
           perPupil={perPerson}
-          perUnitLabel="osoba/rok"
-          unitCountLabel="osob / příjemců / pacientů / žáků za rok"
+          perUnitLabel="jednotku"
+          unitCountLabel="žáků / pacientů / příjemců / případů / klientů za rok"
           totalAmountLabel="celkové náklady"
           onNodeClick={handleNodeClick}
           onNodeHover={setHoverInfo}

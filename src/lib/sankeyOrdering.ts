@@ -2,6 +2,7 @@ import type { SankeyLink, SankeyNode } from '../types';
 
 const NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES = new Set([
   'mv_police_region_allocated_cost',
+  'mv_police_crime_class_allocated_cost',
   'mv_fire_rescue_region_allocated_cost',
   'health_outpatient_region_group',
   'health_outpatient_specialty_group',

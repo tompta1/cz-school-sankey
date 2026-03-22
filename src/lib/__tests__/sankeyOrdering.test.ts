@@ -53,6 +53,24 @@ describe('sankeyOrdering', () => {
     expect(normalizedValue(1000, null, false)).toBe(1000);
   });
 
+  it('normalizes school expenditure against the source capacity when the bucket has none', () => {
+    const capacityMap = new Map<string, number>([['founder:municipality', 180]]);
+    const schoolLink: SankeyLink = {
+      source: 'founder:municipality',
+      target: 'bucket:pedagogical',
+      value: 540000,
+      amountCzk: 540000,
+      year: 2025,
+      flowType: 'school_expenditure',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+
+    expect(normalizationCapacity(schoolLink, capacityMap, true)).toBe(180);
+    expect(normalizedValue(schoolLink.amountCzk, normalizationCapacity(schoolLink, capacityMap, true), true)).toBe(3000);
+  });
+
   it('orders normalized mode by descending per-unit weight and pushes unsupported nodes down', () => {
     const capacityMap = new Map<string, number>([
       ['high', 10],
@@ -67,8 +85,9 @@ describe('sankeyOrdering', () => {
     expect(orderedNodeIds.indexOf('low')).toBeLessThan(orderedNodeIds.indexOf('na'));
   });
 
-  it('suppresses only synthetic allocated levels without a real denominator', () => {
+  it('suppresses synthetic police allocations in normalized mode', () => {
     const capacityMap = new Map<string, number>([
+      ['police', 173322],
       ['region', 100],
       ['class', 25],
     ]);
@@ -104,13 +123,13 @@ describe('sankeyOrdering', () => {
       ),
     ).toBe(0);
 
-    expect(normalizationCapacity(classAllocatedLink, capacityMap, true)).toBe(25);
+    expect(normalizationCapacity(classAllocatedLink, capacityMap, true)).toBeNull();
     expect(
       normalizedValue(
         classAllocatedLink.amountCzk,
         normalizationCapacity(classAllocatedLink, capacityMap, true),
         true,
       ),
-    ).toBe(10000);
+    ).toBe(0);
   });
 });
