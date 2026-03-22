@@ -17,6 +17,7 @@ etl/data/monitor_cache/
 etl/data/msmt_registry_cache/
 etl/data/dotaceeu_cache/
 etl/data/raw/health/
+etl/data/raw/mv/
 etl/data/raw/social/
 .vercel
 .neon

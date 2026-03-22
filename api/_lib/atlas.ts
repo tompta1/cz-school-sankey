@@ -8,6 +8,11 @@ const HEALTH_PUBLIC_HEALTH_ID = 'health:public-health';
 const HEALTH_ADMIN_ID = 'health:admin:residual';
 const HEALTH_COSTS_ID = 'health:costs';
 const SOCIAL_MINISTRY_ID = 'social:ministry:mpsv';
+const MV_MINISTRY_ID = 'security:ministry:mv';
+const MV_POLICE_ID = 'security:police';
+const MV_FIRE_RESCUE_ID = 'security:fire-rescue';
+const MV_ADMIN_ID = 'security:mv-admin';
+const MV_SOCIAL_ID = 'security:mv-social';
 const PREV_WINDOW_ID = 'synthetic:prev-window';
 const NEXT_WINDOW_ID = 'synthetic:next-window';
 
@@ -149,6 +154,28 @@ interface SocialRecipientMetric {
   metricName: string;
   denominatorKind: string;
   recipientCount: number;
+  sourceDataset: string;
+}
+
+interface MvBudgetAggregate {
+  year: number;
+  basis: string;
+  metricGroup: string;
+  metricCode: string;
+  metricName: string;
+  amount: number;
+  sourceDataset: string;
+}
+
+interface MvPoliceCrimeAggregate {
+  year: number;
+  regionName: string;
+  regionCode: string;
+  indicatorCode: string;
+  indicatorName: string;
+  crimeClassCode: string;
+  crimeClassName: string;
+  countValue: number;
   sourceDataset: string;
 }
 
@@ -339,6 +366,34 @@ function createSocialMinistryNode(): AtlasNode {
     name: 'Ministerstvo prace a socialnich veci',
     category: 'ministry',
     level: 1,
+  };
+}
+
+function createMvMinistryNode(): AtlasNode {
+  return {
+    id: MV_MINISTRY_ID,
+    name: 'Ministerstvo vnitra',
+    category: 'ministry',
+    level: 1,
+  };
+}
+
+function createMvBranchNode(
+  id: string,
+  name: string,
+  capacity: number | null = null,
+  drilldownAvailable = false,
+): AtlasNode {
+  return {
+    id,
+    name,
+    category: 'other',
+    level: 2,
+    metadata: {
+      ...(capacity ? { capacity } : {}),
+      drilldownAvailable,
+      focus: 'security',
+    },
   };
 }
 
@@ -743,6 +798,67 @@ async function getSocialRecipientMetrics(year: number): Promise<SocialRecipientM
   }));
 }
 
+async function getMvBudgetAggregates(year: number): Promise<MvBudgetAggregate[]> {
+  const result = await query(
+    `
+      select
+        reporting_year,
+        basis,
+        metric_group,
+        metric_code,
+        metric_name,
+        amount_czk
+      from mart.mv_budget_aggregate_latest
+      where reporting_year = $1
+      order by metric_group, metric_code
+    `,
+    [year],
+  );
+
+  return result.rows.map((row) => ({
+    year: Number(row.reporting_year),
+    basis: String(row.basis),
+    metricGroup: String(row.metric_group),
+    metricCode: String(row.metric_code),
+    metricName: String(row.metric_name),
+    amount: toNumber(row.amount_czk),
+    sourceDataset: 'mv_budget_aggregates',
+  }));
+}
+
+async function getMvPoliceCrimeAggregates(year: number): Promise<MvPoliceCrimeAggregate[]> {
+  const result = await query(
+    `
+      select
+        reporting_year,
+        region_name,
+        region_code,
+        indicator_code,
+        indicator_name,
+        crime_class_code,
+        crime_class_name,
+        count_value
+      from mart.mv_police_crime_aggregate_latest
+      where reporting_year = $1
+        and crime_class_code = '0-999'
+      order by region_name, indicator_code
+    `,
+    [year],
+  );
+
+  return result.rows.map((row) => ({
+    year: Number(row.reporting_year),
+    regionName: String(row.region_name),
+    regionCode: String(row.region_code),
+    indicatorCode: String(row.indicator_code),
+    indicatorName: String(row.indicator_name),
+    crimeClassCode: String(row.crime_class_code),
+    crimeClassName: String(row.crime_class_name),
+    countValue: toNumber(row.count_value),
+    sourceDataset: 'mv_police_crime_aggregates',
+  }));
+}
+
 async function getOutpatientDirectoryRows(
   subtypeCode?: keyof typeof OUTPATIENT_SUBTYPE_NODES,
 ): Promise<OutpatientDirectoryRow[]> {
@@ -897,6 +1013,45 @@ function socialRecipientCountByCode(rows: SocialRecipientMetric[], metricCode: s
   return value > 0 ? value : null;
 }
 
+function mvAmountByCode(rows: MvBudgetAggregate[], metricCode: string): number {
+  return rows.find((row) => row.metricCode === metricCode)?.amount ?? 0;
+}
+
+function mvNationalCrimeCount(rows: MvPoliceCrimeAggregate[], indicatorName: string): number | null {
+  const value =
+    rows.find((row) => row.regionCode === 'CZ' && row.indicatorName === indicatorName)?.countValue ?? 0;
+  return value > 0 ? value : null;
+}
+
+function buildMvPoliceRegionRows(rows: MvPoliceCrimeAggregate[]) {
+  const registeredByRegion = new Map<string, { regionName: string; registeredCount: number; clearedCount: number }>();
+
+  for (const row of rows) {
+    if (row.regionCode === 'CZ') continue;
+    const bucket = registeredByRegion.get(row.regionCode) ?? {
+      regionName: row.regionName,
+      registeredCount: 0,
+      clearedCount: 0,
+    };
+    if (row.indicatorName === 'Počet registrovaných skutků') {
+      bucket.registeredCount = row.countValue;
+    } else if (row.indicatorName === 'Počet objasněných skutků') {
+      bucket.clearedCount = row.countValue;
+    }
+    registeredByRegion.set(row.regionCode, bucket);
+  }
+
+  return [...registeredByRegion.entries()]
+    .map(([regionCode, row]) => ({
+      regionCode,
+      regionName: row.regionName,
+      registeredCount: row.registeredCount,
+      clearedCount: row.clearedCount,
+    }))
+    .filter((row) => row.registeredCount > 0)
+    .sort((a, b) => b.registeredCount - a.registeredCount || a.regionName.localeCompare(b.regionName, 'cs'));
+}
+
 function buildRegionGroups(rows: HealthFinanceRow[]): Array<{ regionName: string; rows: HealthFinanceRow[] }> {
   const grouped = new Map<string, HealthFinanceRow[]>();
   for (const row of rows) {
@@ -969,6 +1124,8 @@ function buildCombinedRootGraph(
   schoolGraph: { year: number; nodes: AtlasNode[]; links: AtlasLink[] },
   socialRows: SocialMpsvAggregate[],
   socialRecipientMetrics: SocialRecipientMetric[],
+  mvBudgetRows: MvBudgetAggregate[],
+  mvPoliceCrimeRows: MvPoliceCrimeAggregate[],
   healthRows: HealthFinanceRow[],
   mzAggregate: HealthMzAggregate | null,
   adminEntities: HealthMzAdminEntity[],
@@ -978,6 +1135,7 @@ function buildCombinedRootGraph(
   const nodes = [...schoolGraph.nodes];
   const links = [...schoolGraph.links];
   const socialTotal = socialAmountByCode(socialRows, 'total_expenditure');
+  const mvTotal = mvAmountByCode(mvBudgetRows, 'total_expenditure');
   const stateOtherLink = links.find((link) => link.source === STATE_ID && link.target === 'state:other');
 
   const hospitalRows = healthRows.filter((row) => row.focus === 'hospital');
@@ -988,7 +1146,7 @@ function buildCombinedRootGraph(
   const ministryTotal = mzAggregate?.amount ?? publicHealthAmount;
   const namedAdminAmount = sumAdminAmount(adminEntities);
   const adminAmount = Math.max(ministryTotal - publicHealthAmount - namedAdminAmount, 0);
-  const explicitAtlasTopLevelAmount = socialTotal + hospitalAmount + outpatientAmount + ministryTotal;
+  const explicitAtlasTopLevelAmount = socialTotal + mvTotal + hospitalAmount + outpatientAmount + ministryTotal;
 
   if (stateOtherLink) {
     stateOtherLink.amountCzk = Math.max(0, stateOtherLink.amountCzk - explicitAtlasTopLevelAmount);
@@ -1117,6 +1275,78 @@ function buildCombinedRootGraph(
     }
   }
 
+  if (mvTotal > 0) {
+    const policeAmount = mvAmountByCode(mvBudgetRows, 'police');
+    const fireRescueAmount = mvAmountByCode(mvBudgetRows, 'fire_rescue');
+    const adminAmountMv = mvAmountByCode(mvBudgetRows, 'ministry_admin') + mvAmountByCode(mvBudgetRows, 'sport');
+    const socialAmountMv = mvAmountByCode(mvBudgetRows, 'pensions') + mvAmountByCode(mvBudgetRows, 'other_social');
+    const policeCapacity = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
+    const policeDrilldownAvailable = buildMvPoliceRegionRows(mvPoliceCrimeRows).length > 0;
+
+    addNode(nodes, createMvMinistryNode());
+    links.push(
+      makeLink(
+        STATE_ID,
+        MV_MINISTRY_ID,
+        mvTotal,
+        year,
+        'state_to_mv_ministry',
+        'MV rozpočet: kapitola 314 podle oficiálních rozpočtových dokumentů MV',
+        'mv_budget_aggregates',
+      ),
+    );
+
+    const mvBuckets = [
+      {
+        id: MV_POLICE_ID,
+        name: 'Policie CR',
+        amount: policeAmount,
+        capacity: policeCapacity,
+        drilldownAvailable: policeDrilldownAvailable,
+        note: 'Specifický ukazatel kapitoly 314: Výdaje Policie ČR',
+      },
+      {
+        id: MV_FIRE_RESCUE_ID,
+        name: 'HZS CR',
+        amount: fireRescueAmount,
+        capacity: null,
+        drilldownAvailable: false,
+        note: 'Specifický ukazatel kapitoly 314: Výdaje Hasičského záchranného sboru ČR',
+      },
+      {
+        id: MV_ADMIN_ID,
+        name: 'MV a ostatni OSS',
+        amount: adminAmountMv,
+        capacity: null,
+        drilldownAvailable: false,
+        note: 'Ministerstvo vnitra, ostatní organizační složky státu a sportovní reprezentace',
+      },
+      {
+        id: MV_SOCIAL_ID,
+        name: 'Socialni davky MV',
+        amount: socialAmountMv,
+        capacity: null,
+        drilldownAvailable: false,
+        note: 'Důchody a ostatní sociální dávky vyplácené v kapitole MV',
+      },
+    ];
+
+    for (const bucket of mvBuckets.filter((entry) => entry.amount > 0)) {
+      addNode(nodes, createMvBranchNode(bucket.id, bucket.name, bucket.capacity, bucket.drilldownAvailable));
+      links.push(
+        makeLink(
+          MV_MINISTRY_ID,
+          bucket.id,
+          bucket.amount,
+          year,
+          'mv_budget_group',
+          bucket.note,
+          'mv_budget_aggregates',
+        ),
+      );
+    }
+  }
+
   if (hospitalRows.length > 0) {
     const ownerGroups = buildOwnerGroups(hospitalRows);
     addNode(nodes, createInsuranceNode(sumPeople(hospitalRows) || null));
@@ -1237,6 +1467,154 @@ function buildCombinedRootGraph(
         'health_ministry_admin_residual',
         'Zbytek kapitoly MZd po odecteni KHS, SZU/ZU a vybranych centralnich instituci',
         mzAggregate?.sourceDataset ?? 'atlas.inferred',
+      ),
+    );
+  }
+
+  return { year, nodes, links };
+}
+
+function buildMvRootGraph(year: number, mvBudgetRows: MvBudgetAggregate[], mvPoliceCrimeRows: MvPoliceCrimeAggregate[]) {
+  const mvTotal = mvAmountByCode(mvBudgetRows, 'total_expenditure');
+  if (mvTotal <= 0) return null;
+
+  const policeAmount = mvAmountByCode(mvBudgetRows, 'police');
+  const fireRescueAmount = mvAmountByCode(mvBudgetRows, 'fire_rescue');
+  const adminAmountMv = mvAmountByCode(mvBudgetRows, 'ministry_admin') + mvAmountByCode(mvBudgetRows, 'sport');
+  const socialAmountMv = mvAmountByCode(mvBudgetRows, 'pensions') + mvAmountByCode(mvBudgetRows, 'other_social');
+  const policeCapacity = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
+  const policeDrilldownAvailable = buildMvPoliceRegionRows(mvPoliceCrimeRows).length > 0;
+
+  const nodes: AtlasNode[] = [];
+  const links: AtlasLink[] = [];
+
+  addNode(nodes, createStateNode(null));
+  addNode(nodes, createMvMinistryNode());
+  links.push(
+    makeLink(
+      STATE_ID,
+      MV_MINISTRY_ID,
+      mvTotal,
+      year,
+      'state_to_mv_ministry',
+      'MV rozpočet: kapitola 314 podle oficiálních rozpočtových dokumentů MV',
+      'mv_budget_aggregates',
+    ),
+  );
+
+  const buckets = [
+    {
+      id: MV_POLICE_ID,
+      name: 'Policie CR',
+      amount: policeAmount,
+      capacity: policeCapacity,
+      drilldownAvailable: policeDrilldownAvailable,
+      note: 'Specifický ukazatel kapitoly 314: Výdaje Policie ČR',
+    },
+    {
+      id: MV_FIRE_RESCUE_ID,
+      name: 'HZS CR',
+      amount: fireRescueAmount,
+      capacity: null,
+      drilldownAvailable: false,
+      note: 'Specifický ukazatel kapitoly 314: Výdaje Hasičského záchranného sboru ČR',
+    },
+    {
+      id: MV_ADMIN_ID,
+      name: 'MV a ostatni OSS',
+      amount: adminAmountMv,
+      capacity: null,
+      drilldownAvailable: false,
+      note: 'Ministerstvo vnitra, ostatní organizační složky státu a sportovní reprezentace',
+    },
+    {
+      id: MV_SOCIAL_ID,
+      name: 'Socialni davky MV',
+      amount: socialAmountMv,
+      capacity: null,
+      drilldownAvailable: false,
+      note: 'Důchody a ostatní sociální dávky vyplácené v kapitole MV',
+    },
+  ];
+
+  for (const bucket of buckets.filter((entry) => entry.amount > 0)) {
+    addNode(nodes, createMvBranchNode(bucket.id, bucket.name, bucket.capacity, bucket.drilldownAvailable));
+    links.push(
+      makeLink(
+        MV_MINISTRY_ID,
+        bucket.id,
+        bucket.amount,
+        year,
+        'mv_budget_group',
+        bucket.note,
+        'mv_budget_aggregates',
+      ),
+    );
+  }
+
+  return { year, nodes, links };
+}
+
+function buildMvPoliceRegionGraph(year: number, mvBudgetRows: MvBudgetAggregate[], mvPoliceCrimeRows: MvPoliceCrimeAggregate[]) {
+  const policeAmount = mvAmountByCode(mvBudgetRows, 'police');
+  const nationalRegisteredCount = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
+  const regions = buildMvPoliceRegionRows(mvPoliceCrimeRows);
+  if (policeAmount <= 0 || !nationalRegisteredCount || !regions.length) return null;
+
+  const nodes: AtlasNode[] = [];
+  const links: AtlasLink[] = [];
+
+  addNode(nodes, createStateNode(null));
+  addNode(nodes, createMvMinistryNode());
+  addNode(nodes, createMvBranchNode(MV_POLICE_ID, 'Policie CR', nationalRegisteredCount, true));
+
+  links.push(
+    makeLink(
+      STATE_ID,
+      MV_MINISTRY_ID,
+      policeAmount,
+      year,
+      'state_to_mv_ministry',
+      'Zúžený pohled na policejní část kapitoly 314',
+      'mv_budget_aggregates',
+    ),
+  );
+  links.push(
+    makeLink(
+      MV_MINISTRY_ID,
+      MV_POLICE_ID,
+      policeAmount,
+      year,
+      'mv_budget_group',
+      'Specifický ukazatel kapitoly 314: Výdaje Policie ČR',
+      'mv_budget_aggregates',
+    ),
+  );
+
+  for (const region of regions) {
+    const allocatedAmount = allocateAmount(policeAmount, region.registeredCount, nationalRegisteredCount);
+    const regionId = `security:police:region:${region.regionCode}`;
+    addNode(nodes, {
+      id: regionId,
+      name: region.regionName,
+      category: 'region',
+      level: 3,
+      metadata: {
+        capacity: region.registeredCount,
+        clearedCount: region.clearedCount,
+        drilldownAvailable: false,
+        focus: 'security',
+      },
+    });
+    links.push(
+      makeLink(
+        MV_POLICE_ID,
+        regionId,
+        allocatedAmount,
+        year,
+        'mv_police_region_allocated_cost',
+        'Regionální rozdělení policejního rozpočtu je odhadnuto podle podílu registrovaných skutků z otevřeného datasetu KRI10',
+        'mv_police_crime_aggregates',
       ),
     );
   }
@@ -1955,10 +2333,23 @@ export async function getAtlasYears() {
 }
 
 export async function getAtlasOverview(year: number) {
-  const [schoolGraph, socialRows, socialRecipientMetrics, healthRows, mzAggregate, adminEntities, outpatientAggregate, outpatientSubtypes] = await Promise.all([
+  const [
+    schoolGraph,
+    socialRows,
+    socialRecipientMetrics,
+    mvBudgetRows,
+    mvPoliceCrimeRows,
+    healthRows,
+    mzAggregate,
+    adminEntities,
+    outpatientAggregate,
+    outpatientSubtypes,
+  ] = await Promise.all([
     getSchoolOverviewGraph(year),
     getSocialMpsvAggregates(year),
     getSocialRecipientMetrics(year),
+    getMvBudgetAggregates(year),
+    getMvPoliceCrimeAggregates(year),
     getHealthFinanceRows(year),
     getHealthMzAggregate(year),
     getHealthMzAdminEntities(year),
@@ -1972,6 +2363,8 @@ export async function getAtlasOverview(year: number) {
     schoolGraph,
     socialRows,
     socialRecipientMetrics,
+    mvBudgetRows,
+    mvPoliceCrimeRows,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2053,6 +2446,22 @@ export async function getAtlasHealthGraph(year: number, nodeId: string | null = 
     return buildOutpatientProviderDetailGraph(year, outpatientAggregate, providerIco, subtypeRows);
   }
 
+  return null;
+}
+
+export async function getAtlasMvGraph(year: number, nodeId: string | null = null) {
+  const [mvBudgetRows, mvPoliceCrimeRows] = await Promise.all([
+    getMvBudgetAggregates(year),
+    getMvPoliceCrimeAggregates(year),
+  ]);
+
+  if (!mvBudgetRows.length) return null;
+  if (!nodeId || nodeId === MV_MINISTRY_ID) {
+    return buildMvRootGraph(year, mvBudgetRows, mvPoliceCrimeRows);
+  }
+  if (nodeId === MV_POLICE_ID) {
+    return buildMvPoliceRegionGraph(year, mvBudgetRows, mvPoliceCrimeRows);
+  }
   return null;
 }
 

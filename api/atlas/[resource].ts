@@ -1,4 +1,4 @@
-import { getAtlasHealthGraph, getAtlasOverview, getAtlasYears, searchAtlasEntities } from '../_lib/atlas.js';
+import { getAtlasHealthGraph, getAtlasMvGraph, getAtlasOverview, getAtlasYears, searchAtlasEntities } from '../_lib/atlas.js';
 import { badRequest, json, methodNotAllowed, notFound, preflight } from '../_lib/http.js';
 import type { ApiRequest, ApiResponse } from '../_lib/server.js';
 
@@ -33,6 +33,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const graph = await getAtlasHealthGraph(year, nodeId, offset);
     if (!graph) return notFound(res, `No health atlas data for year ${year}`);
+    return json(res, 200, graph);
+  }
+
+  if (resource === 'mv') {
+    const year = Number(req.query.year);
+    if (!Number.isInteger(year)) return badRequest(res, 'Missing or invalid year');
+    const nodeId = typeof req.query.nodeId === 'string' ? req.query.nodeId.trim() : null;
+
+    const graph = await getAtlasMvGraph(year, nodeId);
+    if (!graph) return notFound(res, `No MV atlas data for year ${year}`);
     return json(res, 200, graph);
   }
 

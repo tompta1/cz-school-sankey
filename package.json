@@ -42,6 +42,10 @@
     "social:mpsv:load": "python3 etl/load_social_raw.py --dataset social_mpsv_aggregates --database-url \"${DATABASE_URL}\"",
     "social:recipients:pull": "python3 etl/social/fetch_recipient_metrics.py --year 2024",
     "social:recipients:load": "python3 etl/load_social_raw.py --dataset social_recipient_metrics --database-url \"${DATABASE_URL}\"",
+    "mv:budget:pull": "python3 etl/mv/fetch_budget_aggregates.py",
+    "mv:budget:load": "python3 etl/load_mv_raw.py --dataset mv_budget_aggregates --database-url \"${DATABASE_URL}\"",
+    "mv:police:pull": "python3 etl/mv/fetch_police_crime_aggregates.py",
+    "mv:police:load": "python3 etl/load_mv_raw.py --dataset mv_police_crime_aggregates --database-url \"${DATABASE_URL}\"",
     "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:providers:ico && npm run health:claims:payers && npm run health:insurers"
   },
   "dependencies": {
