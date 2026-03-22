@@ -17,6 +17,7 @@ RAW_ROOT = ROOT / "etl" / "data" / "raw" / "mv"
 SOURCES = {
     "mv_budget_docs": ("Ministerstvo vnitra ČR", "https://mv.gov.cz"),
     "police_crime_stats": ("ČSÚ / Policie ČR", "https://data.csu.gov.cz"),
+    "fire_rescue_activity_stats": ("Hasičský záchranný sbor ČR", "https://hzscr.gov.cz"),
 }
 
 
@@ -30,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         action="append",
-        choices=["mv_budget_aggregates", "mv_police_crime_aggregates"],
+        choices=["mv_budget_aggregates", "mv_police_crime_aggregates", "mv_fire_rescue_activity_aggregates"],
         help="Restrict loading to one or more dataset codes.",
     )
     return parser.parse_args()
@@ -272,9 +273,71 @@ def load_mv_police_crime_aggregates(conn: psycopg.Connection, path: Path) -> tup
     return dataset_release_id, inserted
 
 
+def load_mv_fire_rescue_activity_aggregates(conn: psycopg.Connection, path: Path) -> tuple[int, int]:
+    snapshot_label = snapshot_label_for(path)
+    sidecar = sidecar_for(path)
+    source_system_id = upsert_source_system(
+        conn,
+        "fire_rescue_activity_stats",
+        *SOURCES["fire_rescue_activity_stats"],
+    )
+    reporting_years = sidecar.get("years") or []
+    dataset_release_id = upsert_dataset_release(
+        conn,
+        source_system_id=source_system_id,
+        dataset_code="mv_fire_rescue_activity_aggregates",
+        snapshot_label=snapshot_label,
+        source_url=sidecar.get("source_url"),
+        local_path=path,
+        metadata=sidecar,
+        content_sha256=sidecar.get("sha256"),
+        reporting_year=max(reporting_years) if reporting_years else None,
+    )
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "delete from raw.mv_fire_rescue_activity_aggregate where dataset_release_id = %s",
+            (dataset_release_id,),
+        )
+        inserted = 0
+        for row in read_rows(path):
+            cur.execute(
+                """
+                insert into raw.mv_fire_rescue_activity_aggregate (
+                  dataset_release_id,
+                  reporting_year,
+                  region_name,
+                  region_code,
+                  indicator_code,
+                  indicator_name,
+                  count_value,
+                  source_url,
+                  payload
+                )
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    dataset_release_id,
+                    int(row["reporting_year"]),
+                    row["region_name"],
+                    row["region_code"],
+                    row["indicator_code"],
+                    row["indicator_name"],
+                    parse_decimal(row["count_value"]),
+                    row.get("source_url"),
+                    Jsonb(row),
+                ),
+            )
+            inserted += 1
+
+    finalize_dataset_release(conn, dataset_release_id=dataset_release_id, row_count=inserted)
+    return dataset_release_id, inserted
+
+
 LOADERS = {
     "mv_budget_aggregates": load_mv_budget_aggregates,
     "mv_police_crime_aggregates": load_mv_police_crime_aggregates,
+    "mv_fire_rescue_activity_aggregates": load_mv_fire_rescue_activity_aggregates,
 }
 
 

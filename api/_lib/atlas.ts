@@ -179,6 +179,16 @@ interface MvPoliceCrimeAggregate {
   sourceDataset: string;
 }
 
+interface MvFireRescueActivityAggregate {
+  year: number;
+  regionName: string;
+  regionCode: string;
+  indicatorCode: string;
+  indicatorName: string;
+  countValue: number;
+  sourceDataset: string;
+}
+
 interface OutpatientDirectoryRow {
   providerIco: string;
   providerName: string;
@@ -859,6 +869,34 @@ async function getMvPoliceCrimeAggregates(year: number): Promise<MvPoliceCrimeAg
   }));
 }
 
+async function getMvFireRescueActivityAggregates(year: number): Promise<MvFireRescueActivityAggregate[]> {
+  const result = await query(
+    `
+      select
+        reporting_year,
+        region_name,
+        region_code,
+        indicator_code,
+        indicator_name,
+        count_value
+      from mart.mv_fire_rescue_activity_aggregate_latest
+      where reporting_year = $1
+      order by region_name, indicator_code
+    `,
+    [year],
+  );
+
+  return result.rows.map((row) => ({
+    year: Number(row.reporting_year),
+    regionName: String(row.region_name),
+    regionCode: String(row.region_code),
+    indicatorCode: String(row.indicator_code),
+    indicatorName: String(row.indicator_name),
+    countValue: toNumber(row.count_value),
+    sourceDataset: 'mv_fire_rescue_activity_aggregates',
+  }));
+}
+
 async function getOutpatientDirectoryRows(
   subtypeCode?: keyof typeof OUTPATIENT_SUBTYPE_NODES,
 ): Promise<OutpatientDirectoryRow[]> {
@@ -1052,6 +1090,40 @@ function buildMvPoliceRegionRows(rows: MvPoliceCrimeAggregate[]) {
     .sort((a, b) => b.registeredCount - a.registeredCount || a.regionName.localeCompare(b.regionName, 'cs'));
 }
 
+function mvNationalFireRescueCount(rows: MvFireRescueActivityAggregate[], indicatorCode: string): number | null {
+  const value = rows.find((row) => row.regionCode === 'CZ' && row.indicatorCode === indicatorCode)?.countValue ?? 0;
+  return value > 0 ? value : null;
+}
+
+function buildMvFireRescueRegionRows(rows: MvFireRescueActivityAggregate[]) {
+  const interventionsByRegion = new Map<string, { regionName: string; interventionCount: number; totalJpoCount: number }>();
+
+  for (const row of rows) {
+    if (row.regionCode === 'CZ') continue;
+    const bucket = interventionsByRegion.get(row.regionCode) ?? {
+      regionName: row.regionName,
+      interventionCount: 0,
+      totalJpoCount: 0,
+    };
+    if (row.indicatorCode === 'hzs_interventions') {
+      bucket.interventionCount = row.countValue;
+    } else if (row.indicatorCode === 'jpo_total_interventions') {
+      bucket.totalJpoCount = row.countValue;
+    }
+    interventionsByRegion.set(row.regionCode, bucket);
+  }
+
+  return [...interventionsByRegion.entries()]
+    .map(([regionCode, row]) => ({
+      regionCode,
+      regionName: row.regionName,
+      interventionCount: row.interventionCount,
+      totalJpoCount: row.totalJpoCount,
+    }))
+    .filter((row) => row.interventionCount > 0)
+    .sort((a, b) => b.interventionCount - a.interventionCount || a.regionName.localeCompare(b.regionName, 'cs'));
+}
+
 function buildRegionGroups(rows: HealthFinanceRow[]): Array<{ regionName: string; rows: HealthFinanceRow[] }> {
   const grouped = new Map<string, HealthFinanceRow[]>();
   for (const row of rows) {
@@ -1126,6 +1198,7 @@ function buildCombinedRootGraph(
   socialRecipientMetrics: SocialRecipientMetric[],
   mvBudgetRows: MvBudgetAggregate[],
   mvPoliceCrimeRows: MvPoliceCrimeAggregate[],
+  mvFireRescueRows: MvFireRescueActivityAggregate[],
   healthRows: HealthFinanceRow[],
   mzAggregate: HealthMzAggregate | null,
   adminEntities: HealthMzAdminEntity[],
@@ -1282,6 +1355,8 @@ function buildCombinedRootGraph(
     const socialAmountMv = mvAmountByCode(mvBudgetRows, 'pensions') + mvAmountByCode(mvBudgetRows, 'other_social');
     const policeCapacity = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
     const policeDrilldownAvailable = buildMvPoliceRegionRows(mvPoliceCrimeRows).length > 0;
+    const fireRescueCapacity = mvNationalFireRescueCount(mvFireRescueRows, 'hzs_interventions');
+    const fireRescueDrilldownAvailable = buildMvFireRescueRegionRows(mvFireRescueRows).length > 0;
 
     addNode(nodes, createMvMinistryNode());
     links.push(
@@ -1309,8 +1384,8 @@ function buildCombinedRootGraph(
         id: MV_FIRE_RESCUE_ID,
         name: 'HZS CR',
         amount: fireRescueAmount,
-        capacity: null,
-        drilldownAvailable: false,
+        capacity: fireRescueCapacity,
+        drilldownAvailable: fireRescueDrilldownAvailable,
         note: 'Specifický ukazatel kapitoly 314: Výdaje Hasičského záchranného sboru ČR',
       },
       {
@@ -1474,7 +1549,12 @@ function buildCombinedRootGraph(
   return { year, nodes, links };
 }
 
-function buildMvRootGraph(year: number, mvBudgetRows: MvBudgetAggregate[], mvPoliceCrimeRows: MvPoliceCrimeAggregate[]) {
+function buildMvRootGraph(
+  year: number,
+  mvBudgetRows: MvBudgetAggregate[],
+  mvPoliceCrimeRows: MvPoliceCrimeAggregate[],
+  mvFireRescueRows: MvFireRescueActivityAggregate[],
+) {
   const mvTotal = mvAmountByCode(mvBudgetRows, 'total_expenditure');
   if (mvTotal <= 0) return null;
 
@@ -1484,6 +1564,8 @@ function buildMvRootGraph(year: number, mvBudgetRows: MvBudgetAggregate[], mvPol
   const socialAmountMv = mvAmountByCode(mvBudgetRows, 'pensions') + mvAmountByCode(mvBudgetRows, 'other_social');
   const policeCapacity = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
   const policeDrilldownAvailable = buildMvPoliceRegionRows(mvPoliceCrimeRows).length > 0;
+  const fireRescueCapacity = mvNationalFireRescueCount(mvFireRescueRows, 'hzs_interventions');
+  const fireRescueDrilldownAvailable = buildMvFireRescueRegionRows(mvFireRescueRows).length > 0;
 
   const nodes: AtlasNode[] = [];
   const links: AtlasLink[] = [];
@@ -1515,8 +1597,8 @@ function buildMvRootGraph(year: number, mvBudgetRows: MvBudgetAggregate[], mvPol
       id: MV_FIRE_RESCUE_ID,
       name: 'HZS CR',
       amount: fireRescueAmount,
-      capacity: null,
-      drilldownAvailable: false,
+      capacity: fireRescueCapacity,
+      drilldownAvailable: fireRescueDrilldownAvailable,
       note: 'Specifický ukazatel kapitoly 314: Výdaje Hasičského záchranného sboru ČR',
     },
     {
@@ -1615,6 +1697,79 @@ function buildMvPoliceRegionGraph(year: number, mvBudgetRows: MvBudgetAggregate[
         'mv_police_region_allocated_cost',
         'Regionální rozdělení policejního rozpočtu je odhadnuto podle podílu registrovaných skutků z otevřeného datasetu KRI10',
         'mv_police_crime_aggregates',
+      ),
+    );
+  }
+
+  return { year, nodes, links };
+}
+
+function buildMvFireRescueRegionGraph(
+  year: number,
+  mvBudgetRows: MvBudgetAggregate[],
+  mvFireRescueRows: MvFireRescueActivityAggregate[],
+) {
+  const fireRescueAmount = mvAmountByCode(mvBudgetRows, 'fire_rescue');
+  const nationalInterventionCount = mvNationalFireRescueCount(mvFireRescueRows, 'hzs_interventions');
+  const regions = buildMvFireRescueRegionRows(mvFireRescueRows);
+  if (fireRescueAmount <= 0 || !regions.length) return null;
+
+  const regionalInterventionTotal = regions.reduce((sum, row) => sum + row.interventionCount, 0);
+
+  const nodes: AtlasNode[] = [];
+  const links: AtlasLink[] = [];
+
+  addNode(nodes, createStateNode(null));
+  addNode(nodes, createMvMinistryNode());
+  addNode(nodes, createMvBranchNode(MV_FIRE_RESCUE_ID, 'HZS CR', nationalInterventionCount, true));
+
+  links.push(
+    makeLink(
+      STATE_ID,
+      MV_MINISTRY_ID,
+      fireRescueAmount,
+      year,
+      'state_to_mv_ministry',
+      'Zúžený pohled na výdaje HZS v kapitole 314',
+      'mv_budget_aggregates',
+    ),
+  );
+  links.push(
+    makeLink(
+      MV_MINISTRY_ID,
+      MV_FIRE_RESCUE_ID,
+      fireRescueAmount,
+      year,
+      'mv_budget_group',
+      'Specifický ukazatel kapitoly 314: Výdaje Hasičského záchranného sboru ČR',
+      'mv_budget_aggregates',
+    ),
+  );
+
+  for (const region of regions) {
+    const allocatedAmount = allocateAmount(fireRescueAmount, region.interventionCount, regionalInterventionTotal);
+    const regionId = `security:fire-rescue:region:${region.regionCode}`;
+    addNode(nodes, {
+      id: regionId,
+      name: region.regionName,
+      category: 'region',
+      level: 3,
+      metadata: {
+        capacity: region.interventionCount,
+        totalJpoCount: region.totalJpoCount,
+        drilldownAvailable: false,
+        focus: 'security',
+      },
+    });
+    links.push(
+      makeLink(
+        MV_FIRE_RESCUE_ID,
+        regionId,
+        allocatedAmount,
+        year,
+        'mv_fire_rescue_region_allocated_cost',
+        'Regionální rozdělení rozpočtu HZS je odhadnuto podle podílu zásahů HZS ČR z oficiální statistické ročenky HZS ČR',
+        'mv_fire_rescue_activity_aggregates',
       ),
     );
   }
@@ -2339,6 +2494,7 @@ export async function getAtlasOverview(year: number) {
     socialRecipientMetrics,
     mvBudgetRows,
     mvPoliceCrimeRows,
+    mvFireRescueRows,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2350,6 +2506,7 @@ export async function getAtlasOverview(year: number) {
     getSocialRecipientMetrics(year),
     getMvBudgetAggregates(year),
     getMvPoliceCrimeAggregates(year),
+    getMvFireRescueActivityAggregates(year),
     getHealthFinanceRows(year),
     getHealthMzAggregate(year),
     getHealthMzAdminEntities(year),
@@ -2365,6 +2522,7 @@ export async function getAtlasOverview(year: number) {
     socialRecipientMetrics,
     mvBudgetRows,
     mvPoliceCrimeRows,
+    mvFireRescueRows,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2450,17 +2608,21 @@ export async function getAtlasHealthGraph(year: number, nodeId: string | null = 
 }
 
 export async function getAtlasMvGraph(year: number, nodeId: string | null = null) {
-  const [mvBudgetRows, mvPoliceCrimeRows] = await Promise.all([
+  const [mvBudgetRows, mvPoliceCrimeRows, mvFireRescueRows] = await Promise.all([
     getMvBudgetAggregates(year),
     getMvPoliceCrimeAggregates(year),
+    getMvFireRescueActivityAggregates(year),
   ]);
 
   if (!mvBudgetRows.length) return null;
   if (!nodeId || nodeId === MV_MINISTRY_ID) {
-    return buildMvRootGraph(year, mvBudgetRows, mvPoliceCrimeRows);
+    return buildMvRootGraph(year, mvBudgetRows, mvPoliceCrimeRows, mvFireRescueRows);
   }
   if (nodeId === MV_POLICE_ID) {
     return buildMvPoliceRegionGraph(year, mvBudgetRows, mvPoliceCrimeRows);
+  }
+  if (nodeId === MV_FIRE_RESCUE_ID) {
+    return buildMvFireRescueRegionGraph(year, mvBudgetRows, mvFireRescueRows);
   }
   return null;
 }

@@ -46,6 +46,8 @@
     "mv:budget:load": "python3 etl/load_mv_raw.py --dataset mv_budget_aggregates --database-url \"${DATABASE_URL}\"",
     "mv:police:pull": "python3 etl/mv/fetch_police_crime_aggregates.py",
     "mv:police:load": "python3 etl/load_mv_raw.py --dataset mv_police_crime_aggregates --database-url \"${DATABASE_URL}\"",
+    "mv:fire:pull": "python3 etl/mv/fetch_fire_rescue_activity_aggregates.py",
+    "mv:fire:load": "python3 etl/load_mv_raw.py --dataset mv_fire_rescue_activity_aggregates --database-url \"${DATABASE_URL}\"",
     "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:providers:ico && npm run health:claims:payers && npm run health:insurers"
   },
   "dependencies": {
