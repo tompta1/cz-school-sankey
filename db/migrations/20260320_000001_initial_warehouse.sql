@@ -311,6 +311,18 @@ create table if not exists raw.health_claims_payer (
   loaded_at timestamptz not null default now()
 );
 
+create table if not exists raw.health_claims_provider_ico_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  provider_ico text not null,
+  total_quantity bigint not null,
+  patient_count bigint not null default 0,
+  contact_count bigint not null default 0,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
 create table if not exists raw.health_insurer_codebook (
   raw_id bigserial primary key,
   dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
@@ -323,6 +335,29 @@ create table if not exists raw.health_insurer_codebook (
   payload jsonb not null default '{}'::jsonb,
   loaded_at timestamptz not null default now()
 );
+
+create table if not exists raw.health_monitor_indicator (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  period_code text not null,
+  provider_ico text not null,
+  revenues_czk numeric(20, 2) not null default 0,
+  costs_czk numeric(20, 2) not null default 0,
+  result_czk numeric(20, 2) not null default 0,
+  assets_czk numeric(20, 2) not null default 0,
+  receivables_czk numeric(20, 2) not null default 0,
+  liabilities_czk numeric(20, 2) not null default 0,
+  short_term_liabilities_czk numeric(20, 2) not null default 0,
+  long_term_liabilities_czk numeric(20, 2) not null default 0,
+  total_debt_czk numeric(20, 2) not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists health_monitor_indicator_year_ico_idx
+  on raw.health_monitor_indicator (reporting_year, provider_ico);
 
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
@@ -357,6 +392,16 @@ select
 from raw.health_claims_provider_specialty
 group by reporting_year, reporting_month, icz;
 
+create or replace view mart.health_claims_provider_yearly as
+select
+  reporting_year,
+  provider_ico,
+  sum(total_quantity) as total_quantity,
+  sum(patient_count) as patient_count,
+  sum(contact_count) as contact_count
+from raw.health_claims_provider_ico_yearly
+group by reporting_year, provider_ico;
+
 create or replace view mart.health_claims_payer_monthly as
 select
   reporting_year,
@@ -365,5 +410,82 @@ select
   sum(quantity) as total_quantity
 from raw.health_claims_payer
 group by reporting_year, reporting_month, payer_code;
+
+create or replace view mart.health_monitor_indicator_latest as
+select distinct on (r.reporting_year, r.provider_ico)
+  r.reporting_year,
+  r.period_code,
+  r.provider_ico,
+  r.revenues_czk,
+  r.costs_czk,
+  r.result_czk,
+  r.assets_czk,
+  r.receivables_czk,
+  r.liabilities_czk,
+  r.short_term_liabilities_czk,
+  r.long_term_liabilities_czk,
+  r.total_debt_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.health_monitor_indicator r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.provider_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.health_provider_finance_yearly as
+with provider_directory as (
+  select
+    provider_ico,
+    max(provider_name) as provider_name,
+    max(provider_type) as provider_type,
+    max(provider_legal_form_name) as provider_legal_form_name,
+    max(region_name) as region_name,
+    bool_or(
+      lower(coalesce(facility_type_name, '')) like '%nemoc%'
+      or lower(coalesce(provider_type, '')) like '%nemoc%'
+    ) as hospital_like,
+    bool_or(
+      lower(coalesce(care_field, '')) like '%hygiena a epidemiologie%'
+      or lower(coalesce(facility_type_name, '')) like '%zdravotní ústav%'
+      or lower(coalesce(provider_type, '')) like '%zdravotní ústav%'
+    ) as public_health_like
+  from mart.health_provider_directory
+  group by provider_ico
+)
+select
+  m.reporting_year,
+  m.period_code,
+  m.provider_ico,
+  d.provider_name,
+  d.provider_type,
+  d.provider_legal_form_name,
+  d.region_name,
+  coalesce(d.hospital_like, false) as hospital_like,
+  coalesce(d.public_health_like, false) as public_health_like,
+  m.revenues_czk,
+  m.costs_czk,
+  m.result_czk,
+  m.assets_czk,
+  m.receivables_czk,
+  m.liabilities_czk,
+  m.short_term_liabilities_czk,
+  m.long_term_liabilities_czk,
+  m.total_debt_czk,
+  coalesce(c.total_quantity, 0) as total_quantity,
+  coalesce(c.patient_count, 0) as patient_count,
+  coalesce(c.contact_count, 0) as contact_count,
+  m.source_url,
+  m.snapshot_label
+from mart.health_monitor_indicator_latest m
+left join provider_directory d using (provider_ico)
+left join mart.health_claims_provider_yearly c
+  on c.reporting_year = m.reporting_year
+ and c.provider_ico = m.provider_ico;
 
 commit;

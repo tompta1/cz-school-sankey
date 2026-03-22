@@ -1,5 +1,60 @@
 import { query } from './db.js';
 
+type SchoolFounderType = 'kraj' | 'obec' | null;
+
+interface SchoolEntity {
+  institutionId: string;
+  institutionName: string;
+  ico: string | null;
+  founderId: string | null;
+  founderName: string | null;
+  founderType: SchoolFounderType;
+  municipality: string | null;
+  region: string | null;
+  capacity: number | null;
+}
+
+interface SchoolAllocationRow {
+  institutionId: string;
+  pedagogicalAmount: number;
+  nonpedagogicalAmount: number;
+  onivAmount: number;
+  otherAmount: number;
+  operationsAmount: number;
+  investmentAmount: number;
+  bucketBasis: string;
+  bucketCertainty: string;
+}
+
+interface SchoolEuProjectRow {
+  institutionId: string;
+  programme: string;
+  projectName: string;
+  amountCzk: number;
+  basis: string;
+  certainty: string;
+}
+
+interface SchoolFounderSupportRow {
+  institutionId: string;
+  amountCzk: number;
+  basis: string;
+  certainty: string;
+  note: string | null;
+}
+
+type SchoolNode = {
+  id: string;
+  name: string;
+  category: string;
+  level: number;
+  ico?: string;
+  founderType?: string;
+  metadata?: Record<string, number>;
+};
+
+type SchoolLink = ReturnType<typeof makeLink>;
+
 const BUCKET_META = {
   pedagogical: { id: 'bucket:pedagogical', name: 'Pedagogical staff' },
   nonpedagogical: { id: 'bucket:nonpedagogical', name: 'Non-pedagogical staff' },
@@ -19,7 +74,7 @@ const TOP_FOUNDERS = 25;
 const PREV_WINDOW_ID = 'synthetic:prev-window';
 const NEXT_WINDOW_ID = 'synthetic:next-window';
 
-async function getSchoolPeriod(year) {
+async function getSchoolPeriod(year: number) {
   const result = await query(
     `
       select reporting_period_id, period_code, calendar_year
@@ -53,7 +108,7 @@ export async function getAvailableYears() {
   }));
 }
 
-export async function getSchoolSummary(year) {
+export async function getSchoolSummary(year: number) {
   const period = await getSchoolPeriod(year);
   if (!period) return null;
 
@@ -109,7 +164,7 @@ export async function getSchoolSummary(year) {
   };
 }
 
-export async function searchInstitutions(year, q, limit = 8) {
+export async function searchInstitutions(year: number, q: string, limit = 8) {
   const entities = await getSchoolEntities(year);
   const normalizedQuery = q
     .normalize('NFD')
@@ -137,7 +192,7 @@ export async function searchInstitutions(year, q, limit = 8) {
     }));
 }
 
-async function getSchoolEntities(year) {
+async function getSchoolEntities(year: number): Promise<SchoolEntity[]> {
   const result = await query(
     `
       select
@@ -169,7 +224,7 @@ async function getSchoolEntities(year) {
   }));
 }
 
-async function getSchoolAllocations(year) {
+async function getSchoolAllocations(year: number): Promise<SchoolAllocationRow[]> {
   const result = await query(
     `
       select
@@ -201,7 +256,7 @@ async function getSchoolAllocations(year) {
   }));
 }
 
-async function getSchoolEuProjects(year) {
+async function getSchoolEuProjects(year: number): Promise<SchoolEuProjectRow[]> {
   const result = await query(
     `
       select institution_id, programme, project_name, amount_czk, basis, certainty
@@ -221,7 +276,7 @@ async function getSchoolEuProjects(year) {
   }));
 }
 
-async function getSchoolFounderSupport(year) {
+async function getSchoolFounderSupport(year: number): Promise<SchoolFounderSupportRow[]> {
   const result = await query(
     `
       select institution_id, amount_czk, basis, certainty, note
@@ -240,7 +295,7 @@ async function getSchoolFounderSupport(year) {
   }));
 }
 
-async function loadSchoolYearRaw(year) {
+async function loadSchoolYearRaw(year: number) {
   const [entities, allocations, euProjects, founderSupport] = await Promise.all([
     getSchoolEntities(year),
     getSchoolAllocations(year),
@@ -250,20 +305,27 @@ async function loadSchoolYearRaw(year) {
   return { entities, allocations, euProjects, founderSupport };
 }
 
-function ensureNode(nodesById, node) {
+function ensureNode(nodesById: Map<string, SchoolNode>, node: SchoolNode) {
   if (!nodesById.has(node.id)) {
     nodesById.set(node.id, node);
   }
 }
 
-function slugify(value) {
+function slugify(value: string) {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 }
 
-function makeLink(source, target, amount, year, flowType, sourceDataset = 'api.aggregated') {
+function makeLink(
+  source: string,
+  target: string,
+  amount: number,
+  year: number,
+  flowType: string,
+  sourceDataset = 'api.aggregated',
+) {
   return {
     source,
     target,
@@ -277,7 +339,7 @@ function makeLink(source, target, amount, year, flowType, sourceDataset = 'api.a
   };
 }
 
-function bucketNode(id, count, label, capacity = null) {
+function bucketNode(id: string, count: number, label: string, capacity: number | null = null): SchoolNode {
   return {
     id,
     name: `${id === PREV_WINDOW_ID ? '↑' : '↓'} ${count} more ${label}`,
@@ -287,7 +349,10 @@ function bucketNode(id, count, label, capacity = null) {
   };
 }
 
-function createInstitutionNode(entity) {
+function createInstitutionNode(entity: SchoolEntity | undefined): SchoolNode {
+  if (!entity) {
+    throw new Error('Missing school entity for node creation');
+  }
   return {
     id: entity.institutionId,
     name: entity.institutionName,
@@ -299,7 +364,7 @@ function createInstitutionNode(entity) {
   };
 }
 
-function createFounderNode(entity, capacity = null) {
+function createFounderNode(entity: SchoolEntity, capacity: number | null = null): SchoolNode {
   return {
     id: entity.founderId,
     name: entity.founderName,
@@ -309,7 +374,7 @@ function createFounderNode(entity, capacity = null) {
   };
 }
 
-function createProgrammeNode(programme) {
+function createProgrammeNode(programme: string): SchoolNode {
   return {
     id: `eu:${slugify(programme)}`,
     name: programme,
@@ -318,7 +383,7 @@ function createProgrammeNode(programme) {
   };
 }
 
-function createBucketNode(bucketCode) {
+function createBucketNode(bucketCode: string): SchoolNode {
   const bucket = BUCKET_META[bucketCode] ?? {
     id: `bucket:${bucketCode}`,
     name: bucketCode,
@@ -331,7 +396,7 @@ function createBucketNode(bucketCode) {
   };
 }
 
-function allocationTotal(row) {
+function allocationTotal(row: SchoolAllocationRow) {
   return (
     row.pedagogicalAmount +
     row.nonpedagogicalAmount +
@@ -340,7 +405,7 @@ function allocationTotal(row) {
   );
 }
 
-function allocationBuckets(row) {
+function allocationBuckets(row: SchoolAllocationRow): Array<[string, number]> {
   return [
     ['pedagogical', row.pedagogicalAmount],
     ['nonpedagogical', row.nonpedagogicalAmount],
@@ -351,7 +416,7 @@ function allocationBuckets(row) {
   ];
 }
 
-function buildWindow(sortedEntries, offset, windowSize) {
+function buildWindow(sortedEntries: Array<[string, number]>, offset: number, windowSize: number) {
   const windowIds = new Set(sortedEntries.slice(offset, offset + windowSize).map(([id]) => id));
   const prevIds = new Set(sortedEntries.slice(0, offset).map(([id]) => id));
   const nextIds = new Set(sortedEntries.slice(offset + windowSize).map(([id]) => id));
@@ -369,7 +434,7 @@ function buildWindow(sortedEntries, offset, windowSize) {
   };
 }
 
-export async function getSchoolOverviewGraph(year) {
+export async function getSchoolOverviewGraph(year: number) {
   const period = await getSchoolPeriod(year);
   if (!period) return null;
 
@@ -459,10 +524,10 @@ export async function getSchoolOverviewGraph(year) {
     ),
   ]);
 
-  const nodesById = new Map();
-  const links = [];
+  const nodesById = new Map<string, SchoolNode>();
+  const links: SchoolLink[] = [];
 
-  const regionCapacity = new Map(
+  const regionCapacity = new Map<string, number>(
     regionCapacityRes.rows.map((row) => [
       row.region_name,
       Number(row.total_capacity),
@@ -470,7 +535,7 @@ export async function getSchoolOverviewGraph(year) {
   );
 
   const totalCapacity = [...regionCapacity.values()].reduce((sum, value) => sum + value, 0);
-  const founderTypeCapacity = { kraj: 0, obec: 0 };
+  const founderTypeCapacity: Record<'kraj' | 'obec', number> = { kraj: 0, obec: 0 };
 
   ensureNode(nodesById, {
     id: STATE_ID,
@@ -649,11 +714,11 @@ export async function getSchoolOverviewGraph(year) {
   };
 }
 
-export async function getSchoolEuGraph(year) {
+export async function getSchoolEuGraph(year: number) {
   const { entities, euProjects } = await loadSchoolYearRaw(year);
-  const schoolById = new Map(entities.map((entity) => [entity.institutionId, entity]));
-  const programmeRegionTotals = new Map();
-  const regionCapacity = new Map();
+  const schoolById = new Map<string, SchoolEntity>(entities.map((entity) => [entity.institutionId, entity]));
+  const programmeRegionTotals = new Map<string, number>();
+  const regionCapacity = new Map<string, number>();
 
   for (const entity of entities) {
     if (!entity.region) continue;
@@ -668,8 +733,8 @@ export async function getSchoolEuGraph(year) {
     programmeRegionTotals.set(key, (programmeRegionTotals.get(key) ?? 0) + row.amountCzk);
   }
 
-  const nodesById = new Map();
-  const links = [];
+  const nodesById = new Map<string, SchoolNode>();
+  const links: SchoolLink[] = [];
 
   for (const [key, amount] of programmeRegionTotals) {
     const [programme, region] = key.split('|');
@@ -689,14 +754,14 @@ export async function getSchoolEuGraph(year) {
   return { year, nodes: [...nodesById.values()], links };
 }
 
-export async function getSchoolFounderTypeGraph(year, founderType, offset = 0) {
+export async function getSchoolFounderTypeGraph(year: number, founderType: 'kraj' | 'obec', offset = 0) {
   const { entities, founderSupport } = await loadSchoolYearRaw(year);
   const entitiesOfType = entities.filter((entity) => entity.founderType === founderType);
   if (entitiesOfType.length === 0) return null;
 
-  const founderMeta = new Map();
-  const founderCapacity = new Map();
-  const founderTotals = new Map();
+  const founderMeta = new Map<string, SchoolEntity>();
+  const founderCapacity = new Map<string, number>();
+  const founderTotals = new Map<string, number>();
 
   for (const entity of entitiesOfType) {
     founderMeta.set(entity.founderId, entity);
@@ -706,7 +771,7 @@ export async function getSchoolFounderTypeGraph(year, founderType, offset = 0) {
     );
   }
 
-  const entityById = new Map(entitiesOfType.map((entity) => [entity.institutionId, entity]));
+  const entityById = new Map<string, SchoolEntity>(entitiesOfType.map((entity) => [entity.institutionId, entity]));
   for (const row of founderSupport) {
     const entity = entityById.get(row.institutionId);
     if (!entity?.founderId) continue;
@@ -722,7 +787,7 @@ export async function getSchoolFounderTypeGraph(year, founderType, offset = 0) {
   const aggNodeName =
     founderType === 'kraj' ? 'Příspěvky krajů (provoz)' : 'Příspěvky obcí (provoz)';
 
-  const nodesById = new Map();
+  const nodesById = new Map<string, SchoolNode>();
   ensureNode(nodesById, {
     id: aggNodeId,
     name: aggNodeName,
@@ -730,7 +795,7 @@ export async function getSchoolFounderTypeGraph(year, founderType, offset = 0) {
     level: 0,
   });
 
-  const links = [];
+  const links: SchoolLink[] = [];
   for (const [founderId, amount] of founderTotals) {
     const target = window.bucket(founderId);
     if (target === PREV_WINDOW_ID && !window.prevCount) continue;
@@ -750,21 +815,21 @@ export async function getSchoolFounderTypeGraph(year, founderType, offset = 0) {
   return { year, nodes: [...nodesById.values()], links };
 }
 
-export async function getSchoolRegionGraph(year, region, offset = 0) {
+export async function getSchoolRegionGraph(year: number, region: string, offset = 0) {
   const { entities, allocations, euProjects, founderSupport } = await loadSchoolYearRaw(year);
   const schools = entities.filter((entity) => entity.region === region);
   if (schools.length === 0) return null;
 
   const schoolIds = new Set(schools.map((entity) => entity.institutionId));
-  const schoolById = new Map(schools.map((entity) => [entity.institutionId, entity]));
+  const schoolById = new Map<string, SchoolEntity>(schools.map((entity) => [entity.institutionId, entity]));
 
-  const founderCapacity = new Map();
-  const founderMeta = new Map();
-  const msmtToFounder = new Map();
-  const founderToBucket = new Map();
-  const founderSupportToFounder = new Map();
-  const euProgrammeToFounder = new Map();
-  const totalToFounder = new Map();
+  const founderCapacity = new Map<string, number>();
+  const founderMeta = new Map<string, SchoolEntity>();
+  const msmtToFounder = new Map<string, number>();
+  const founderToBucket = new Map<string, number>();
+  const founderSupportToFounder = new Map<string, number>();
+  const euProgrammeToFounder = new Map<string, number>();
+  const totalToFounder = new Map<string, number>();
 
   for (const school of schools) {
     founderMeta.set(school.founderId, school);
@@ -815,8 +880,8 @@ export async function getSchoolRegionGraph(year, region, offset = 0) {
 
   const sorted = [...totalToFounder.entries()].sort((a, b) => b[1] - a[1]);
   const window = buildWindow(sorted, offset, TOP_FOUNDERS);
-  const nodesById = new Map();
-  const links = [];
+  const nodesById = new Map<string, SchoolNode>();
+  const links: SchoolLink[] = [];
   let hasFounderKraj = false;
   let hasFounderObec = false;
 
@@ -890,16 +955,16 @@ export async function getSchoolRegionGraph(year, region, offset = 0) {
   return { year, region, nodes: [...nodesById.values()], links, hasFounderKraj, hasFounderObec };
 }
 
-export async function getSchoolFounderGraph(year, founderId, offset = 0) {
+export async function getSchoolFounderGraph(year: number, founderId: string, offset = 0) {
   const { entities, allocations, euProjects, founderSupport } = await loadSchoolYearRaw(year);
   const schools = entities.filter((entity) => entity.founderId === founderId);
   if (schools.length === 0) return null;
 
   const schoolIds = new Set(schools.map((entity) => entity.institutionId));
-  const schoolById = new Map(schools.map((entity) => [entity.institutionId, entity]));
+  const schoolById = new Map<string, SchoolEntity>(schools.map((entity) => [entity.institutionId, entity]));
   const founderMeta = schools[0];
 
-  const schoolInflow = new Map();
+  const schoolInflow = new Map<string, number>();
   for (const row of allocations) {
     if (!schoolIds.has(row.institutionId)) continue;
     schoolInflow.set(row.institutionId, (schoolInflow.get(row.institutionId) ?? 0) + allocationTotal(row));
@@ -911,8 +976,8 @@ export async function getSchoolFounderGraph(year, founderId, offset = 0) {
 
   const sorted = [...schoolInflow.entries()].sort((a, b) => b[1] - a[1]);
   const window = buildWindow(sorted, offset, TOP_SCHOOLS);
-  const nodesById = new Map();
-  const links = [];
+  const nodesById = new Map<string, SchoolNode>();
+  const links: SchoolLink[] = [];
 
   ensureNode(nodesById, {
     id: MSMT_ID,
@@ -970,7 +1035,7 @@ export async function getSchoolFounderGraph(year, founderId, offset = 0) {
   return { year, founderId, nodes: [...nodesById.values()], links };
 }
 
-export async function getSchoolNodeGraph(year, nodeId, offset = 0) {
+export async function getSchoolNodeGraph(year: number, nodeId: string, offset = 0) {
   if (nodeId.startsWith('region:')) {
     return getSchoolRegionGraph(year, nodeId.replace('region:', ''), offset);
   }
@@ -993,8 +1058,8 @@ export async function getSchoolNodeGraph(year, nodeId, offset = 0) {
     const entity = entities.find((row) => row.institutionId === nodeId);
     if (!entity) return null;
 
-    const nodesById = new Map();
-    const links = [];
+    const nodesById = new Map<string, SchoolNode>();
+    const links: SchoolLink[] = [];
     ensureNode(nodesById, createInstitutionNode(entity));
     ensureNode(nodesById, {
       id: MSMT_ID,
@@ -1026,8 +1091,8 @@ export async function getSchoolNodeGraph(year, nodeId, offset = 0) {
 
   if (nodeId.startsWith('bucket:')) {
     const bucketCode = nodeId.replace('bucket:', '');
-    const nodesById = new Map();
-    const links = [];
+    const nodesById = new Map<string, SchoolNode>();
+    const links: SchoolLink[] = [];
     ensureNode(nodesById, createBucketNode(bucketCode));
     ensureNode(nodesById, {
       id: MSMT_ID,
@@ -1036,7 +1101,7 @@ export async function getSchoolNodeGraph(year, nodeId, offset = 0) {
       level: 0,
     });
 
-    const entityById = new Map(entities.map((entity) => [entity.institutionId, entity]));
+    const entityById = new Map<string, SchoolEntity>(entities.map((entity) => [entity.institutionId, entity]));
     for (const row of allocations) {
       const amount = Object.fromEntries(allocationBuckets(row))[bucketCode] ?? 0;
       if (amount <= 0) continue;

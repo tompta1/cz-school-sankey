@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && npm run typecheck:api && vite build",
+    "typecheck:api": "tsc -p tsconfig.api.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
@@ -16,6 +17,7 @@
     "db:apply:schema": "python3 db/apply_schema.py --database-url \"$(bash ./scripts/dev-db-url.sh)\"",
     "db:load:school:2025": "python3 etl/load_school_raw.py --year 2025 --database-url \"$(bash ./scripts/dev-db-url.sh)\"",
     "db:transform:school:2025": "python3 etl/transform_school_core.py --year 2025 --database-url \"$(bash ./scripts/dev-db-url.sh)\"",
+    "db:load:health": "python3 etl/load_health_raw.py --database-url \"$(bash ./scripts/dev-db-url.sh)\"",
     "etl:demo": "python3 etl/build_school_year.py --year 2025 --demo",
     "etl:parse": "python3 etl/parse_msmt_xlsx.py --year 2025 --kraj Středočeský --top 25",
     "etl:eu": "python3 etl/fetch_eu_grants.py --year 2025",
@@ -26,9 +28,21 @@
     "etl:full": "npm run etl:parse && npm run etl:eu && npm run etl:founders && npm run etl:registry && npm run etl:year",
     "health:providers": "python3 etl/health/fetch_provider_sites.py",
     "health:claims:providers": "python3 etl/health/fetch_claims_by_provider_specialty.py",
+    "health:claims:providers:ico": "python3 etl/health/fetch_claims_by_provider_ico.py",
     "health:claims:payers": "python3 etl/health/fetch_claims_by_payer.py",
+    "health:load:claims": "node ./scripts/load-health-claims-monthly.mjs",
     "health:insurers": "python3 etl/health/fetch_insurer_codebook.py",
-    "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:payers && npm run health:insurers"
+    "health:monitor:pull": "python3 etl/health/fetch_monitor_indicators.py",
+    "health:monitor:load": "python3 etl/load_health_raw.py --dataset health_monitor_indicators --database-url \"${DATABASE_URL}\"",
+    "health:mz:pull": "python3 etl/health/fetch_mz_budget_entities.py",
+    "health:mz:load": "python3 etl/load_health_raw.py --dataset health_mz_budget_entities --database-url \"${DATABASE_URL}\"",
+    "health:financing:pull": "python3 etl/health/fetch_czso_health_financing.py",
+    "health:financing:load": "python3 etl/load_health_raw.py --dataset health_financing_aggregates --database-url \"${DATABASE_URL}\"",
+    "social:mpsv:pull": "python3 etl/social/fetch_mpsv_budget_aggregates.py",
+    "social:mpsv:load": "python3 etl/load_social_raw.py --dataset social_mpsv_aggregates --database-url \"${DATABASE_URL}\"",
+    "social:recipients:pull": "python3 etl/social/fetch_recipient_metrics.py --year 2024",
+    "social:recipients:load": "python3 etl/load_social_raw.py --dataset social_recipient_metrics --database-url \"${DATABASE_URL}\"",
+    "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:providers:ico && npm run health:claims:payers && npm run health:insurers"
   },
   "dependencies": {
     "echarts": "^5.6.0",
@@ -37,6 +51,7 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.0",

@@ -1,10 +1,14 @@
 node_modules/
 dist/
 .claude/
+.agents/
+AGENTS.md
+skills-lock.json
 **/__pycache__/
 *.pyc
 *.pyo
 .env
+.env.*
 *.local
 *.tsbuildinfo
 vite.config.js
@@ -12,5 +16,7 @@ vite.config.d.ts
 etl/data/monitor_cache/
 etl/data/msmt_registry_cache/
 etl/data/dotaceeu_cache/
+etl/data/raw/health/
+etl/data/raw/social/
 .vercel
 .neon

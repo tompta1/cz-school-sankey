@@ -1,7 +1,8 @@
 import { badRequest, json, methodNotAllowed, preflight } from '../_lib/http.js';
+import type { ApiRequest, ApiResponse } from '../_lib/server.js';
 import { searchInstitutions } from '../_lib/school.js';
 
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (preflight(req, res)) return;
   if (req.method !== 'GET') return methodNotAllowed(res);
 

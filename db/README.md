@@ -110,6 +110,7 @@ Fetch and land:
 - monthly claims counts by provider and specialty from NRHZS
 - monthly claims counts by payer from NRHZS
 - insurer codebook from DIA/RPP
+- Monitor MF yearly finance indicators for public hospitals and public-health institutions
 
 Then transform into:
 
@@ -129,3 +130,11 @@ The first health slice is not purely money-centric, because the most accessible 
 - `core.health_service_activity` for provider and payer activity volumes
 
 If a reliable open reimbursement-amount dataset appears later, it can be added without changing the organization model.
+
+The current bridge into a unified school + health money view uses:
+
+- `raw.health_monitor_indicator`
+- `mart.health_monitor_indicator_latest`
+- `mart.health_provider_finance_yearly`
+
+That path keeps Monitor pulls reproducible in the warehouse instead of querying third-party HTTP endpoints at request time.
