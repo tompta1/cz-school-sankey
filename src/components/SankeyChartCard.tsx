@@ -175,6 +175,7 @@ function buildActiveOption(
     },
     series: [{
       type: 'sankey',
+      triggerEvent: true,
       ...chartLayout(containerWidth),
       nodeWidth: mobile ? 14 : 18,
       nodeGap,
@@ -185,6 +186,8 @@ function buildActiveOption(
       blur: { itemStyle: { opacity: 0.08 }, lineStyle: { opacity: 0.05 } },
       lineStyle: { color: 'source', opacity: 0.45, curveness: 0.5 },
       label: {
+        show: true,
+        triggerEvent: true,
         color: '#cbd5e1',
         fontSize: labelFontSize,
         fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
@@ -225,6 +228,7 @@ function buildGhostOption(
     backgroundColor: 'transparent',
     series: [{
       type: 'sankey',
+      triggerEvent: true,
       ...chartLayout(containerWidth),
       nodeWidth: mobile ? 14 : 18,
       nodeGap,
@@ -288,10 +292,29 @@ export function SankeyChartCard({
     );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
+    function resolveClickedNodeId(params: unknown): string | null {
+      const p = params as {
+        dataType?: string;
+        componentSubType?: string;
+        name?: string;
+        data?: { name?: string; target?: string };
+      };
+      if (p.dataType === 'node' && typeof p.data?.name === 'string') {
+        return p.data.name;
+      }
+      if (p.dataType === 'edge' && typeof p.data?.target === 'string') {
+        return p.data.target;
+      }
+      if (p.componentSubType === 'sankey' && typeof p.name === 'string' && idToDisplay.has(p.name)) {
+        return p.name;
+      }
+      return null;
+    }
+
     if (!prevActive) {
       chart.on('click', (params) => {
-        if (params.dataType === 'node')
-          onNodeClickRef.current((params.data as { name: string }).name);
+        const nodeId = resolveClickedNodeId(params);
+        if (nodeId) onNodeClickRef.current(nodeId);
       });
       chart.on('mouseover', (params) => {
         if (params.dataType === 'node') {
@@ -332,10 +355,29 @@ export function SankeyChartCard({
     );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
+    function resolveClickedNodeId(params: unknown): string | null {
+      const p = params as {
+        dataType?: string;
+        componentSubType?: string;
+        name?: string;
+        data?: { name?: string; target?: string };
+      };
+      if (p.dataType === 'node' && typeof p.data?.name === 'string') {
+        return p.data.name;
+      }
+      if (p.dataType === 'edge' && typeof p.data?.target === 'string') {
+        return p.data.target;
+      }
+      if (p.componentSubType === 'sankey' && typeof p.name === 'string' && idToDisplay.has(p.name)) {
+        return p.name;
+      }
+      return null;
+    }
+
     if (prevActive) {
       chart.on('click', (params) => {
-        if (params.dataType === 'node')
-          onNodeClickRef.current((params.data as { name: string }).name);
+        const nodeId = resolveClickedNodeId(params);
+        if (nodeId) onNodeClickRef.current(nodeId);
       });
       chart.on('mouseover', (params) => {
         if (params.dataType === 'node') {
