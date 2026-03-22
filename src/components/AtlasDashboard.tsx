@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { buildApiUrl, fetchJson } from '../lib/api';
+import { atlasBackLabel, backAtlasView, pageAtlasView, pushAtlasView, type AtlasDrilldownState } from '../lib/atlasNavigation';
 import {
   EU_ALL_ID,
   FOUNDERS_KRAJ,
@@ -21,11 +22,6 @@ const HEALTH_PUBLIC_HEALTH_ID = 'health:public-health';
 const MV_MINISTRY_ID = 'security:ministry:mv';
 const MV_POLICE_ID = 'security:police';
 const MAX_RESULTS = 8;
-
-type AtlasDrilldownState =
-  | { scope: 'school'; nodeId: string; label: string; offset: number }
-  | { scope: 'health'; nodeId: string | null; label: string; offset: number }
-  | { scope: 'mv'; nodeId: string | null; label: string; offset: number };
 
 function buildSchoolGraphUrl(year: number, nodeId: string, offset: number): string {
   const params = new URLSearchParams({ year: String(year) });
@@ -200,16 +196,13 @@ export function AtlasDashboard() {
         const current = prev.at(-1);
         if (!current || current.scope !== 'school') return prev;
         const step = node.id === PREV_WINDOW_ID ? -pageSizeForSchoolNode(current.nodeId) : pageSizeForSchoolNode(current.nodeId);
-        return [
-          ...prev.slice(0, -1),
-          { ...current, offset: Math.max(0, current.offset + step) },
-        ];
+        return pageAtlasView(prev, step);
       });
       return;
     }
 
     if (!isClickableSchoolNode(node)) return;
-    setViewStack((prev) => [...prev, { scope: 'school', nodeId: node.id, label: node.name, offset: 0 }]);
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'school', nodeId: node.id, label: node.name, offset: 0 }));
   }
 
   function handleHealthNodeClick(node: SankeyNode) {
@@ -218,10 +211,7 @@ export function AtlasDashboard() {
         const current = prev.at(-1);
         if (!current || current.scope !== 'health') return prev;
         const step = node.id === PREV_WINDOW_ID ? -28 : 28;
-        return [
-          ...prev.slice(0, -1),
-          { ...current, offset: Math.max(0, current.offset + step) },
-        ];
+        return pageAtlasView(prev, step);
       });
       return;
     }
@@ -231,13 +221,13 @@ export function AtlasDashboard() {
       node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID
         ? null
         : node.id;
-    setViewStack((prev) => [...prev, { scope: 'health', nodeId: nextNodeId, label: node.name, offset: 0 }]);
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'health', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
   function handleMvNodeClick(node: SankeyNode) {
     if (!isClickableMvNode(node)) return;
     const nextNodeId = node.id === MV_MINISTRY_ID ? null : node.id;
-    setViewStack((prev) => [...prev, { scope: 'mv', nodeId: nextNodeId, label: node.name, offset: 0 }]);
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'mv', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
   function handleNodeClick(nodeId: string) {
@@ -271,7 +261,7 @@ export function AtlasDashboard() {
   }
 
   function handleBack() {
-    setViewStack((prev) => prev.slice(0, -1));
+    setViewStack((prev) => backAtlasView(prev));
   }
 
   function handleSearchSelect(result: AtlasSearchHit) {
@@ -292,7 +282,7 @@ export function AtlasDashboard() {
   if (error && !graph) return <div className="centered error">Chyba: {error}</div>;
   if (!graph || !selectedYear) return <div className="centered">Zatim neni k dispozici sjednoceny pohled.</div>;
 
-  const backLabel = viewStack.length > 1 ? viewStack.at(-2)!.label : ROOT_TITLE;
+  const backLabel = atlasBackLabel(viewStack, ROOT_TITLE);
 
   return (
     <div className="dashboard-shell">

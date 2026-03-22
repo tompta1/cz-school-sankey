@@ -2,6 +2,7 @@ import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 
 import { formatCompactCzk, formatInteger, formatPerPupil, formatPerUnit } from '../lib/format';
+import { normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
 import type { HoverInfo, SankeyLink, SankeyNode } from '../types';
 
 interface Props {
@@ -63,39 +64,8 @@ function maxLabelLengthForGraph(nodes: SankeyNode[], mobile: boolean): number {
   return mobile ? 20 : 28;
 }
 
-function normalizedValue(amountCzk: number, capacity: number | null, perUnit: boolean): number {
-  if (!perUnit) return amountCzk;
-  if (!capacity || capacity <= 0) return 0;
-  return amountCzk / capacity;
-}
-
 function unavailableMetricMarkup(perUnitLabel: string): string {
   return `N/A<br/><small style="color:#94a3b8">Metoda ${perUnitLabel} není pro tento tok k dispozici</small>`;
-}
-
-function normalizedNodeWeight(
-  nodeId: string,
-  links: SankeyLink[],
-  capacityMap: Map<string, number>,
-  perUnit: boolean,
-): number {
-  const incoming = links
-    .filter((link) => link.target === nodeId)
-    .reduce((sum, link) => {
-      const capacity = link.institutionId
-        ? capacityMap.get(link.institutionId) ?? null
-        : capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
-      return sum + normalizedValue(link.amountCzk, capacity, perUnit);
-    }, 0);
-  const outgoing = links
-    .filter((link) => link.source === nodeId)
-    .reduce((sum, link) => {
-      const capacity = link.institutionId
-        ? capacityMap.get(link.institutionId) ?? null
-        : capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
-      return sum + normalizedValue(link.amountCzk, capacity, perUnit);
-    }, 0);
-  return Math.max(incoming, outgoing);
 }
 
 function buildActiveOption(
@@ -123,16 +93,7 @@ function buildActiveOption(
 
   // In per-pupil mode sort links descending by Kč/žák so higher-value flows
   // appear at the top and ECharts orders nodes accordingly.
-  const orderedLinks = perPupil
-    ? [...links].sort((a, b) => {
-        const capA = linkCapacity(a);
-        const capB = linkCapacity(b);
-        return normalizedValue(b.amountCzk, capB, true) - normalizedValue(a.amountCzk, capA, true);
-      })
-    : links;
-  const orderedNodes = perPupil
-    ? [...nodes].sort((a, b) => normalizedNodeWeight(b.id, orderedLinks, capacityMap, true) - normalizedNodeWeight(a.id, orderedLinks, capacityMap, true))
-    : nodes;
+  const { orderedNodes, orderedLinks } = orderSankeyGraph(nodes, links, capacityMap, perPupil);
 
   return {
     backgroundColor: 'transparent',
