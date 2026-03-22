@@ -50,6 +50,10 @@
     "mv:police:load": "python3 etl/load_mv_raw.py --dataset mv_police_crime_aggregates --database-url \"${DATABASE_URL}\"",
     "mv:fire:pull": "python3 etl/mv/fetch_fire_rescue_activity_aggregates.py",
     "mv:fire:load": "python3 etl/load_mv_raw.py --dataset mv_fire_rescue_activity_aggregates --database-url \"${DATABASE_URL}\"",
+    "justice:budget:pull": "python3 etl/justice/fetch_budget_aggregates.py",
+    "justice:budget:load": "python3 etl/load_justice_raw.py --dataset justice_budget_aggregates --database-url \"${DATABASE_URL}\"",
+    "justice:activity:pull": "python3 etl/justice/fetch_activity_aggregates.py --year 2024",
+    "justice:activity:load": "python3 etl/load_justice_raw.py --dataset justice_activity_aggregates --database-url \"${DATABASE_URL}\"",
     "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:providers:ico && npm run health:claims:payers && npm run health:insurers"
   },
   "dependencies": {

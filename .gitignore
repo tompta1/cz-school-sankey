@@ -19,5 +19,6 @@ etl/data/dotaceeu_cache/
 etl/data/raw/health/
 etl/data/raw/mv/
 etl/data/raw/social/
+etl/data/raw/justice/
 .vercel
 .neon

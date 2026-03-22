@@ -528,6 +528,41 @@ create table if not exists raw.mv_fire_rescue_activity_aggregate (
 create index if not exists mv_fire_rescue_activity_year_region_indicator_idx
   on raw.mv_fire_rescue_activity_aggregate (reporting_year, region_code, indicator_code);
 
+create table if not exists raw.justice_budget_aggregate (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  basis text not null,
+  chapter_code text not null,
+  chapter_name text not null,
+  metric_group text not null,
+  metric_code text not null,
+  metric_name text not null,
+  amount_czk numeric(20, 2) not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists justice_budget_aggregate_year_metric_idx
+  on raw.justice_budget_aggregate (reporting_year, metric_group, metric_code);
+
+create table if not exists raw.justice_activity_aggregate (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  activity_domain text not null,
+  metric_code text not null,
+  metric_name text not null,
+  count_value numeric(20, 2) not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists justice_activity_aggregate_year_metric_idx
+  on raw.justice_activity_aggregate (reporting_year, activity_domain, metric_code);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -810,6 +845,51 @@ order by
   r.reporting_year,
   r.region_code,
   r.indicator_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.justice_budget_aggregate_latest as
+select distinct on (r.reporting_year, r.metric_group, r.metric_code)
+  r.reporting_year,
+  r.basis,
+  r.chapter_code,
+  r.chapter_name,
+  r.metric_group,
+  r.metric_code,
+  r.metric_name,
+  r.amount_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.justice_budget_aggregate r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.metric_group,
+  r.metric_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.justice_activity_aggregate_latest as
+select distinct on (r.reporting_year, r.activity_domain, r.metric_code)
+  r.reporting_year,
+  r.activity_domain,
+  r.metric_code,
+  r.metric_name,
+  r.count_value,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.justice_activity_aggregate r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.activity_domain,
+  r.metric_code,
   d.snapshot_label desc,
   r.loaded_at desc,
   r.raw_id desc;

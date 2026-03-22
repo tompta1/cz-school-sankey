@@ -17,6 +17,13 @@ import {
   getMvPoliceCrimeAggregates,
   getMvTotal,
 } from './atlas/mv.js';
+import {
+  appendJusticeBranch,
+  buildJusticeRootGraph,
+  getJusticeActivityAggregates,
+  getJusticeBudgetAggregates,
+  getJusticeTotal,
+} from './atlas/justice.js';
 
 const STATE_ID = 'state:cr';
 const HEALTH_MINISTRY_ID = 'health:ministry:mzcr';
@@ -31,6 +38,7 @@ const MV_POLICE_ID = 'security:police';
 const MV_FIRE_RESCUE_ID = 'security:fire-rescue';
 const MV_ADMIN_ID = 'security:mv-admin';
 const MV_SOCIAL_ID = 'security:mv-social';
+const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const PREV_WINDOW_ID = 'synthetic:prev-window';
 const NEXT_WINDOW_ID = 'synthetic:next-window';
 
@@ -1036,6 +1044,7 @@ function buildCombinedRootGraph(
   mvBudgetRows: MvBudgetAggregate[],
   mvPoliceCrimeRows: MvPoliceCrimeAggregate[],
   mvFireRescueRows: MvFireRescueActivityAggregate[],
+  justiceBudgetRows: Awaited<ReturnType<typeof getJusticeBudgetAggregates>>,
   healthRows: HealthFinanceRow[],
   mzAggregate: HealthMzAggregate | null,
   adminEntities: HealthMzAdminEntity[],
@@ -1047,6 +1056,7 @@ function buildCombinedRootGraph(
   const links = [...schoolGraph.links];
   const socialTotal = getSocialTotal(socialRows);
   const mvTotal = getMvTotal(mvBudgetRows);
+  const justiceTotal = getJusticeTotal(justiceBudgetRows);
   const stateOtherLink = links.find((link) => link.source === STATE_ID && link.target === 'state:other');
 
   const hospitalRows = healthRows.filter((row) => row.focus === 'hospital');
@@ -1059,16 +1069,18 @@ function buildCombinedRootGraph(
   const ministryTotal = mzAggregate?.amount ?? publicHealthAmount;
   const namedAdminAmount = sumAdminAmount(adminEntities);
   const adminAmount = Math.max(ministryTotal - publicHealthAmount - namedAdminAmount, 0);
-  const explicitAtlasTopLevelAmount = socialTotal + mvTotal + hospitalAmount + zzsAmount + outpatientAmount + ministryTotal;
+  const explicitAtlasTopLevelAmount =
+    socialTotal + mvTotal + justiceTotal + hospitalAmount + zzsAmount + outpatientAmount + ministryTotal;
 
   if (stateOtherLink) {
     stateOtherLink.amountCzk = Math.max(0, stateOtherLink.amountCzk - explicitAtlasTopLevelAmount);
     stateOtherLink.value = stateOtherLink.amountCzk;
-    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich a zdravotnich vetvi atlasu';
+    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich a zdravotnich vetvi atlasu';
   }
 
   appendSocialBranch(nodes, links, year, socialRows, socialRecipientMetrics);
   appendMvBranch(nodes, links, year, mvBudgetRows, mvPoliceCrimeRows, mvFireRescueRows);
+  appendJusticeBranch(nodes, links, year, justiceBudgetRows);
 
   if (hospitalRows.length > 0) {
     const ownerGroups = buildOwnerGroups(hospitalRows);
@@ -2008,6 +2020,7 @@ export async function getAtlasOverview(year: number) {
     mvBudgetRows,
     mvPoliceCrimeRows,
     mvFireRescueRows,
+    justiceBudgetRows,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2021,6 +2034,7 @@ export async function getAtlasOverview(year: number) {
     getMvBudgetAggregates(year),
     getMvPoliceCrimeAggregates(year),
     getMvFireRescueActivityAggregates(year),
+    getJusticeBudgetAggregates(year),
     getHealthFinanceRows(year),
     getHealthMzAggregate(year),
     getHealthMzAdminEntities(year),
@@ -2038,6 +2052,7 @@ export async function getAtlasOverview(year: number) {
     mvBudgetRows,
     mvPoliceCrimeRows,
     mvFireRescueRows,
+    justiceBudgetRows,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2155,6 +2170,19 @@ export async function getAtlasMvGraph(year: number, nodeId: string | null = null
   }
   if (nodeId === MV_FIRE_RESCUE_ID) {
     return buildMvFireRescueRegionGraph(year, mvBudgetRows, mvFireRescueRows);
+  }
+  return null;
+}
+
+export async function getAtlasJusticeGraph(year: number, nodeId: string | null = null) {
+  const [budgetRows, activityRows] = await Promise.all([
+    getJusticeBudgetAggregates(year),
+    getJusticeActivityAggregates(year),
+  ]);
+
+  if (!budgetRows.length) return null;
+  if (!nodeId || nodeId === JUSTICE_MINISTRY_ID) {
+    return buildJusticeRootGraph(year, budgetRows, activityRows);
   }
   return null;
 }

@@ -22,6 +22,7 @@ const HEALTH_PUBLIC_HEALTH_ID = 'health:public-health';
 const HEALTH_ZZS_ID = 'health:zzs';
 const MV_MINISTRY_ID = 'security:ministry:mv';
 const MV_POLICE_ID = 'security:police';
+const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const MAX_RESULTS = 8;
 
 function buildSchoolGraphUrl(year: number, nodeId: string, offset: number): string {
@@ -83,6 +84,10 @@ function isClickableMvNode(node: SankeyNode): boolean {
   return false;
 }
 
+function isClickableJusticeNode(node: SankeyNode): boolean {
+  return node.id === JUSTICE_MINISTRY_ID;
+}
+
 export function AtlasDashboard() {
   const [years, setYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -136,6 +141,10 @@ export function AtlasDashboard() {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
       path = `/api/atlas/mv?${params.toString()}`;
+    } else if (currentView.scope === 'justice') {
+      const params = new URLSearchParams({ year: String(selectedYear) });
+      if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
+      path = `/api/atlas/justice?${params.toString()}`;
     }
 
     setLoading(true);
@@ -233,11 +242,21 @@ export function AtlasDashboard() {
     setViewStack((prev) => pushAtlasView(prev, { scope: 'mv', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
+  function handleJusticeNodeClick(node: SankeyNode) {
+    if (!isClickableJusticeNode(node)) return;
+    const nextNodeId = node.id === JUSTICE_MINISTRY_ID ? null : node.id;
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'justice', nodeId: nextNodeId, label: node.name, offset: 0 }));
+  }
+
   function handleNodeClick(nodeId: string) {
     const node = graph?.nodes.find((entry) => entry.id === nodeId);
     if (!node) return;
 
     if (currentView.scope === 'root') {
+      if (node.id.startsWith('justice:')) {
+        handleJusticeNodeClick(node);
+        return;
+      }
       if (node.id.startsWith('security:')) {
         handleMvNodeClick(node);
         return;
@@ -260,7 +279,12 @@ export function AtlasDashboard() {
       return;
     }
 
-    handleMvNodeClick(node);
+    if (currentView.scope === 'mv') {
+      handleMvNodeClick(node);
+      return;
+    }
+
+    handleJusticeNodeClick(node);
   }
 
   function handleBack() {
