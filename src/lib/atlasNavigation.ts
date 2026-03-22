@@ -2,6 +2,7 @@ export type AtlasDrilldownState =
   | { scope: 'school'; nodeId: string; label: string; offset: number }
   | { scope: 'health'; nodeId: string | null; label: string; offset: number }
   | { scope: 'mv'; nodeId: string | null; label: string; offset: number }
+  | { scope: 'transport'; nodeId: string | null; label: string; offset: number }
   | { scope: 'justice'; nodeId: string | null; label: string; offset: number };
 
 export function pushAtlasView(

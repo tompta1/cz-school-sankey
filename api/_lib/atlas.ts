@@ -24,6 +24,13 @@ import {
   getJusticeBudgetAggregates,
   getJusticeTotal,
 } from './atlas/justice.js';
+import {
+  appendTransportBranch,
+  getAtlasTransportGraph,
+  getTransportBudgetEntities,
+  getTransportSfdiProjects,
+  getTransportTotal,
+} from './atlas/transport.js';
 
 const STATE_ID = 'state:cr';
 const HEALTH_MINISTRY_ID = 'health:ministry:mzcr';
@@ -1046,6 +1053,8 @@ function buildCombinedRootGraph(
   mvFireRescueRows: MvFireRescueActivityAggregate[],
   justiceBudgetRows: Awaited<ReturnType<typeof getJusticeBudgetAggregates>>,
   justiceActivityRows: Awaited<ReturnType<typeof getJusticeActivityAggregates>>,
+  transportBudgetRows: Awaited<ReturnType<typeof getTransportBudgetEntities>>,
+  transportSfdiProjects: Awaited<ReturnType<typeof getTransportSfdiProjects>>,
   healthRows: HealthFinanceRow[],
   mzAggregate: HealthMzAggregate | null,
   adminEntities: HealthMzAdminEntity[],
@@ -1058,6 +1067,7 @@ function buildCombinedRootGraph(
   const socialTotal = getSocialTotal(socialRows);
   const mvTotal = getMvTotal(mvBudgetRows);
   const justiceTotal = getJusticeTotal(justiceBudgetRows);
+  const transportTotal = getTransportTotal(transportBudgetRows, transportSfdiProjects);
   const stateOtherLink = links.find((link) => link.source === STATE_ID && link.target === 'state:other');
 
   const hospitalRows = healthRows.filter((row) => row.focus === 'hospital');
@@ -1071,17 +1081,18 @@ function buildCombinedRootGraph(
   const namedAdminAmount = sumAdminAmount(adminEntities);
   const adminAmount = Math.max(ministryTotal - publicHealthAmount - namedAdminAmount, 0);
   const explicitAtlasTopLevelAmount =
-    socialTotal + mvTotal + justiceTotal + hospitalAmount + zzsAmount + outpatientAmount + ministryTotal;
+    socialTotal + mvTotal + justiceTotal + transportTotal + hospitalAmount + zzsAmount + outpatientAmount + ministryTotal;
 
   if (stateOtherLink) {
     stateOtherLink.amountCzk = Math.max(0, stateOtherLink.amountCzk - explicitAtlasTopLevelAmount);
     stateOtherLink.value = stateOtherLink.amountCzk;
-    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich a zdravotnich vetvi atlasu';
+    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich, dopravnich a zdravotnich vetvi atlasu';
   }
 
   appendSocialBranch(nodes, links, year, socialRows, socialRecipientMetrics);
   appendMvBranch(nodes, links, year, mvBudgetRows, mvPoliceCrimeRows, mvFireRescueRows);
   appendJusticeBranch(nodes, links, year, justiceBudgetRows, justiceActivityRows);
+  appendTransportBranch(nodes, links, year, transportBudgetRows, transportSfdiProjects);
 
   if (hospitalRows.length > 0) {
     const ownerGroups = buildOwnerGroups(hospitalRows);
@@ -2023,6 +2034,8 @@ export async function getAtlasOverview(year: number) {
     mvFireRescueRows,
     justiceBudgetRows,
     justiceActivityRows,
+    transportBudgetRows,
+    transportSfdiProjects,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2038,6 +2051,8 @@ export async function getAtlasOverview(year: number) {
     getMvFireRescueActivityAggregates(year),
     getJusticeBudgetAggregates(year),
     getJusticeActivityAggregates(year),
+    getTransportBudgetEntities(year),
+    getTransportSfdiProjects(year),
     getHealthFinanceRows(year),
     getHealthMzAggregate(year),
     getHealthMzAdminEntities(year),
@@ -2057,6 +2072,8 @@ export async function getAtlasOverview(year: number) {
     mvFireRescueRows,
     justiceBudgetRows,
     justiceActivityRows,
+    transportBudgetRows,
+    transportSfdiProjects,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2190,6 +2207,8 @@ export async function getAtlasJusticeGraph(year: number, nodeId: string | null =
   }
   return null;
 }
+
+export { getAtlasTransportGraph };
 
 export async function searchAtlasEntities(year: number, q: string, limit = 8) {
   const needle = q.trim();

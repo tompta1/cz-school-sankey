@@ -22,6 +22,7 @@ const HEALTH_PUBLIC_HEALTH_ID = 'health:public-health';
 const HEALTH_ZZS_ID = 'health:zzs';
 const MV_MINISTRY_ID = 'security:ministry:mv';
 const MV_POLICE_ID = 'security:police';
+const TRANSPORT_ROOT_ID = 'transport:ministry:md';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -99,6 +100,13 @@ function isClickableMvNode(node: SankeyNode): boolean {
   return false;
 }
 
+function isClickableTransportNode(node: SankeyNode): boolean {
+  if (node.id === TRANSPORT_ROOT_ID) return true;
+  if (node.id.startsWith('transport:sfdi:') && node.metadata?.drilldownAvailable === true) return true;
+  if (node.id.startsWith('transport:investor:')) return true;
+  return false;
+}
+
 function isClickableJusticeNode(node: SankeyNode): boolean {
   return node.id === JUSTICE_MINISTRY_ID;
 }
@@ -156,6 +164,10 @@ export function AtlasDashboard() {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
       path = `/api/atlas/mv?${params.toString()}`;
+    } else if (currentView.scope === 'transport') {
+      const params = new URLSearchParams({ year: String(selectedYear) });
+      if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
+      path = `/api/atlas/transport?${params.toString()}`;
     } else if (currentView.scope === 'justice') {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
@@ -256,10 +268,16 @@ export function AtlasDashboard() {
     setViewStack((prev) => pushAtlasView(prev, { scope: 'health', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
-  function handleMvNodeClick(node: SankeyNode) {
+function handleMvNodeClick(node: SankeyNode) {
     if (!isClickableMvNode(node)) return;
     const nextNodeId = node.id === MV_MINISTRY_ID ? null : node.id;
-    setViewStack((prev) => pushAtlasView(prev, { scope: 'mv', nodeId: nextNodeId, label: node.name, offset: 0 }));
+  setViewStack((prev) => pushAtlasView(prev, { scope: 'mv', nodeId: nextNodeId, label: node.name, offset: 0 }));
+}
+
+  function handleTransportNodeClick(node: SankeyNode) {
+    if (!isClickableTransportNode(node)) return;
+    const nextNodeId = node.id === TRANSPORT_ROOT_ID ? null : node.id;
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'transport', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
   function handleJusticeNodeClick(node: SankeyNode) {
@@ -279,6 +297,10 @@ export function AtlasDashboard() {
       }
       if (node.id.startsWith('security:')) {
         handleMvNodeClick(node);
+        return;
+      }
+      if (node.id.startsWith('transport:')) {
+        handleTransportNodeClick(node);
         return;
       }
       if (node.id.startsWith('health:') || node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID) {
@@ -301,6 +323,11 @@ export function AtlasDashboard() {
 
     if (currentView.scope === 'mv') {
       handleMvNodeClick(node);
+      return;
+    }
+
+    if (currentView.scope === 'transport') {
+      handleTransportNodeClick(node);
       return;
     }
 

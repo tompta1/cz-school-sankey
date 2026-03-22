@@ -563,6 +563,55 @@ create table if not exists raw.justice_activity_aggregate (
 create index if not exists justice_activity_aggregate_year_metric_idx
   on raw.justice_activity_aggregate (reporting_year, activity_domain, metric_code);
 
+create table if not exists raw.transport_budget_entity (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  period_code text not null,
+  entity_ico text not null,
+  entity_name text not null,
+  entity_kind text not null,
+  expenses_czk numeric(20, 2) not null default 0,
+  costs_czk numeric(20, 2) not null default 0,
+  revenues_czk numeric(20, 2) not null default 0,
+  result_czk numeric(20, 2) not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists transport_budget_entity_year_ico_idx
+  on raw.transport_budget_entity (reporting_year, entity_ico);
+
+create table if not exists raw.transport_sfdi_project (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  action_id text not null,
+  budget_area_code text not null,
+  action_type_code text,
+  financing_code text,
+  status_code text,
+  project_name text not null,
+  total_cost_czk numeric(20, 2) not null default 0,
+  adjusted_budget_czk numeric(20, 2) not null default 0,
+  paid_czk numeric(20, 2) not null default 0,
+  sfdi_paid_czk numeric(20, 2) not null default 0,
+  eu_paid_czk numeric(20, 2) not null default 0,
+  region_code text,
+  investor_name text not null,
+  investor_ico text,
+  investor_address text,
+  start_period text,
+  end_period text,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists transport_sfdi_project_year_action_idx
+  on raw.transport_sfdi_project (reporting_year, action_id, budget_area_code);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -890,6 +939,65 @@ order by
   r.reporting_year,
   r.activity_domain,
   r.metric_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.transport_budget_entity_latest as
+select distinct on (r.reporting_year, r.entity_ico)
+  r.reporting_year,
+  r.period_code,
+  r.entity_ico,
+  r.entity_name,
+  r.entity_kind,
+  r.expenses_czk,
+  r.costs_czk,
+  r.revenues_czk,
+  r.result_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.transport_budget_entity r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.entity_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.transport_sfdi_project_latest as
+select distinct on (r.reporting_year, r.action_id, r.budget_area_code, r.investor_name)
+  r.reporting_year,
+  r.action_id,
+  r.budget_area_code,
+  r.action_type_code,
+  r.financing_code,
+  r.status_code,
+  r.project_name,
+  r.total_cost_czk,
+  r.adjusted_budget_czk,
+  r.paid_czk,
+  r.sfdi_paid_czk,
+  r.eu_paid_czk,
+  r.region_code,
+  r.investor_name,
+  r.investor_ico,
+  r.investor_address,
+  r.start_period,
+  r.end_period,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.transport_sfdi_project r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.action_id,
+  r.budget_area_code,
+  r.investor_name,
   d.snapshot_label desc,
   r.loaded_at desc,
   r.raw_id desc;

@@ -3,6 +3,7 @@ import {
   getAtlasJusticeGraph,
   getAtlasMvGraph,
   getAtlasOverview,
+  getAtlasTransportGraph,
   getAtlasYears,
   searchAtlasEntities,
 } from '../_lib/atlas.js';
@@ -60,6 +61,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const graph = await getAtlasJusticeGraph(year, nodeId);
     if (!graph) return notFound(res, `No justice atlas data for year ${year}`);
+    return json(res, 200, graph);
+  }
+
+  if (resource === 'transport') {
+    const year = Number(req.query.year);
+    if (!Number.isInteger(year)) return badRequest(res, 'Missing or invalid year');
+    const nodeId = typeof req.query.nodeId === 'string' ? req.query.nodeId.trim() : null;
+
+    const graph = await getAtlasTransportGraph(year, nodeId);
+    if (!graph) return notFound(res, `No transport atlas data for year ${year}`);
     return json(res, 200, graph);
   }
 
