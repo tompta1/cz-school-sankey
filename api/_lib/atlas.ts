@@ -1,5 +1,5 @@
 import { query } from './db.js';
-import { getAvailableYears, getSchoolOverviewGraph, searchInstitutions } from './school.js';
+import { getAvailableYears, getSchoolAtlasOverviewGraph, getSchoolOverviewGraph, searchInstitutions } from './school.js';
 import {
   appendSocialBranch,
   getSocialMpsvAggregates,
@@ -2030,7 +2030,7 @@ export async function getAtlasOverview(year: number) {
     outpatientAggregate,
     outpatientSubtypes,
   ] = await Promise.all([
-    getSchoolOverviewGraph(year),
+    getSchoolAtlasOverviewGraph(year),
     getSocialMpsvAggregates(year),
     getSocialRecipientMetrics(year),
     getMvBudgetAggregates(year),

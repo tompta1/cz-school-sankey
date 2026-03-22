@@ -500,6 +500,49 @@ async function getSchoolDepartmentRootGraph(year: number) {
   return { year, nodes: [...nodesById.values()], links };
 }
 
+export async function getSchoolAtlasOverviewGraph(year: number) {
+  const [overviewGraph, departmentGraph] = await Promise.all([
+    getSchoolOverviewGraph(year),
+    getSchoolDepartmentRootGraph(year),
+  ]);
+
+  if (!overviewGraph || !departmentGraph) return null;
+
+  const stateLinks = overviewGraph.links.filter((link) =>
+    link.flowType === 'state_revenue' ||
+    link.flowType === 'state_to_ministry' ||
+    link.flowType === 'state_to_other',
+  );
+
+  const bucketLinks = departmentGraph.links
+    .filter((link) => link.source === SCHOOL_ROOT_ID)
+    .map((link) => ({ ...link, source: MSMT_ID }));
+
+  const usedIds = new Set<string>();
+  for (const link of [...stateLinks, ...bucketLinks]) {
+    usedIds.add(link.source);
+    usedIds.add(link.target);
+  }
+
+  const stateLinkNodeIds = new Set<string>();
+  for (const link of stateLinks) {
+    stateLinkNodeIds.add(link.source);
+    stateLinkNodeIds.add(link.target);
+  }
+
+  const stateNodes = overviewGraph.nodes.filter((node) => stateLinkNodeIds.has(node.id));
+  const departmentNodes = departmentGraph.nodes
+    .filter((node) => node.id !== SCHOOL_ROOT_ID)
+    .map((node) => (node.id.startsWith('bucket:') ? { ...node, level: 2 } : node))
+    .filter((node) => !stateNodes.some((existing) => existing.id === node.id));
+
+  return {
+    year,
+    nodes: [...stateNodes, ...departmentNodes],
+    links: [...stateLinks, ...bucketLinks],
+  };
+}
+
 async function getSchoolBucketRegionGraph(year: number, bucketCode: string) {
   const { entities, allocations } = await loadSchoolYearRaw(year);
   if (!entities.length || !allocations.length) return null;
@@ -581,6 +624,7 @@ async function getSchoolBucketRegionSchoolGraph(year: number, bucketCode: string
   links.push(makeLink(SCHOOL_ROOT_ID, `bucket:${bucketCode}`, regionTotal, year, 'school_expenditure'));
   links.push(makeLink(`bucket:${bucketCode}`, regionNodeId, regionTotal, year, 'school_expenditure'));
 
+  const aggregatedTargets = new Map<string, number>();
   for (const [schoolId, amount] of schoolTotals) {
     const target = window.bucket(schoolId);
     if (target === PREV_WINDOW_ID && !window.prevCount) continue;
@@ -588,7 +632,13 @@ async function getSchoolBucketRegionSchoolGraph(year: number, bucketCode: string
     if (target === schoolId) {
       const schoolNode = createInstitutionNode(schoolById.get(schoolId));
       ensureNode(nodesById, { ...schoolNode, level: 3 });
+      links.push(makeLink(regionNodeId, target, amount, year, 'school_expenditure'));
+      continue;
     }
+    aggregatedTargets.set(target, (aggregatedTargets.get(target) ?? 0) + amount);
+  }
+
+  for (const [target, amount] of aggregatedTargets) {
     links.push(makeLink(regionNodeId, target, amount, year, 'school_expenditure'));
   }
 
