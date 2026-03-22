@@ -1,10 +1,11 @@
 import pg from 'pg';
+import type { QueryResult, QueryResultRow } from 'pg';
 
 const { Pool } = pg;
 
 const DEFAULT_LOCAL_URL = 'postgresql://app:app@127.0.0.1:55432/cz_school_sankey';
 
-let pool;
+let pool: pg.Pool | undefined;
 
 function getConnectionConfig() {
   const connectionString = process.env.DATABASE_URL || DEFAULT_LOCAL_URL;
@@ -25,8 +26,11 @@ export function getPool() {
   return pool;
 }
 
-export async function query(text, params = []) {
-  return getPool().query(text, params);
+export async function query<Row extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: unknown[] = [],
+): Promise<QueryResult<Row>> {
+  return getPool().query<Row>(text, params);
 }
 
 export async function closePool() {

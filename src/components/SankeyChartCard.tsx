@@ -1,7 +1,7 @@
 import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 
-import { formatCompactCzk, formatPerPupil } from '../lib/format';
+import { formatCompactCzk, formatInteger, formatPerPupil, formatPerUnit } from '../lib/format';
 import type { HoverInfo, SankeyLink, SankeyNode } from '../types';
 
 interface Props {
@@ -11,6 +11,9 @@ interface Props {
   prevLinks?: SankeyLink[];
   prevActive?: boolean;
   perPupil?: boolean;
+  perUnitLabel?: string;
+  unitCountLabel?: string;
+  totalAmountLabel?: string;
   onNodeClick: (nodeId: string) => void;
   onNodeHover: (info: HoverInfo | null) => void;
   onLinkHover: (info: HoverInfo | null) => void;
@@ -21,6 +24,8 @@ const COLOR: Record<string, string> = {
   ministry:      '#2563eb',
   region:        '#7c3aed',
   municipality:  '#0f766e',
+  health_system: '#0f766e',
+  health_provider:'#f97316',
   eu_programme:  '#0ea5e9',
   eu_project:    '#06b6d4',
   school_entity: '#f59e0b',
@@ -34,6 +39,65 @@ function chartLayout(containerWidth: number) {
   return { top: 20, right: 200, bottom: 20, left: 200 };
 }
 
+function nodeGapForGraph(nodes: SankeyNode[], mobile: boolean): number {
+  const providerLikeCount = nodes.filter((node) => node.category === 'health_provider' || node.category === 'school_entity').length;
+  const maxLevel = nodes.reduce((max, node) => Math.max(max, node.level), 0);
+
+  if (providerLikeCount >= 28) return mobile ? 8 : 10;
+  if (providerLikeCount >= 16) return mobile ? 10 : 12;
+  if (maxLevel <= 2 && nodes.length <= 18) return mobile ? 16 : 26;
+  if (maxLevel <= 3 && nodes.length <= 24) return mobile ? 14 : 22;
+  if (nodes.length > 35) return mobile ? 9 : 12;
+  return mobile ? 12 : 18;
+}
+
+function maxLabelLengthForGraph(nodes: SankeyNode[], mobile: boolean): number {
+  const providerLikeCount = nodes.filter((node) => node.category === 'health_provider' || node.category === 'school_entity').length;
+  const maxLevel = nodes.reduce((max, node) => Math.max(max, node.level), 0);
+
+  if (providerLikeCount >= 28) return mobile ? 16 : 22;
+  if (providerLikeCount >= 16) return mobile ? 17 : 24;
+  if (maxLevel <= 2 && nodes.length <= 18) return mobile ? 24 : 42;
+  if (maxLevel <= 3 && nodes.length <= 24) return mobile ? 22 : 34;
+  if (nodes.length > 35) return mobile ? 17 : 24;
+  return mobile ? 20 : 28;
+}
+
+function normalizedValue(amountCzk: number, capacity: number | null, perUnit: boolean): number {
+  if (!perUnit) return amountCzk;
+  if (!capacity || capacity <= 0) return 0;
+  return amountCzk / capacity;
+}
+
+function unavailableMetricMarkup(perUnitLabel: string): string {
+  return `N/A<br/><small style="color:#94a3b8">Metoda ${perUnitLabel} není pro tento tok k dispozici</small>`;
+}
+
+function normalizedNodeWeight(
+  nodeId: string,
+  links: SankeyLink[],
+  capacityMap: Map<string, number>,
+  perUnit: boolean,
+): number {
+  const incoming = links
+    .filter((link) => link.target === nodeId)
+    .reduce((sum, link) => {
+      const capacity = link.institutionId
+        ? capacityMap.get(link.institutionId) ?? null
+        : capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
+      return sum + normalizedValue(link.amountCzk, capacity, perUnit);
+    }, 0);
+  const outgoing = links
+    .filter((link) => link.source === nodeId)
+    .reduce((sum, link) => {
+      const capacity = link.institutionId
+        ? capacityMap.get(link.institutionId) ?? null
+        : capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
+      return sum + normalizedValue(link.amountCzk, capacity, perUnit);
+    }, 0);
+  return Math.max(incoming, outgoing);
+}
+
 function buildActiveOption(
   nodes: SankeyNode[],
   links: SankeyLink[],
@@ -41,11 +105,14 @@ function buildActiveOption(
   perPupil: boolean,
   capacityMap: Map<string, number>,
   containerWidth: number,
+  perUnitLabel: string,
+  unitCountLabel: string,
+  totalAmountLabel: string,
 ) {
   const mobile = containerWidth < 640;
-  const maxLabelLen = mobile ? 18 : 26;
+  const maxLabelLen = maxLabelLengthForGraph(nodes, mobile);
   const labelFontSize = mobile ? 10 : 11;
-  const nodeGap = nodes.length > 35 ? 4 : nodes.length > 20 ? 8 : 14;
+  const nodeGap = nodeGapForGraph(nodes, mobile);
 
   const linkCapacity = (l: SankeyLink): number | null => {
     if (!perPupil) return null;
@@ -60,9 +127,12 @@ function buildActiveOption(
     ? [...links].sort((a, b) => {
         const capA = linkCapacity(a);
         const capB = linkCapacity(b);
-        return (capB ? b.amountCzk / capB : b.amountCzk) - (capA ? a.amountCzk / capA : a.amountCzk);
+        return normalizedValue(b.amountCzk, capB, true) - normalizedValue(a.amountCzk, capA, true);
       })
     : links;
+  const orderedNodes = perPupil
+    ? [...nodes].sort((a, b) => normalizedNodeWeight(b.id, orderedLinks, capacityMap, true) - normalizedNodeWeight(a.id, orderedLinks, capacityMap, true))
+    : nodes;
 
   return {
     backgroundColor: 'transparent',
@@ -74,7 +144,11 @@ function buildActiveOption(
         if (p.dataType === 'edge') {
           const { source, target, amountCzk, capacity } =
             p.data as { source: string; target: string; amountCzk: number; capacity: number | null };
-          const amt = perPupil && capacity ? formatPerPupil(amountCzk / capacity) : formatCompactCzk(amountCzk);
+          const amt = perPupil
+            ? capacity
+              ? (perUnitLabel === 'žák/rok' ? formatPerPupil(amountCzk / capacity) : formatPerUnit(amountCzk / capacity, perUnitLabel))
+              : unavailableMetricMarkup(perUnitLabel)
+            : formatCompactCzk(amountCzk);
           return `<strong>${idToDisplay.get(source) ?? source} → ${idToDisplay.get(target) ?? target}</strong><br/>${amt}`;
         }
         const nodeId = (p.data as { name: string }).name;
@@ -82,8 +156,16 @@ function buildActiveOption(
         const total = links.filter((l) => l.target === nodeId).reduce((s, l) => s + l.amountCzk, 0);
         if (total === 0) return `<strong>${displayName}</strong>`;
         const cap = perPupil ? (capacityMap.get(nodeId) ?? null) : null;
-        const totalFmt = cap ? formatPerPupil(total / cap) : formatCompactCzk(total);
-        const suffix = cap ? `<br/><small style="color:#94a3b8">${cap} žáků (RSSZ kapacita)</small>` : ' celkový příjem';
+        const totalFmt = perPupil
+          ? cap
+            ? (perUnitLabel === 'žák/rok' ? formatPerPupil(total / cap) : formatPerUnit(total / cap, perUnitLabel))
+            : 'N/A'
+          : formatCompactCzk(total);
+        const suffix = perPupil
+          ? cap
+            ? `<br/><small style="color:#94a3b8">${formatInteger(cap)} ${unitCountLabel}</small>`
+            : `<br/><small style="color:#94a3b8">Metoda ${perUnitLabel} není pro tento uzel k dispozici</small>`
+          : ` ${totalAmountLabel}`;
         return `<strong>${displayName}</strong><br/>${totalFmt}${suffix}`;
       },
       backgroundColor: 'rgba(8,16,30,0.92)',
@@ -93,6 +175,7 @@ function buildActiveOption(
     },
     series: [{
       type: 'sankey',
+      triggerEvent: true,
       ...chartLayout(containerWidth),
       nodeWidth: mobile ? 14 : 18,
       nodeGap,
@@ -103,6 +186,8 @@ function buildActiveOption(
       blur: { itemStyle: { opacity: 0.08 }, lineStyle: { opacity: 0.05 } },
       lineStyle: { color: 'source', opacity: 0.45, curveness: 0.5 },
       label: {
+        show: true,
+        triggerEvent: true,
         color: '#cbd5e1',
         fontSize: labelFontSize,
         fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
@@ -111,7 +196,7 @@ function buildActiveOption(
           return name.length > maxLabelLen ? name.slice(0, maxLabelLen - 2) + '…' : name;
         },
       },
-      data: nodes.map((n) => ({
+      data: orderedNodes.map((n) => ({
         name: n.id,
         itemStyle: { color: COLOR[n.category] ?? COLOR.other, borderColor: '#0b1220', borderWidth: 1 },
       })),
@@ -120,10 +205,10 @@ function buildActiveOption(
         return {
           source: l.source,
           target: l.target,
-          value: cap ? l.amountCzk / cap : l.amountCzk,
+          value: normalizedValue(l.amountCzk, cap, perPupil),
           amountCzk: l.amountCzk,
           capacity: cap,
-          lineStyle: { opacity: l.certainty === 'observed' ? 0.55 : 0.28 },
+          lineStyle: { opacity: perPupil && !cap ? 0.08 : l.certainty === 'observed' ? 0.55 : 0.28 },
         };
       }),
     }],
@@ -138,11 +223,12 @@ function buildGhostOption(
   containerWidth: number,
 ) {
   const mobile = containerWidth < 640;
-  const nodeGap = nodes.length > 35 ? 4 : nodes.length > 20 ? 8 : 14;
+  const nodeGap = nodeGapForGraph(nodes, mobile);
   return {
     backgroundColor: 'transparent',
     series: [{
       type: 'sankey',
+      triggerEvent: true,
       ...chartLayout(containerWidth),
       nodeWidth: mobile ? 14 : 18,
       nodeGap,
@@ -163,14 +249,27 @@ function buildGhostOption(
         return {
           source: l.source,
           target: l.target,
-          value: cap ? l.amountCzk / cap : l.amountCzk,
+          value: normalizedValue(l.amountCzk, cap, perPupil),
         };
       }),
     }],
   };
 }
 
-export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive = false, perPupil = false, onNodeClick, onNodeHover, onLinkHover }: Props) {
+export function SankeyChartCard({
+  nodes,
+  links,
+  prevNodes,
+  prevLinks,
+  prevActive = false,
+  perPupil = false,
+  perUnitLabel = 'žák/rok',
+  unitCountLabel = 'žáků (RSSZ kapacita)',
+  totalAmountLabel = 'celkový příjem',
+  onNodeClick,
+  onNodeHover,
+  onLinkHover,
+}: Props) {
   const curRef  = useRef<HTMLDivElement>(null);
   const prevRef = useRef<HTMLDivElement>(null);
 
@@ -193,10 +292,29 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
     );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
+    function resolveClickedNodeId(params: unknown): string | null {
+      const p = params as {
+        dataType?: string;
+        componentSubType?: string;
+        name?: string;
+        data?: { name?: string; target?: string };
+      };
+      if (p.dataType === 'node' && typeof p.data?.name === 'string') {
+        return p.data.name;
+      }
+      if (p.dataType === 'edge' && typeof p.data?.target === 'string') {
+        return p.data.target;
+      }
+      if (p.componentSubType === 'sankey' && typeof p.name === 'string' && idToDisplay.has(p.name)) {
+        return p.name;
+      }
+      return null;
+    }
+
     if (!prevActive) {
       chart.on('click', (params) => {
-        if (params.dataType === 'node')
-          onNodeClickRef.current((params.data as { name: string }).name);
+        const nodeId = resolveClickedNodeId(params);
+        if (nodeId) onNodeClickRef.current(nodeId);
       });
       chart.on('mouseover', (params) => {
         if (params.dataType === 'node') {
@@ -213,7 +331,7 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? buildGhostOption(nodes, links, perPupil, capacityMap, w) as any
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap, w) as any;
+      : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap, w, perUnitLabel, unitCountLabel, totalAmountLabel) as any;
 
     chart.setOption(buildOption(el.clientWidth));
 
@@ -223,7 +341,7 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
     });
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
-  }, [nodes, links, prevActive, perPupil]);
+  }, [nodes, links, prevActive, perPupil, perUnitLabel, unitCountLabel, totalAmountLabel]);
 
   // Previous-year chart
   useEffect(() => {
@@ -237,10 +355,29 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
     );
     const chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
+    function resolveClickedNodeId(params: unknown): string | null {
+      const p = params as {
+        dataType?: string;
+        componentSubType?: string;
+        name?: string;
+        data?: { name?: string; target?: string };
+      };
+      if (p.dataType === 'node' && typeof p.data?.name === 'string') {
+        return p.data.name;
+      }
+      if (p.dataType === 'edge' && typeof p.data?.target === 'string') {
+        return p.data.target;
+      }
+      if (p.componentSubType === 'sankey' && typeof p.name === 'string' && idToDisplay.has(p.name)) {
+        return p.name;
+      }
+      return null;
+    }
+
     if (prevActive) {
       chart.on('click', (params) => {
-        if (params.dataType === 'node')
-          onNodeClickRef.current((params.data as { name: string }).name);
+        const nodeId = resolveClickedNodeId(params);
+        if (nodeId) onNodeClickRef.current(nodeId);
       });
       chart.on('mouseover', (params) => {
         if (params.dataType === 'node') {
@@ -253,11 +390,14 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
       chart.on('mouseout', () => onNodeHoverRef.current(null));
     }
 
-    const buildOption = (w: number) => prevActive
+    const buildOption = (w: number) => {
+      if (prevActive) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return buildActiveOption(prevNodes, prevLinks, idToDisplay, perPupil, capacityMap, w, perUnitLabel, unitCountLabel, totalAmountLabel) as any;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ? buildActiveOption(prevNodes, prevLinks, idToDisplay, perPupil, capacityMap, w) as any
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      : buildGhostOption(prevNodes, prevLinks, perPupil, capacityMap, w) as any;
+      return buildGhostOption(prevNodes, prevLinks, perPupil, capacityMap, w) as any;
+    };
 
     chart.setOption(buildOption(el.clientWidth));
 
@@ -267,7 +407,7 @@ export function SankeyChartCard({ nodes, links, prevNodes, prevLinks, prevActive
     });
     ro.observe(el);
     return () => { ro.disconnect(); chart.dispose(); };
-  }, [prevNodes, prevLinks, prevActive, perPupil]);
+  }, [prevNodes, prevLinks, prevActive, perPupil, perUnitLabel, unitCountLabel, totalAmountLabel]);
 
   const curHeight  = Math.min(Math.max(500, nodes.length * 38), 16_000);
   const prevHeight = prevNodes ? Math.min(Math.max(500, prevNodes.length * 38), 16_000) : 0;
