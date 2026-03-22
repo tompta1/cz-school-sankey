@@ -94,6 +94,15 @@ export function comparableNodeMetric(
   return { totalAmount, totalCapacity, group: metricGroup };
 }
 
+function linkWeight(
+  link: SankeyLink,
+  capacityMap: Map<string, number>,
+  perUnit: boolean,
+): number {
+  const capacity = normalizationCapacity(link, capacityMap, perUnit);
+  return normalizedValue(link.amountCzk, capacity, perUnit);
+}
+
 export function normalizedNodeWeight(
   nodeId: string,
   links: SankeyLink[],
@@ -102,16 +111,10 @@ export function normalizedNodeWeight(
 ): number {
   const incoming = links
     .filter((link) => link.target === nodeId)
-    .reduce((sum, link) => {
-      const capacity = normalizationCapacity(link, capacityMap, perUnit);
-      return sum + normalizedValue(link.amountCzk, capacity, perUnit);
-    }, 0);
+    .reduce((sum, link) => sum + linkWeight(link, capacityMap, perUnit), 0);
   const outgoing = links
     .filter((link) => link.source === nodeId)
-    .reduce((sum, link) => {
-      const capacity = normalizationCapacity(link, capacityMap, perUnit);
-      return sum + normalizedValue(link.amountCzk, capacity, perUnit);
-    }, 0);
+    .reduce((sum, link) => sum + linkWeight(link, capacityMap, perUnit), 0);
   return Math.max(incoming, outgoing);
 }
 
@@ -121,24 +124,20 @@ export function orderSankeyGraph(
   capacityMap: Map<string, number>,
   perUnit: boolean,
 ): { orderedNodes: SankeyNode[]; orderedLinks: SankeyLink[] } {
-  const orderedLinks = perUnit
-    ? [...links].sort((a, b) => {
-        const capA = normalizationCapacity(a, capacityMap, true);
-        const capB = normalizationCapacity(b, capacityMap, true);
-        return normalizedValue(b.amountCzk, capB, true) - normalizedValue(a.amountCzk, capA, true);
-      })
-    : links;
+  const orderedLinks = [...links].sort((a, b) => {
+    const diff = linkWeight(b, capacityMap, perUnit) - linkWeight(a, capacityMap, perUnit);
+    if (diff !== 0) return diff;
+    return b.amountCzk - a.amountCzk || a.target.localeCompare(b.target, 'cs');
+  });
 
-  const orderedNodes = perUnit
-    ? [...nodes].sort((a, b) => {
-        if (a.level !== b.level) return a.level - b.level;
-        return (
-          normalizedNodeWeight(b.id, orderedLinks, capacityMap, true) -
-            normalizedNodeWeight(a.id, orderedLinks, capacityMap, true) ||
-          a.name.localeCompare(b.name, 'cs')
-        );
-      })
-    : nodes;
+  const orderedNodes = [...nodes].sort((a, b) => {
+    if (a.level !== b.level) return a.level - b.level;
+    return (
+      normalizedNodeWeight(b.id, orderedLinks, capacityMap, perUnit) -
+        normalizedNodeWeight(a.id, orderedLinks, capacityMap, perUnit) ||
+      a.name.localeCompare(b.name, 'cs')
+    );
+  });
 
   return { orderedNodes, orderedLinks };
 }

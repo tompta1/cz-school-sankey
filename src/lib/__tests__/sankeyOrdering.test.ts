@@ -47,6 +47,16 @@ const links: SankeyLink[] = [
 ];
 
 describe('sankeyOrdering', () => {
+  it('orders amount mode by descending absolute value within each level', () => {
+    const capacityMap = new Map<string, number>();
+    const { orderedNodes, orderedLinks } = orderSankeyGraph(nodes, links, capacityMap, false);
+
+    expect(orderedLinks.map((link) => link.target)).toEqual(['na', 'low', 'high']);
+    const orderedNodeIds = orderedNodes.map((node) => node.id);
+    expect(orderedNodeIds.indexOf('low')).toBeLessThan(orderedNodeIds.indexOf('high'));
+    expect(orderedNodeIds.indexOf('na')).toBeLessThan(orderedNodeIds.indexOf('high'));
+  });
+
   it('normalizes values only when capacity exists', () => {
     expect(normalizedValue(1000, 10, true)).toBe(100);
     expect(normalizedValue(1000, null, true)).toBe(0);

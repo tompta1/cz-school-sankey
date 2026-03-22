@@ -23,11 +23,16 @@ const HEALTH_ZZS_ID = 'health:zzs';
 const MV_MINISTRY_ID = 'security:ministry:mv';
 const MV_POLICE_ID = 'security:police';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
+const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
 
 function buildSchoolGraphUrl(year: number, nodeId: string, offset: number): string {
   const params = new URLSearchParams({ year: String(year) });
 
+  if (nodeId === SCHOOL_ROOT_ID || nodeId === 'msmt') {
+    params.set('nodeId', SCHOOL_ROOT_ID);
+    return `/api/graph/node?${params.toString()}`;
+  }
   if (nodeId === EU_ALL_ID) {
     return `/api/graph/eu?${params.toString()}`;
   }
@@ -53,14 +58,24 @@ function buildSchoolGraphUrl(year: number, nodeId: string, offset: number): stri
 }
 
 function pageSizeForSchoolNode(nodeId: string): number {
-  if (nodeId === FOUNDERS_KRAJ || nodeId === FOUNDERS_OBEC || nodeId.startsWith('region:')) {
+  if (
+    nodeId === FOUNDERS_KRAJ ||
+    nodeId === FOUNDERS_OBEC ||
+    nodeId.startsWith('region:')
+  ) {
     return TOP_FOUNDERS;
+  }
+  if (nodeId.startsWith('school:bucket-region:')) {
+    return TOP_SCHOOLS;
   }
   return TOP_SCHOOLS;
 }
 
 function isClickableSchoolNode(node: SankeyNode): boolean {
   if (node.id.startsWith('synthetic:')) return false;
+  if (node.id === 'msmt' || node.id === SCHOOL_ROOT_ID) return true;
+  if (node.id.startsWith('bucket:')) return true;
+  if (node.id.startsWith('school:bucket-region:')) return true;
   return node.category !== 'state' && node.category !== 'ministry' && node.category !== 'other';
 }
 
@@ -214,7 +229,12 @@ export function AtlasDashboard() {
     }
 
     if (!isClickableSchoolNode(node)) return;
-    setViewStack((prev) => pushAtlasView(prev, { scope: 'school', nodeId: node.id, label: node.name, offset: 0 }));
+    const nextNodeId = node.id === 'msmt' ? SCHOOL_ROOT_ID : node.id;
+    setViewStack((prev) => {
+      const current = prev.at(-1);
+      if (current?.scope === 'school' && current.nodeId === nextNodeId) return prev;
+      return pushAtlasView(prev, { scope: 'school', nodeId: nextNodeId, label: node.name, offset: 0 });
+    });
   }
 
   function handleHealthNodeClick(node: SankeyNode) {
