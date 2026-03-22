@@ -145,7 +145,7 @@ function buildMvPoliceRegionRows(rows: MvPoliceCrimeAggregate[]) {
   const registeredByRegion = new Map<string, { regionName: string; registeredCount: number; clearedCount: number }>();
 
   for (const row of rows) {
-    if (row.regionCode === 'CZ') continue;
+    if (row.regionCode === 'CZ' || row.crimeClassCode !== '0-999') continue;
     const bucket = registeredByRegion.get(row.regionCode) ?? {
       regionName: row.regionName,
       registeredCount: 0,
@@ -168,6 +168,35 @@ function buildMvPoliceRegionRows(rows: MvPoliceCrimeAggregate[]) {
     }))
     .filter((row) => row.registeredCount > 0)
     .sort((a, b) => b.registeredCount - a.registeredCount || a.regionName.localeCompare(b.regionName, 'cs'));
+}
+
+function buildMvPoliceCrimeClassRows(rows: MvPoliceCrimeAggregate[], regionCode: string) {
+  const grouped = new Map<string, { crimeClassName: string; registeredCount: number; clearedCount: number }>();
+
+  for (const row of rows) {
+    if (row.regionCode !== regionCode || row.crimeClassCode === '0-999') continue;
+    const bucket = grouped.get(row.crimeClassCode) ?? {
+      crimeClassName: row.crimeClassName,
+      registeredCount: 0,
+      clearedCount: 0,
+    };
+    if (row.indicatorName === 'Počet registrovaných skutků') {
+      bucket.registeredCount = row.countValue;
+    } else if (row.indicatorName === 'Počet objasněných skutků') {
+      bucket.clearedCount = row.countValue;
+    }
+    grouped.set(row.crimeClassCode, bucket);
+  }
+
+  return [...grouped.entries()]
+    .map(([crimeClassCode, row]) => ({
+      crimeClassCode,
+      crimeClassName: row.crimeClassName,
+      registeredCount: row.registeredCount,
+      clearedCount: row.clearedCount,
+    }))
+    .filter((row) => row.registeredCount > 0)
+    .sort((a, b) => b.registeredCount - a.registeredCount || a.crimeClassName.localeCompare(b.crimeClassName, 'cs'));
 }
 
 function mvNationalFireRescueCount(rows: MvFireRescueActivityAggregate[], indicatorCode: string): number | null {
@@ -251,7 +280,6 @@ export async function getMvPoliceCrimeAggregates(year: number): Promise<MvPolice
         count_value
       from mart.mv_police_crime_aggregate_latest
       where reporting_year = $1
-        and crime_class_code = '0-999'
       order by region_name, indicator_code
     `,
     [year],
@@ -453,7 +481,7 @@ export function buildMvPoliceRegionGraph(
       metadata: {
         capacity: region.registeredCount,
         clearedCount: region.clearedCount,
-        drilldownAvailable: false,
+        drilldownAvailable: true,
         focus: 'security',
       },
     });
@@ -465,6 +493,107 @@ export function buildMvPoliceRegionGraph(
         year,
         'mv_police_region_allocated_cost',
         'Regionální rozdělení policejního rozpočtu je odhadnuto podle podílu registrovaných skutků z otevřeného datasetu KRI10',
+        'mv_police_crime_aggregates',
+      ),
+    );
+  }
+
+  return { year, nodes, links };
+}
+
+export function buildMvPoliceCrimeClassGraph(
+  year: number,
+  mvBudgetRows: MvBudgetAggregate[],
+  mvPoliceCrimeRows: MvPoliceCrimeAggregate[],
+  regionCode: string,
+) {
+  const policeAmount = mvAmountByCode(mvBudgetRows, 'police');
+  const nationalRegisteredCount = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
+  const regions = buildMvPoliceRegionRows(mvPoliceCrimeRows);
+  const region = regions.find((entry) => entry.regionCode === regionCode);
+  if (policeAmount <= 0 || !nationalRegisteredCount || !region) return null;
+
+  const crimeClasses = buildMvPoliceCrimeClassRows(mvPoliceCrimeRows, regionCode);
+  if (!crimeClasses.length) return null;
+
+  const regionAmount = allocateAmount(policeAmount, region.registeredCount, nationalRegisteredCount);
+  const nodes: AtlasNode[] = [];
+  const links: AtlasLink[] = [];
+
+  addNode(nodes, createStateNode(null));
+  addNode(nodes, createMvMinistryNode());
+  addNode(nodes, createMvBranchNode(MV_POLICE_ID, 'Policie CR', nationalRegisteredCount, true));
+
+  const regionId = `security:police:region:${region.regionCode}`;
+  addNode(nodes, {
+    id: regionId,
+    name: region.regionName,
+    category: 'region',
+    level: 3,
+    metadata: {
+      capacity: region.registeredCount,
+      clearedCount: region.clearedCount,
+      drilldownAvailable: true,
+      focus: 'security',
+    },
+  });
+
+  links.push(
+    makeLink(
+      STATE_ID,
+      MV_MINISTRY_ID,
+      regionAmount,
+      year,
+      'state_to_mv_ministry',
+      `Zúžený pohled na policejní výdaje v regionu ${region.regionName}`,
+      'mv_budget_aggregates',
+    ),
+  );
+  links.push(
+    makeLink(
+      MV_MINISTRY_ID,
+      MV_POLICE_ID,
+      regionAmount,
+      year,
+      'mv_budget_group',
+      'Specifický ukazatel kapitoly 314: Výdaje Policie ČR',
+      'mv_budget_aggregates',
+    ),
+  );
+  links.push(
+    makeLink(
+      MV_POLICE_ID,
+      regionId,
+      regionAmount,
+      year,
+      'mv_police_region_allocated_cost',
+      'Regionální rozdělení policejního rozpočtu je odhadnuto podle podílu registrovaných skutků z otevřeného datasetu KRI10',
+      'mv_police_crime_aggregates',
+    ),
+  );
+
+  for (const crimeClass of crimeClasses) {
+    const classId = `security:police:crime-class:${regionCode}:${crimeClass.crimeClassCode}`;
+    addNode(nodes, {
+      id: classId,
+      name: crimeClass.crimeClassName,
+      category: 'other',
+      level: 4,
+      metadata: {
+        capacity: crimeClass.registeredCount,
+        clearedCount: crimeClass.clearedCount,
+        drilldownAvailable: false,
+        focus: 'security',
+      },
+    });
+    links.push(
+      makeLink(
+        regionId,
+        classId,
+        allocateAmount(regionAmount, crimeClass.registeredCount, region.registeredCount),
+        year,
+        'mv_police_crime_class_allocated_cost',
+        'Rozdělení regionální policejní částky podle struktury registrovaných skutků v otevřeném datasetu KRI10',
         'mv_police_crime_aggregates',
       ),
     );

@@ -8,6 +8,7 @@ import {
 } from './atlas/social.js';
 import {
   appendMvBranch,
+  buildMvPoliceCrimeClassGraph,
   buildMvFireRescueRegionGraph,
   buildMvPoliceRegionGraph,
   buildMvRootGraph,
@@ -1943,6 +1944,14 @@ export async function getAtlasMvGraph(year: number, nodeId: string | null = null
   }
   if (nodeId === MV_POLICE_ID) {
     return buildMvPoliceRegionGraph(year, mvBudgetRows, mvPoliceCrimeRows);
+  }
+  if (nodeId.startsWith('security:police:region:')) {
+    return buildMvPoliceCrimeClassGraph(
+      year,
+      mvBudgetRows,
+      mvPoliceCrimeRows,
+      nodeId.replace('security:police:region:', ''),
+    );
   }
   if (nodeId === MV_FIRE_RESCUE_ID) {
     return buildMvFireRescueRegionGraph(year, mvBudgetRows, mvFireRescueRows);

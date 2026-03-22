@@ -77,6 +77,7 @@ function isClickableMvNode(node: SankeyNode): boolean {
   if (node.id === MV_MINISTRY_ID) return true;
   if (node.id === MV_POLICE_ID && node.metadata?.drilldownAvailable === true) return true;
   if (node.id === 'security:fire-rescue' && node.metadata?.drilldownAvailable === true) return true;
+  if (node.id.startsWith('security:police:region:') && node.metadata?.drilldownAvailable === true) return true;
   return false;
 }
 
