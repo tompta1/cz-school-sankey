@@ -2,7 +2,7 @@ import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 
 import { formatCompactCzk, formatInteger, formatPerPupil, formatPerUnit } from '../lib/format';
-import { comparableNodeMetric, normalizationCapacity, normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
+import { comparableNodeMetric, normalizationCapacity, normalizationGroup, normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
 import type { HoverInfo, SankeyLink, SankeyNode } from '../types';
 
 interface Props {
@@ -69,6 +69,52 @@ function unavailableMetricMarkup(metricModeLabel: string): string {
   return `N/A<br/><small style="color:#94a3b8">${metricModeLabel} není pro tento tok k dispozici</small>`;
 }
 
+function formatMetricValue(czk: number, label: string): string {
+  return label === 'žáka/rok' ? formatPerPupil(czk) : formatPerUnit(czk, label);
+}
+
+function metricDescriptorForGroup(group: string | null, fallbackPerUnitLabel: string, fallbackCountLabel: string) {
+  switch (group) {
+    case 'school_pupil':
+      return { perUnitLabel: 'žáka/rok', countLabel: 'žáků' };
+    case 'police_registered_case':
+      return { perUnitLabel: 'registrovaný skutek', countLabel: 'registrovaných skutků' };
+    case 'fire_rescue_intervention':
+      return { perUnitLabel: 'zásah', countLabel: 'zásahů' };
+    case 'justice_resolved_case':
+      return { perUnitLabel: 'vyřízenou věc', countLabel: 'vyřízených věcí' };
+    case 'justice_inmate':
+      return { perUnitLabel: 'vězněnou osobu/rok', countLabel: 'vězněných osob' };
+    case 'social_pension_recipient':
+      return { perUnitLabel: 'příjemce důchodu/rok', countLabel: 'příjemců důchodu' };
+    case 'social_unemployment_recipient':
+      return { perUnitLabel: 'příjemce podpory/rok', countLabel: 'příjemců podpory' };
+    case 'social_care_recipient':
+      return { perUnitLabel: 'příjemce příspěvku/rok', countLabel: 'příjemců příspěvku' };
+    case 'social_substitute_alimony_recipient':
+      return { perUnitLabel: 'příjemce dávky/rok', countLabel: 'příjemců dávky' };
+    default:
+      return { perUnitLabel: fallbackPerUnitLabel, countLabel: fallbackCountLabel };
+  }
+}
+
+function metricDescriptorForLink(
+  link: SankeyLink,
+  fallbackPerUnitLabel: string,
+  fallbackCountLabel: string,
+) {
+  const group =
+    normalizationGroup(link) ??
+    (link.flowType === 'mv_budget_group' && link.target === 'security:police'
+      ? 'police_registered_case'
+      : null) ??
+    (link.flowType === 'mv_budget_group' && link.target === 'security:fire-rescue'
+      ? 'fire_rescue_intervention'
+      : null);
+
+  return metricDescriptorForGroup(group, fallbackPerUnitLabel, fallbackCountLabel);
+}
+
 function buildActiveOption(
   nodes: SankeyNode[],
   links: SankeyLink[],
@@ -102,9 +148,13 @@ function buildActiveOption(
         if (p.dataType === 'edge') {
           const { source, target, amountCzk, capacity } =
             p.data as { source: string; target: string; amountCzk: number; capacity: number | null };
+          const rawLink = links.find((link) => link.source === source && link.target === target && link.amountCzk === amountCzk);
+          const descriptor = rawLink
+            ? metricDescriptorForLink(rawLink, perUnitLabel, unitCountLabel)
+            : { perUnitLabel, countLabel: unitCountLabel };
           const amt = perPupil
             ? capacity
-              ? (perUnitLabel === 'žák/rok' ? formatPerPupil(amountCzk / capacity) : formatPerUnit(amountCzk / capacity, perUnitLabel))
+              ? formatMetricValue(amountCzk / capacity, descriptor.perUnitLabel)
               : unavailableMetricMarkup(metricModeLabel)
             : formatCompactCzk(amountCzk);
           return `<strong>${idToDisplay.get(source) ?? source} → ${idToDisplay.get(target) ?? target}</strong><br/>${amt}`;
@@ -119,20 +169,24 @@ function buildActiveOption(
           ? comparableNodeMetric(nodeId, links, capacityMap, true)
           : null;
         const supportsNodeMetric = !perPupil || incomingLinks.some((link) => linkCapacity(link));
+        const representativeLink = incomingLinks.find((link) => linkCapacity(link)) ?? null;
+        const descriptor = aggregatedMetric
+          ? metricDescriptorForGroup(aggregatedMetric.group, perUnitLabel, unitCountLabel)
+          : representativeLink
+            ? metricDescriptorForLink(representativeLink, perUnitLabel, unitCountLabel)
+            : { perUnitLabel, countLabel: unitCountLabel };
         const totalFmt = perPupil
           ? cap && supportsNodeMetric
-            ? (perUnitLabel === 'žák/rok' ? formatPerPupil(total / cap) : formatPerUnit(total / cap, perUnitLabel))
+            ? formatMetricValue(total / cap, descriptor.perUnitLabel)
             : aggregatedMetric
-              ? (perUnitLabel === 'žák/rok'
-                  ? formatPerPupil(aggregatedMetric.totalAmount / aggregatedMetric.totalCapacity)
-                  : formatPerUnit(aggregatedMetric.totalAmount / aggregatedMetric.totalCapacity, perUnitLabel))
+              ? formatMetricValue(aggregatedMetric.totalAmount / aggregatedMetric.totalCapacity, descriptor.perUnitLabel)
             : 'N/A'
           : formatCompactCzk(total);
         const suffix = perPupil
           ? cap && supportsNodeMetric
-            ? `<br/><small style="color:#94a3b8">${formatInteger(cap)} ${unitCountLabel}</small>`
+            ? `<br/><small style="color:#94a3b8">${formatInteger(cap)} ${descriptor.countLabel}</small>`
             : aggregatedMetric
-              ? `<br/><small style="color:#94a3b8">${formatInteger(aggregatedMetric.totalCapacity)} ${unitCountLabel}</small>`
+              ? `<br/><small style="color:#94a3b8">${formatInteger(aggregatedMetric.totalCapacity)} ${descriptor.countLabel}</small>`
               : `<br/><small style="color:#94a3b8">${metricModeLabel} není pro tento uzel k dispozici</small>`
           : ` ${totalAmountLabel}`;
         return `<strong>${displayName}</strong><br/>${totalFmt}${suffix}`;
