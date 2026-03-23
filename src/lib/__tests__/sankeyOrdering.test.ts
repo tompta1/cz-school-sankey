@@ -296,6 +296,36 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(recipientLink)).toBe('mpo_support_recipient');
   });
 
+  it('maps MK supported branches to recipient metrics', () => {
+    const branchLink: SankeyLink = {
+      source: 'mk:ministry:mk',
+      target: 'mk:support:heritage',
+      value: 100,
+      amountCzk: 100,
+      year: 2024,
+      flowType: 'mk_support_heritage_branch',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const programLink: SankeyLink = {
+      ...branchLink,
+      source: 'mk:support:heritage',
+      target: 'mk:program:pzad',
+      flowType: 'mk_support_program',
+    };
+    const regionLink: SankeyLink = {
+      ...branchLink,
+      source: 'mk:program:pzad',
+      target: 'mk:region:CZ020|Středočeský',
+      flowType: 'mk_support_region',
+    };
+
+    expect(normalizationGroup(branchLink)).toBe('mk_support_recipient');
+    expect(normalizationGroup(programLink)).toBe('mk_support_recipient');
+    expect(normalizationGroup(regionLink)).toBe('mk_support_recipient');
+  });
+
   it('maps agriculture family links to the correct normalization groups', () => {
     const recipientFamilyLink: SankeyLink = {
       source: 'agriculture:ministry:mze',

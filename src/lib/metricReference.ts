@@ -133,6 +133,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Podpory MPO jsou v první iteraci porovnávány proti počtu jedinečných příjemců OP TAK v otevřeném seznamu operací.',
     rationale: 'U MPO je recipient-level IČO v OP TAK workbooku veřejné a stabilní, takže jde o nejlepší první jmenovatel bez předstírání výrobních, exportních nebo energetických efektů.',
   },
+  mk_support_recipient: {
+    group: 'mk_support_recipient',
+    perUnitLabel: 'příjemce podpory',
+    countLabel: 'příjemců podpory',
+    title: 'Kč/příjemce podpory',
+    description: 'Programově podložené větve MK jsou porovnávány proti počtu zveřejněných příjemců podpory v konkrétním dotačním programu.',
+    rationale: 'U první iterace MK je to jediný obhajitelný jmenovatel, protože ministerstvo zveřejňuje jen vybrané výsledkové seznamy a agregace, ne jednotný recipient-level rozpad celé kapitoly.',
+  },
   transport_rail_passenger: {
     group: 'transport_rail_passenger',
     perUnitLabel: 'cestujícího',

@@ -46,6 +46,10 @@ async function main() {
     overview2024.links.some((link) => link.target === 'mpo:ministry:mpo'),
     'overview 2024 is missing MPO root link',
   );
+  assert(
+    overview2024.links.some((link) => link.target === 'mk:ministry:mk'),
+    'overview 2024 is missing MK root link',
+  );
 
   const transport2024 = await fetchJson('/api/atlas/transport?year=2024');
   assert(
@@ -125,6 +129,18 @@ async function main() {
   assert(
     mpoSupport2024.nodes.some((node) => node.id.startsWith('mpo:recipient:')),
     'MPO 2024 is missing recipient drilldown',
+  );
+
+  const mk2024 = await fetchJson('/api/atlas/mk?year=2024');
+  assert(
+    mk2024.nodes.some((node) => node.id === 'mk:support:heritage' && node.metadata?.capacity),
+    'MK 2024 is missing heritage branch',
+  );
+
+  const mkHeritage2024 = await fetchJson('/api/atlas/mk?year=2024&nodeId=mk:support:heritage');
+  assert(
+    mkHeritage2024.nodes.some((node) => node.id.startsWith('mk:region:')),
+    'MK 2024 is missing PZAD regional drilldown',
   );
 
   console.log(`Atlas smoke checks passed for ${baseUrl}`);

@@ -60,6 +60,14 @@ import {
   getMpoRecipientMetric,
   getMpoTotal,
 } from './atlas/mpo.js';
+import {
+  appendMkBranch,
+  getAtlasMkGraph,
+  getMkBudgetAggregates,
+  getMkBudgetEntities,
+  getMkProgramMetrics,
+  getMkTotal,
+} from './atlas/mk.js';
 
 const STATE_ID = 'state:cr';
 const HEALTH_MINISTRY_ID = 'health:ministry:mzcr';
@@ -1089,6 +1097,9 @@ function buildCombinedRootGraph(
   mmrRecipientMetrics: Awaited<ReturnType<typeof getMmrRecipientMetrics>>,
   mpoBudgetRows: Awaited<ReturnType<typeof getMpoBudgetEntities>>,
   mpoRecipientMetric: Awaited<ReturnType<typeof getMpoRecipientMetric>>,
+  mkBudgetRows: Awaited<ReturnType<typeof getMkBudgetEntities>>,
+  mkBudgetAggregates: Awaited<ReturnType<typeof getMkBudgetAggregates>>,
+  mkProgramMetrics: Awaited<ReturnType<typeof getMkProgramMetrics>>,
   agricultureBudgetRows: Awaited<ReturnType<typeof getAgricultureBudgetEntities>>,
   agricultureRecipientMetrics: Awaited<ReturnType<typeof getAgricultureRecipientMetrics>>,
   environmentBudgetRows: Awaited<ReturnType<typeof getEnvironmentBudgetEntities>>,
@@ -1108,6 +1119,7 @@ function buildCombinedRootGraph(
   const transportTotal = getTransportTotal(transportBudgetRows, transportSfdiProjects);
   const mmrTotal = getMmrTotal(mmrBudgetRows);
   const mpoTotal = getMpoTotal(mpoBudgetRows);
+  const mkTotal = getMkTotal(mkBudgetRows);
   const agricultureTotal = getAgricultureTotal(agricultureBudgetRows, agricultureRecipientMetrics);
   const environmentTotal = getEnvironmentTotal(environmentBudgetRows);
   const stateOtherLink = links.find((link) => link.source === STATE_ID && link.target === 'state:other');
@@ -1129,6 +1141,7 @@ function buildCombinedRootGraph(
     transportTotal +
     mmrTotal +
     mpoTotal +
+    mkTotal +
     agricultureTotal +
     environmentTotal +
     hospitalAmount +
@@ -1139,7 +1152,7 @@ function buildCombinedRootGraph(
   if (stateOtherLink) {
     stateOtherLink.amountCzk = Math.max(0, stateOtherLink.amountCzk - explicitAtlasTopLevelAmount);
     stateOtherLink.value = stateOtherLink.amountCzk;
-    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich, dopravnich, rozvojovych, prumyslovych, zemedelskych, environmentalnich a zdravotnich vetvi atlasu';
+    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich, dopravnich, rozvojovych, prumyslovych, kulturnich, zemedelskych, environmentalnich a zdravotnich vetvi atlasu';
   }
 
   appendSocialBranch(nodes, links, year, socialRows, socialRecipientMetrics);
@@ -1148,6 +1161,7 @@ function buildCombinedRootGraph(
   appendTransportBranch(nodes, links, year, transportBudgetRows, transportSfdiProjects, transportActivityMetrics);
   appendMmrBranch(nodes, links, year, mmrBudgetRows, mmrRecipientMetrics);
   appendMpoBranch(nodes, links, year, mpoBudgetRows, mpoRecipientMetric);
+  appendMkBranch(nodes, links, year, mkBudgetRows, mkBudgetAggregates, mkProgramMetrics);
   appendAgricultureBranch(nodes, links, year, agricultureBudgetRows, agricultureRecipientMetrics);
   appendEnvironmentBranch(nodes, links, year, environmentBudgetRows, environmentRecipientMetrics);
 
@@ -2098,6 +2112,9 @@ export async function getAtlasOverview(year: number) {
     mmrRecipientMetrics,
     mpoBudgetRows,
     mpoRecipientMetric,
+    mkBudgetRows,
+    mkBudgetAggregates,
+    mkProgramMetrics,
     agricultureBudgetRows,
     agricultureRecipientMetrics,
     environmentBudgetRows,
@@ -2124,6 +2141,9 @@ export async function getAtlasOverview(year: number) {
     getMmrRecipientMetrics(year),
     getMpoBudgetEntities(year),
     getMpoRecipientMetric(year),
+    getMkBudgetEntities(year),
+    getMkBudgetAggregates(year),
+    getMkProgramMetrics(year),
     getAgricultureBudgetEntities(year),
     getAgricultureRecipientMetrics(year),
     getEnvironmentBudgetEntities(year),
@@ -2154,6 +2174,9 @@ export async function getAtlasOverview(year: number) {
     mmrRecipientMetrics,
     mpoBudgetRows,
     mpoRecipientMetric,
+    mkBudgetRows,
+    mkBudgetAggregates,
+    mkProgramMetrics,
     agricultureBudgetRows,
     agricultureRecipientMetrics,
     environmentBudgetRows,
@@ -2297,6 +2320,7 @@ export { getAtlasAgricultureGraph };
 export { getAtlasEnvironmentGraph };
 export { getAtlasMmrGraph };
 export { getAtlasMpoGraph };
+export { getAtlasMkGraph };
 
 export async function searchAtlasEntities(year: number, q: string, limit = 8) {
   const needle = q.trim();

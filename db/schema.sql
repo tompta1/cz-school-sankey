@@ -866,6 +866,86 @@ create index if not exists mpo_optak_operation_year_region_idx
 create index if not exists mpo_optak_operation_year_recipient_idx
   on raw.mpo_optak_operation_yearly (reporting_year, recipient_key);
 
+create table if not exists raw.mk_budget_entity (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  period_code text not null,
+  entity_ico text not null,
+  entity_name text not null,
+  entity_kind text not null,
+  expenses_czk numeric(18,2) not null,
+  costs_czk numeric(18,2) not null,
+  revenues_czk numeric(18,2) not null,
+  result_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mk_budget_entity_year_ico_idx
+  on raw.mk_budget_entity (reporting_year, entity_ico);
+
+create table if not exists raw.mk_budget_aggregate (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  metric_code text not null,
+  metric_name text not null,
+  pvs_code text,
+  amount_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mk_budget_aggregate_year_metric_idx
+  on raw.mk_budget_aggregate (reporting_year, metric_code);
+
+create table if not exists raw.mk_support_award (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  program_code text not null,
+  program_name text not null,
+  recipient_key text not null,
+  recipient_name text not null,
+  recipient_ico text,
+  project_name text not null,
+  requested_czk numeric(18,2) not null,
+  awarded_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mk_support_award_year_program_idx
+  on raw.mk_support_award (reporting_year, program_code);
+
+create index if not exists mk_support_award_year_recipient_idx
+  on raw.mk_support_award (reporting_year, recipient_key);
+
+create table if not exists raw.mk_region_metric (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  program_code text not null,
+  program_name text not null,
+  region_code text,
+  region_name text not null,
+  recipient_count integer not null,
+  awarded_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mk_region_metric_year_program_idx
+  on raw.mk_region_metric (reporting_year, program_code);
+
+create index if not exists mk_region_metric_year_region_idx
+  on raw.mk_region_metric (reporting_year, region_code);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -1692,6 +1772,132 @@ select
   sum(charged_total_czk) as charged_total_czk
 from mart.mpo_optak_operation_yearly_latest
 group by reporting_year, coalesce(region_code, 'UNKNOWN'), recipient_key;
+
+create or replace view mart.mk_budget_entity_latest as
+select distinct on (r.reporting_year, r.entity_ico)
+  r.reporting_year,
+  r.period_code,
+  r.entity_ico,
+  r.entity_name,
+  r.entity_kind,
+  r.expenses_czk,
+  r.costs_czk,
+  r.revenues_czk,
+  r.result_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mk_budget_entity r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.entity_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mk_budget_aggregate_latest as
+select distinct on (r.reporting_year, r.metric_code)
+  r.reporting_year,
+  r.metric_code,
+  r.metric_name,
+  r.pvs_code,
+  r.amount_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mk_budget_aggregate r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.metric_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mk_support_award_latest as
+select distinct on (r.reporting_year, r.program_code, r.recipient_key, r.project_name)
+  r.reporting_year,
+  r.program_code,
+  r.program_name,
+  r.recipient_key,
+  r.recipient_name,
+  r.recipient_ico,
+  r.project_name,
+  r.requested_czk,
+  r.awarded_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mk_support_award r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.program_code,
+  r.recipient_key,
+  r.project_name,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mk_region_metric_latest as
+select distinct on (r.reporting_year, r.program_code, coalesce(r.region_code, r.region_name))
+  r.reporting_year,
+  r.program_code,
+  r.program_name,
+  r.region_code,
+  r.region_name,
+  r.recipient_count,
+  r.awarded_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mk_region_metric r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.program_code,
+  coalesce(r.region_code, r.region_name),
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mk_support_program_metric_latest as
+select
+  reporting_year,
+  program_code,
+  max(program_name) as program_name,
+  count(distinct recipient_key)::integer as recipient_count,
+  sum(awarded_czk) as awarded_czk
+from mart.mk_support_award_latest
+group by reporting_year, program_code
+union all
+select
+  reporting_year,
+  program_code,
+  max(program_name) as program_name,
+  sum(recipient_count)::integer as recipient_count,
+  sum(awarded_czk) as awarded_czk
+from mart.mk_region_metric_latest
+group by reporting_year, program_code;
+
+create or replace view mart.mk_support_recipient_latest as
+select
+  reporting_year,
+  program_code,
+  max(program_name) as program_name,
+  recipient_key,
+  max(recipient_name) as recipient_name,
+  max(recipient_ico) as recipient_ico,
+  count(*)::integer as project_count,
+  sum(requested_czk) as requested_czk,
+  sum(awarded_czk) as awarded_czk
+from mart.mk_support_award_latest
+group by reporting_year, program_code, recipient_key;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

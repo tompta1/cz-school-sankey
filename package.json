@@ -79,6 +79,12 @@
     "mpo:budget:load": "python3 etl/load_mpo_raw.py --dataset mpo_budget_entities --database-url \"${DATABASE_URL}\"",
     "mpo:optak:pull": "python3 etl/mpo/fetch_optak_operations.py --year 2024 --year 2025",
     "mpo:optak:load": "python3 etl/load_mpo_raw.py --dataset mpo_optak_operations --database-url \"${DATABASE_URL}\"",
+    "mk:budget:pull": "python3 etl/mk/fetch_budget_entities.py --year 2024 --year 2025",
+    "mk:budget:load": "python3 etl/load_mk_raw.py --dataset mk_budget_entities --database-url \"${DATABASE_URL}\"",
+    "mk:aggregates:pull": "python3 etl/mk/fetch_budget_aggregates.py --year 2024",
+    "mk:aggregates:load": "python3 etl/load_mk_raw.py --dataset mk_budget_aggregates --database-url \"${DATABASE_URL}\"",
+    "mk:supports:pull": "python3 etl/mk/fetch_support_results.py --year 2024",
+    "mk:supports:load": "python3 etl/load_mk_raw.py --dataset mk_support_awards --dataset mk_region_metrics --database-url \"${DATABASE_URL}\"",
     "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:providers:ico && npm run health:claims:payers && npm run health:insurers"
   },
   "dependencies": {

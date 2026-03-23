@@ -109,6 +109,17 @@ export function normalizationGroup(link: SankeyLink): string | null {
     return 'mpo_support_recipient';
   }
 
+  if (
+    link.flowType === 'mk_support_culture_branch' ||
+    link.flowType === 'mk_support_heritage_branch' ||
+    link.flowType === 'mk_support_program' ||
+    link.flowType === 'mk_support_recipient' ||
+    link.flowType === 'mk_support_region' ||
+    link.flowType === 'mk_support_page'
+  ) {
+    return 'mk_support_recipient';
+  }
+
   if (link.flowType === 'justice_branch_cost') {
     if (link.target === 'justice:courts') return 'justice_resolved_case';
     if (link.target === 'justice:prison-service') return 'justice_inmate';

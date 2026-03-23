@@ -24,6 +24,7 @@ Current main source families:
 - Environment: Monitor MF for MŽP/SFŽP administration and the open SFŽP support registry for support-program drilldowns.
 - Regional development: MMR open budget CSVs and DotaceEU IROP recipient workbooks.
 - Industry and trade: Monitor MF for MPO and DotaceEU OP TAK recipient workbooks.
+- Culture: Monitor MF for MK top-line spend, the MK final account for large explicit budget blocks, published MK results of selected grant programs, and PZAD regional summary tables.
 
 Some links are intentionally synthetic:
 
@@ -52,6 +53,7 @@ Current branch metrics:
 - Environment support programs: `Kč/příjemce podpory`
 - MMR project-backed branches: `Kč/příjemce podpory`
 - MPO project-backed branch: `Kč/příjemce podpory`
+- MK program-backed branches: `Kč/příjemce podpory`
 
 Agriculture caveat:
 
@@ -80,6 +82,14 @@ MPO caveat:
 - the drilldown branch is built only from OP TAK operations in the public 2021+ DotaceEU workbook
 - OP TAK public commitments can exceed one annual chapter spend of MPO, so the atlas clips the branch to the observed annual MPO amount and uses the OP TAK data only for shares, recipient counts, and drilldown structure
 - the second layer is therefore a public proxy for supported business beneficiaries, not a full decomposition of all MPO outlays
+
+MK caveat:
+
+- top-level MK amount comes from Monitor MF
+- film and church branches are explicit extracts from the official MK final account for 2024
+- grant drilldowns are shown only for those MK programs that publish recipient-level or regional result documents
+- `Památková péče` is therefore a mixed but still truthful branch: one subprogram drills to recipients, `PZAD` drills only to regions because that is the most detailed official public structure currently available
+- the residual `MK a ostatní výdaje resortu` intentionally keeps the rest of the chapter together instead of inventing unsupported recipient splits
 
 Why the transport branch is mixed:
 
