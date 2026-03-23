@@ -17,7 +17,7 @@ const links: SankeyLink[] = [
     value: 1000,
     amountCzk: 1000,
     year: 2025,
-    flowType: 'test',
+    flowType: 'transport_sfdi_project',
     basis: 'allocated',
     certainty: 'observed',
     sourceDataset: 'test',
@@ -28,7 +28,7 @@ const links: SankeyLink[] = [
     value: 500,
     amountCzk: 500,
     year: 2025,
-    flowType: 'test',
+    flowType: 'transport_sfdi_project',
     basis: 'allocated',
     certainty: 'observed',
     sourceDataset: 'test',
@@ -322,6 +322,7 @@ describe('sankeyOrdering', () => {
     };
 
     expect(normalizationGroup(branchLink)).toBeNull();
+    expect(normalizationCapacity(branchLink, new Map([['mk:support:heritage', 266]]), true)).toBeNull();
     expect(normalizationGroup(programLink)).toBe('mk_support_recipient');
     expect(normalizationGroup(regionLink)).toBe('mk_support_recipient');
   });

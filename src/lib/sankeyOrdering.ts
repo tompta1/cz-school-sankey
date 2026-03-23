@@ -22,6 +22,7 @@ export function normalizationCapacity(
 ): number | null {
   if (!perUnit) return null;
   if (NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES.has(link.flowType)) return null;
+  if (!normalizationGroup(link)) return null;
   if (link.institutionId) return capacityMap.get(link.institutionId) ?? null;
   return capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
 }
