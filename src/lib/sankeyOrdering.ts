@@ -7,6 +7,7 @@ const NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES = new Set([
   'health_outpatient_region_group',
   'health_outpatient_specialty_group',
   'health_outpatient_provider_allocated_cost',
+  'agriculture_subsidy_recipient_detail',
 ]);
 
 export function normalizedValue(amountCzk: number, capacity: number | null, perUnit: boolean): number {
@@ -65,11 +66,13 @@ export function normalizationGroup(link: SankeyLink): string | null {
   }
 
   if (
-    link.flowType === 'agriculture_subsidy_branch' ||
-    link.flowType === 'agriculture_subsidy_funding' ||
-    link.flowType === 'agriculture_subsidy_recipient'
+    link.flowType === 'agriculture_subsidy_family_recipient'
   ) {
     return 'agriculture_subsidy_recipient';
+  }
+
+  if (link.flowType === 'agriculture_subsidy_family_area') {
+    return 'agriculture_area_hectare';
   }
 
   if (link.flowType === 'justice_branch_cost') {

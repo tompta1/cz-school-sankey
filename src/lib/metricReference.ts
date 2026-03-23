@@ -101,6 +101,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Zemědělské dotace přes SZIF vztažené k počtu jedinečných příjemců s kladnou čistou částkou ve fiskálním roce.',
     rationale: 'Počet zveřejněných příjemců SZIF je nejbližší obhajitelný denominátor pro dotační větev MZe bez předstírání obecného počtu všech zemědělců.',
   },
+  agriculture_area_hectare: {
+    group: 'agriculture_area_hectare',
+    perUnitLabel: 'ha',
+    countLabel: 'ha LPIS',
+    title: 'Kč/ha',
+    description: 'Plošné a krajinné podpory SZIF vztažené k hektarům LPIS spárovaným s area-family příjemci.',
+    rationale: 'U největších plošných opatření je hektar nejbližší věcný jmenovatel; atlas jej používá jen pro area-family větev a nepřenáší ho do jiných zemědělských podpor.',
+  },
   transport_rail_passenger: {
     group: 'transport_rail_passenger',
     perUnitLabel: 'cestujícího',

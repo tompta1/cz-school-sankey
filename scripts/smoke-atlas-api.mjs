@@ -63,8 +63,14 @@ async function main() {
 
   const agriculture2024 = await fetchJson('/api/atlas/agriculture?year=2024');
   assert(
-    agriculture2024.nodes.some((node) => node.id === 'agriculture:subsidy:total' && node.metadata?.capacity),
-    'agriculture 2024 is missing subsidy denominator',
+    agriculture2024.nodes.some((node) => node.id === 'agriculture:subsidy:total'),
+    'agriculture 2024 is missing subsidy root',
+  );
+
+  const agricultureSubsidy2024 = await fetchJson('/api/atlas/agriculture?year=2024&nodeId=agriculture:subsidy:total');
+  assert(
+    agricultureSubsidy2024.nodes.some((node) => node.id === 'agriculture:subsidy:family:area' && node.metadata?.capacity),
+    'agriculture 2024 is missing area-family hectare denominator',
   );
 
   const agricultureAdmin2024 = await fetchJson('/api/atlas/agriculture?year=2024&nodeId=agriculture:admin');

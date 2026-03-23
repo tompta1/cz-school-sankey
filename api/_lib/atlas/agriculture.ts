@@ -41,10 +41,26 @@ interface AgricultureRecipientMetric {
   sourceDataset: string;
 }
 
+interface AgricultureFamilyMetric {
+  year: number;
+  familyCode: 'AREA' | 'LIVESTOCK' | 'INVESTMENT' | 'OTHER';
+  familyName: string;
+  recipientCount: number;
+  amount: number;
+  sourceDataset: string;
+}
+
+interface AgricultureLpisMetric {
+  year: number;
+  areaHa: number;
+  userCount: number;
+  sourceDataset: string;
+}
+
 interface AgricultureRecipientAggregate {
   year: number;
-  fundingSourceCode: 'EU' | 'NATIONAL';
-  fundingSourceName: string;
+  familyCode: AgricultureFamilyMetric['familyCode'];
+  familyName: string;
   recipientKey: string;
   recipientName: string;
   recipientIco: string | null;
@@ -58,8 +74,10 @@ interface AgricultureRecipientAggregate {
 const STATE_ID = 'state:cr';
 const AGRICULTURE_MINISTRY_ID = 'agriculture:ministry:mze';
 const AGRICULTURE_SUBSIDY_TOTAL_ID = 'agriculture:subsidy:total';
-const AGRICULTURE_SUBSIDY_EU_ID = 'agriculture:subsidy:eu';
-const AGRICULTURE_SUBSIDY_NATIONAL_ID = 'agriculture:subsidy:national';
+const AGRICULTURE_SUBSIDY_AREA_ID = 'agriculture:subsidy:family:area';
+const AGRICULTURE_SUBSIDY_LIVESTOCK_ID = 'agriculture:subsidy:family:livestock';
+const AGRICULTURE_SUBSIDY_INVESTMENT_ID = 'agriculture:subsidy:family:investment';
+const AGRICULTURE_SUBSIDY_OTHER_ID = 'agriculture:subsidy:family:other';
 const AGRICULTURE_ADMIN_ID = 'agriculture:admin';
 const AGRICULTURE_ADMIN_ENTITY_PREFIX = 'agriculture:admin-entity:';
 const AGRICULTURE_RECIPIENT_PREFIX = 'agriculture:recipient:';
@@ -113,6 +131,18 @@ function agricultureMetricBySource(
   return metrics.find((row) => row.fundingSourceCode === fundingSourceCode) ?? null;
 }
 
+function familyNodeId(familyCode: AgricultureFamilyMetric['familyCode']): string {
+  if (familyCode === 'AREA') return AGRICULTURE_SUBSIDY_AREA_ID;
+  if (familyCode === 'LIVESTOCK') return AGRICULTURE_SUBSIDY_LIVESTOCK_ID;
+  if (familyCode === 'INVESTMENT') return AGRICULTURE_SUBSIDY_INVESTMENT_ID;
+  return AGRICULTURE_SUBSIDY_OTHER_ID;
+}
+
+function familyFlowType(familyCode: AgricultureFamilyMetric['familyCode']): string {
+  if (familyCode === 'AREA') return 'agriculture_subsidy_family_area';
+  return 'agriculture_subsidy_family_recipient';
+}
+
 function agricultureRecipientNodeId(recipientKey: string): string {
   return `${AGRICULTURE_RECIPIENT_PREFIX}${recipientKey}`;
 }
@@ -158,10 +188,9 @@ function createAgricultureRecipientNode(row: AgricultureRecipientAggregate): Atl
     id: agricultureRecipientNodeId(row.recipientKey),
     name: row.recipientName,
     category: 'other',
-    level: 3,
+    level: 4,
     ico: row.recipientIco ?? undefined,
     metadata: {
-      capacity: 1,
       municipality: row.municipality,
       district: row.district,
       paymentCount: row.paymentCount,
@@ -170,7 +199,7 @@ function createAgricultureRecipientNode(row: AgricultureRecipientAggregate): Atl
   };
 }
 
-function createAgricultureAdminEntityNode(row: AgricultureBudgetEntity, amount: number, name = row.entityName): AtlasNode {
+function createAgricultureAdminEntityNode(row: AgricultureBudgetEntity, name = row.entityName): AtlasNode {
   return {
     id: agricultureAdminEntityNodeId(row.entityIco),
     name,
@@ -178,7 +207,6 @@ function createAgricultureAdminEntityNode(row: AgricultureBudgetEntity, amount: 
     level: 3,
     ico: row.entityIco,
     metadata: {
-      ...(amount > 0 ? { capacity: amount } : {}),
       drilldownAvailable: false,
       focus: 'agriculture',
       entityKind: row.entityKind,
@@ -191,7 +219,7 @@ function createPagerNode(id: typeof PREV_WINDOW_ID | typeof NEXT_WINDOW_ID, labe
     id,
     name: label,
     category: 'other',
-    level: 4,
+    level: 5,
     metadata: {
       focus: 'agriculture',
       drilldownAvailable: true,
@@ -223,6 +251,18 @@ function agricultureResidualEntityAmount(row: AgricultureBudgetEntity, subsidyAm
     return Math.max(amount - subsidyAmount, 0);
   }
   return amount;
+}
+
+function familyMetricByCode(
+  metrics: AgricultureFamilyMetric[],
+  familyCode: AgricultureFamilyMetric['familyCode'],
+): AgricultureFamilyMetric | null {
+  return metrics.find((row) => row.familyCode === familyCode) ?? null;
+}
+
+function lpisMetricValue(lpisMetric: AgricultureLpisMetric | null): number | null {
+  if (!lpisMetric || lpisMetric.areaHa <= 0) return null;
+  return lpisMetric.areaHa;
 }
 
 export function getAgricultureTotal(
@@ -314,16 +354,77 @@ export async function getAgricultureRecipientMetrics(year: number): Promise<Agri
   }));
 }
 
-export async function getAgricultureRecipients(
+export async function getAgricultureFamilyMetrics(year: number): Promise<AgricultureFamilyMetric[]> {
+  const result = await query(
+    `
+      select
+        reporting_year,
+        family_code,
+        family_name,
+        recipient_count,
+        amount_czk
+      from mart.agriculture_szif_family_metric_latest
+      where reporting_year = $1
+      order by amount_czk desc, family_code asc
+    `,
+    [year],
+  );
+
+  return result.rows.map((row) => ({
+    year: Number(row.reporting_year),
+    familyCode: String(row.family_code) as AgricultureFamilyMetric['familyCode'],
+    familyName: String(row.family_name),
+    recipientCount: Number(row.recipient_count),
+    amount: toNumber(row.amount_czk),
+    sourceDataset: 'agriculture_szif_payments',
+  }));
+}
+
+export async function getAgricultureLpisMetric(year: number): Promise<AgricultureLpisMetric | null> {
+  const result = await query(
+    `
+      with matched_users as (
+        select distinct
+          reporting_year,
+          recipient_name_normalized
+        from mart.agriculture_szif_family_recipient_yearly_latest
+        where reporting_year = $1
+          and family_code = 'AREA'
+          and amount_czk > 0
+          and recipient_name_normalized <> ''
+      )
+      select
+        l.reporting_year,
+        sum(l.area_ha) as area_ha,
+        count(*)::integer as user_count
+      from mart.agriculture_lpis_user_area_yearly_latest l
+      join matched_users m
+        on m.reporting_year = l.reporting_year
+       and m.recipient_name_normalized = l.user_name_normalized
+      group by l.reporting_year
+    `,
+    [year],
+  );
+  if (!result.rows.length) return null;
+  const row = result.rows[0];
+  return {
+    year: Number(row.reporting_year),
+    areaHa: toNumber(row.area_ha),
+    userCount: Number(row.user_count),
+    sourceDataset: 'agriculture_lpis_user_area',
+  };
+}
+
+export async function getAgricultureRecipientsByFamily(
   year: number,
-  fundingSourceCode: 'EU' | 'NATIONAL',
+  familyCode: AgricultureFamilyMetric['familyCode'],
 ): Promise<AgricultureRecipientAggregate[]> {
   const result = await query(
     `
       select
         reporting_year,
-        funding_source_code,
-        funding_source_name,
+        family_code,
+        family_name,
         recipient_key,
         recipient_name,
         recipient_ico,
@@ -331,20 +432,20 @@ export async function getAgricultureRecipients(
         district,
         amount_czk,
         payment_count
-      from mart.agriculture_szif_recipient_yearly_latest
+      from mart.agriculture_szif_family_recipient_yearly_latest
       where reporting_year = $1
-        and funding_source_code = $2
+        and family_code = $2
         and amount_czk > 0
         and coalesce(recipient_ico, '') not in (${ADMIN_LIKE_RECIPIENT_ICOS.map((_, index) => `$${index + 3}`).join(', ')})
       order by amount_czk desc, recipient_name asc
     `,
-    [year, fundingSourceCode, ...ADMIN_LIKE_RECIPIENT_ICOS],
+    [year, familyCode, ...ADMIN_LIKE_RECIPIENT_ICOS],
   );
 
   return result.rows.map((row) => ({
     year: Number(row.reporting_year),
-    fundingSourceCode: String(row.funding_source_code) as 'EU' | 'NATIONAL',
-    fundingSourceName: String(row.funding_source_name),
+    familyCode: String(row.family_code) as AgricultureFamilyMetric['familyCode'],
+    familyName: String(row.family_name),
     recipientKey: String(row.recipient_key),
     recipientName: String(row.recipient_name),
     recipientIco: row.recipient_ico ? String(row.recipient_ico) : null,
@@ -382,16 +483,7 @@ export function appendAgricultureBranch(
     ),
   );
 
-  addNode(
-    nodes,
-    createAgricultureBranchNode(
-      AGRICULTURE_SUBSIDY_TOTAL_ID,
-      'Zemedelske dotace pres SZIF',
-      2,
-      totalMetric.recipientCount,
-      true,
-    ),
-  );
+  addNode(nodes, createAgricultureBranchNode(AGRICULTURE_SUBSIDY_TOTAL_ID, 'Zemedelske dotace pres SZIF', 2, null, true));
   links.push(
     makeLink(
       AGRICULTURE_MINISTRY_ID,
@@ -399,7 +491,7 @@ export function appendAgricultureBranch(
       totalMetric.amount,
       year,
       'agriculture_subsidy_branch',
-      'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF; metrika pouziva pocet jedinecnych prijemcu s kladnou cistou castkou ve fiskalnim roce',
+      'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF',
       totalMetric.sourceDataset,
     ),
   );
@@ -432,16 +524,7 @@ function buildAgricultureRootGraph(
   const nodes: AtlasNode[] = [createAgricultureMinistryNode()];
   const links: AtlasLink[] = [];
 
-  addNode(
-    nodes,
-    createAgricultureBranchNode(
-      AGRICULTURE_SUBSIDY_TOTAL_ID,
-      'Zemedelske dotace pres SZIF',
-      2,
-      totalMetric.recipientCount,
-      true,
-    ),
-  );
+  addNode(nodes, createAgricultureBranchNode(AGRICULTURE_SUBSIDY_TOTAL_ID, 'Zemedelske dotace pres SZIF', 2, null, true));
   links.push(
     makeLink(
       AGRICULTURE_MINISTRY_ID,
@@ -449,7 +532,7 @@ function buildAgricultureRootGraph(
       totalMetric.amount,
       year,
       'agriculture_subsidy_branch',
-      'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF; metrika pouziva pocet jedinecnych prijemcu s kladnou cistou castkou ve fiskalnim roce',
+      'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF',
       totalMetric.sourceDataset,
     ),
   );
@@ -488,7 +571,7 @@ function buildAgricultureAdminGraph(year: number, budgetRows: AgricultureBudgetE
 
   for (const row of adminRows) {
     const name = row.entityIco === '48133981' ? 'SZIF mimo prime dotace' : row.entityName;
-    addNode(nodes, createAgricultureAdminEntityNode(row, row.amount, name));
+    addNode(nodes, createAgricultureAdminEntityNode(row, name));
     links.push(
       makeLink(
         AGRICULTURE_ADMIN_ID,
@@ -505,75 +588,51 @@ function buildAgricultureAdminGraph(year: number, budgetRows: AgricultureBudgetE
   return { year, nodes, links };
 }
 
-function buildAgricultureFundingGraph(year: number, metrics: AgricultureRecipientMetric[]) {
-  const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
-  if (!totalMetric || totalMetric.amount <= 0) return null;
-
-  const euMetric = agricultureMetricBySource(metrics, 'EU');
-  const nationalMetric = agricultureMetricBySource(metrics, 'NATIONAL');
+function buildAgricultureFamilyGraph(
+  year: number,
+  totalMetric: AgricultureRecipientMetric,
+  familyMetrics: AgricultureFamilyMetric[],
+  lpisMetric: AgricultureLpisMetric | null,
+) {
   const nodes: AtlasNode[] = [
-    createAgricultureBranchNode(
-      AGRICULTURE_SUBSIDY_TOTAL_ID,
-      'Zemedelske dotace pres SZIF',
-      2,
-      totalMetric.recipientCount,
-      true,
-    ),
+    createAgricultureBranchNode(AGRICULTURE_SUBSIDY_TOTAL_ID, 'Zemedelske dotace pres SZIF', 2, null, true),
   ];
   const links: AtlasLink[] = [];
 
-  if (euMetric && euMetric.amount > 0) {
-    addNode(nodes, createAgricultureBranchNode(AGRICULTURE_SUBSIDY_EU_ID, euMetric.fundingSourceName, 3, euMetric.recipientCount, true));
+  for (const familyMetric of familyMetrics) {
+    if (familyMetric.amount <= 0) continue;
+    const nodeId = familyNodeId(familyMetric.familyCode);
+    const capacity = familyMetric.familyCode === 'AREA' ? lpisMetricValue(lpisMetric) : familyMetric.recipientCount;
+    addNode(nodes, createAgricultureBranchNode(nodeId, familyMetric.familyName, 3, capacity, true));
     links.push(
       makeLink(
         AGRICULTURE_SUBSIDY_TOTAL_ID,
-        AGRICULTURE_SUBSIDY_EU_ID,
-        euMetric.amount,
+        nodeId,
+        familyMetric.amount,
         year,
-        'agriculture_subsidy_funding',
-        'SZIF: uzavreny fiskalni rok EU a spolufinancovani bez technicke pomoci pro MZe a SZIF; metrika pouziva pocet jedinecnych prijemcu s kladnou cistou castkou',
-        euMetric.sourceDataset,
+        familyFlowType(familyMetric.familyCode),
+        familyMetric.familyCode === 'AREA'
+          ? 'SZIF area-linkovane podpory; srovnavaci metrika pouziva celkovou vymeru aktualni verejne vrstvy LPIS jako nejblizsi dostupny hektarovy jmenovatel'
+          : 'SZIF agregace prijemcu do tematicke rodiny opatreni; srovnavaci metrika na teto vetvi zustava u poctu prijemcu',
+        familyMetric.familyCode === 'AREA' && lpisMetric ? 'agriculture_lpis_user_area' : familyMetric.sourceDataset,
       ),
     );
   }
 
-  if (nationalMetric && nationalMetric.amount > 0) {
-    addNode(
-      nodes,
-      createAgricultureBranchNode(
-        AGRICULTURE_SUBSIDY_NATIONAL_ID,
-        nationalMetric.fundingSourceName,
-        3,
-        nationalMetric.recipientCount,
-        true,
-      ),
-    );
-    links.push(
-      makeLink(
-        AGRICULTURE_SUBSIDY_TOTAL_ID,
-        AGRICULTURE_SUBSIDY_NATIONAL_ID,
-        nationalMetric.amount,
-        year,
-        'agriculture_subsidy_funding',
-        'SZIF: narodni zemedelske dotace ve fiskalnim roce bez technicke pomoci pro MZe a SZIF; metrika pouziva pocet jedinecnych prijemcu s kladnou cistou castkou',
-        nationalMetric.sourceDataset,
-      ),
-    );
-  }
-
+  if (!links.length && totalMetric.amount <= 0) return null;
   return { year, nodes, links };
 }
 
 function buildAgricultureRecipientGraph(
   year: number,
-  fundingMetric: AgricultureRecipientMetric,
+  familyMetric: AgricultureFamilyMetric,
   recipients: AgricultureRecipientAggregate[],
   offset = 0,
 ) {
-  const sourceNodeId =
-    fundingMetric.fundingSourceCode === 'EU' ? AGRICULTURE_SUBSIDY_EU_ID : AGRICULTURE_SUBSIDY_NATIONAL_ID;
+  const sourceNodeId = familyNodeId(familyMetric.familyCode);
+  const familyCapacity = familyMetric.familyCode === 'AREA' ? null : familyMetric.recipientCount;
   const nodes: AtlasNode[] = [
-    createAgricultureBranchNode(sourceNodeId, fundingMetric.fundingSourceName, 3, fundingMetric.recipientCount, true),
+    createAgricultureBranchNode(sourceNodeId, familyMetric.familyName, 3, familyCapacity, true),
   ];
   const links: AtlasLink[] = [];
 
@@ -604,8 +663,8 @@ function buildAgricultureRecipientGraph(
         agricultureRecipientNodeId(row.recipientKey),
         row.amount,
         year,
-        'agriculture_subsidy_recipient',
-        'SZIF: agregovany cisty objem dotaci prijemce ve zvolenem fiskalnim roce',
+        'agriculture_subsidy_recipient_detail',
+        'SZIF: agregovany cisty objem dotaci prijemce ve zvolene rodine opatreni',
         row.sourceDataset,
       ),
     );
@@ -639,8 +698,14 @@ export async function getAtlasAgricultureGraph(year: number, nodeId: string | nu
   }
 
   if (nodeId === AGRICULTURE_SUBSIDY_TOTAL_ID) {
-    const metrics = await getAgricultureRecipientMetrics(year);
-    return buildAgricultureFundingGraph(year, metrics);
+    const [metrics, familyMetrics, lpisMetric] = await Promise.all([
+      getAgricultureRecipientMetrics(year),
+      getAgricultureFamilyMetrics(year),
+      getAgricultureLpisMetric(year),
+    ]);
+    const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
+    if (!totalMetric || totalMetric.amount <= 0) return null;
+    return buildAgricultureFamilyGraph(year, totalMetric, familyMetrics, lpisMetric);
   }
 
   if (nodeId === AGRICULTURE_ADMIN_ID) {
@@ -648,14 +713,21 @@ export async function getAtlasAgricultureGraph(year: number, nodeId: string | nu
     return buildAgricultureAdminGraph(year, budgetRows, metrics);
   }
 
-  if (nodeId === AGRICULTURE_SUBSIDY_EU_ID || nodeId === AGRICULTURE_SUBSIDY_NATIONAL_ID) {
-    const [metrics, recipients] = await Promise.all([
-      getAgricultureRecipientMetrics(year),
-      getAgricultureRecipients(year, nodeId === AGRICULTURE_SUBSIDY_EU_ID ? 'EU' : 'NATIONAL'),
+  const familyCodeByNodeId: Record<string, AgricultureFamilyMetric['familyCode']> = {
+    [AGRICULTURE_SUBSIDY_AREA_ID]: 'AREA',
+    [AGRICULTURE_SUBSIDY_LIVESTOCK_ID]: 'LIVESTOCK',
+    [AGRICULTURE_SUBSIDY_INVESTMENT_ID]: 'INVESTMENT',
+    [AGRICULTURE_SUBSIDY_OTHER_ID]: 'OTHER',
+  };
+  const familyCode = familyCodeByNodeId[nodeId];
+  if (familyCode) {
+    const [familyMetrics, recipients] = await Promise.all([
+      getAgricultureFamilyMetrics(year),
+      getAgricultureRecipientsByFamily(year, familyCode),
     ]);
-    const fundingMetric = agricultureMetricBySource(metrics, nodeId === AGRICULTURE_SUBSIDY_EU_ID ? 'EU' : 'NATIONAL');
-    if (!fundingMetric || fundingMetric.amount <= 0) return null;
-    return buildAgricultureRecipientGraph(year, fundingMetric, recipients, offset);
+    const familyMetric = familyMetricByCode(familyMetrics, familyCode);
+    if (!familyMetric || familyMetric.amount <= 0) return null;
+    return buildAgricultureRecipientGraph(year, familyMetric, recipients, offset);
   }
 
   return null;

@@ -649,6 +649,9 @@ create table if not exists raw.agriculture_budget_entity (
 create index if not exists agriculture_budget_entity_year_ico_idx
   on raw.agriculture_budget_entity (reporting_year, entity_ico);
 
+drop view if exists mart.agriculture_lpis_user_area_yearly_latest;
+drop view if exists mart.agriculture_szif_family_metric_latest;
+drop view if exists mart.agriculture_szif_family_recipient_yearly_latest;
 drop view if exists mart.agriculture_szif_recipient_metric_latest;
 drop view if exists mart.agriculture_szif_recipient_yearly_latest;
 drop view if exists mart.agriculture_szif_payment_latest;
@@ -679,6 +682,50 @@ create index if not exists agriculture_szif_recipient_year_source_recipient_idx
 
 create index if not exists agriculture_szif_recipient_year_source_amount_idx
   on raw.agriculture_szif_recipient_yearly (reporting_year, funding_source_code, amount_czk desc);
+
+create table if not exists raw.agriculture_szif_family_recipient_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  funding_source_code text not null,
+  funding_source_name text not null,
+  family_code text not null,
+  family_name text not null,
+  recipient_name text not null,
+  recipient_name_normalized text not null,
+  recipient_ico text,
+  recipient_key text not null,
+  municipality text,
+  district text,
+  amount_czk numeric(20, 2) not null default 0,
+  payment_count integer not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists agriculture_szif_family_year_family_amount_idx
+  on raw.agriculture_szif_family_recipient_yearly (reporting_year, family_code, amount_czk desc);
+
+create index if not exists agriculture_szif_family_year_family_recipient_idx
+  on raw.agriculture_szif_family_recipient_yearly (reporting_year, family_code, recipient_key);
+
+create table if not exists raw.agriculture_lpis_user_area_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  user_name text not null,
+  user_name_normalized text not null,
+  lpis_user_ji text,
+  area_ha numeric(20, 2) not null default 0,
+  block_count integer not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists agriculture_lpis_user_area_year_name_idx
+  on raw.agriculture_lpis_user_area_yearly (reporting_year, user_name_normalized);
 
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
@@ -1144,6 +1191,36 @@ order by
   r.loaded_at desc,
   r.raw_id desc;
 
+create or replace view mart.agriculture_szif_family_recipient_yearly_latest as
+select distinct on (r.reporting_year, r.funding_source_code, r.family_code, r.recipient_key)
+  r.reporting_year,
+  r.funding_source_code,
+  r.funding_source_name,
+  r.family_code,
+  r.family_name,
+  r.recipient_name,
+  r.recipient_name_normalized,
+  r.recipient_ico,
+  r.recipient_key,
+  r.municipality,
+  r.district,
+  r.amount_czk,
+  r.payment_count,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.agriculture_szif_family_recipient_yearly r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.funding_source_code,
+  r.family_code,
+  r.recipient_key,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
 create or replace view mart.agriculture_szif_recipient_metric_latest as
 with per_source as (
   select
@@ -1179,6 +1256,37 @@ select
   sum(total_amount_czk) as amount_czk
 from all_sources
 group by reporting_year;
+
+create or replace view mart.agriculture_szif_family_metric_latest as
+select
+  reporting_year,
+  family_code,
+  max(family_name) as family_name,
+  count(*) filter (where amount_czk > 0)::integer as recipient_count,
+  sum(amount_czk) as amount_czk
+from mart.agriculture_szif_family_recipient_yearly_latest
+group by reporting_year, family_code;
+
+create or replace view mart.agriculture_lpis_user_area_yearly_latest as
+select distinct on (r.reporting_year, r.user_name_normalized)
+  r.reporting_year,
+  r.user_name,
+  r.user_name_normalized,
+  r.lpis_user_ji,
+  r.area_ha,
+  r.block_count,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.agriculture_lpis_user_area_yearly r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.user_name_normalized,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

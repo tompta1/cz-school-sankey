@@ -26,8 +26,10 @@ const MV_POLICE_ID = 'security:police';
 const TRANSPORT_ROOT_ID = 'transport:ministry:md';
 const AGRICULTURE_ROOT_ID = 'agriculture:ministry:mze';
 const AGRICULTURE_SUBSIDY_TOTAL_ID = 'agriculture:subsidy:total';
-const AGRICULTURE_SUBSIDY_EU_ID = 'agriculture:subsidy:eu';
-const AGRICULTURE_SUBSIDY_NATIONAL_ID = 'agriculture:subsidy:national';
+const AGRICULTURE_SUBSIDY_AREA_ID = 'agriculture:subsidy:family:area';
+const AGRICULTURE_SUBSIDY_LIVESTOCK_ID = 'agriculture:subsidy:family:livestock';
+const AGRICULTURE_SUBSIDY_INVESTMENT_ID = 'agriculture:subsidy:family:investment';
+const AGRICULTURE_SUBSIDY_OTHER_ID = 'agriculture:subsidy:family:other';
 const AGRICULTURE_ADMIN_ID = 'agriculture:admin';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
@@ -117,7 +119,14 @@ function isClickableAgricultureNode(node: SankeyNode): boolean {
   if (node.id === AGRICULTURE_ROOT_ID) return true;
   if (node.id === AGRICULTURE_SUBSIDY_TOTAL_ID) return true;
   if (node.id === AGRICULTURE_ADMIN_ID) return true;
-  if (node.id === AGRICULTURE_SUBSIDY_EU_ID || node.id === AGRICULTURE_SUBSIDY_NATIONAL_ID) return true;
+  if (
+    node.id === AGRICULTURE_SUBSIDY_AREA_ID ||
+    node.id === AGRICULTURE_SUBSIDY_LIVESTOCK_ID ||
+    node.id === AGRICULTURE_SUBSIDY_INVESTMENT_ID ||
+    node.id === AGRICULTURE_SUBSIDY_OTHER_ID
+  ) {
+    return true;
+  }
   return false;
 }
 

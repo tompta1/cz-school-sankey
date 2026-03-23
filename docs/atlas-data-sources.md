@@ -44,12 +44,15 @@ Current branch metrics:
 - Motorway passenger-car branch: `Kč/prodanou známku`
 - Heavy-vehicle toll branch: `Kč/zpoplatněné vozidlo`
 - Transport investor/project drilldown: `Kč/akci`
-- Agriculture subsidies: `Kč/příjemce dotace`
+- Agriculture area-linked subsidies: `Kč/ha`
+- Agriculture other subsidy families: `Kč/příjemce dotace`
 
 Agriculture caveat:
 
-- the MZe comparative metric uses unique annual subsidy recipients published by SZIF
-- technical-assistance payments to `MZe` and `SZIF` themselves are excluded from that denominator and amount, so the branch reflects subsidy recipients rather than administration financing
+- the MZe subsidy branch is now split into metric families
+- area-linked supports use LPIS hectares matched to the area-family recipient cohort
+- livestock, investment, and mixed residual subsidy families still use unique annual subsidy recipients published by SZIF
+- technical-assistance payments to `MZe` and `SZIF` themselves are excluded from the subsidy denominator and amount, so the branch reflects subsidy recipients rather than administration financing
 
 Why the transport branch is mixed:
 

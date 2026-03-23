@@ -143,8 +143,16 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     title: 'SZIF: seznamy příjemců dotací',
     description: 'Otevřené CSV seznamů příjemců dotací z fondů EU a z národních zdrojů včetně identifikace příjemce, opatření a vyplacené částky.',
     freshness: 'Uzavřené fiskální roky EU mají samostatné roční soubory; atlas zatím používá uzavřený rok 2024.',
-    rationale: 'Je to nejpřímější veřejný zdroj pro dotační větev MZe a pro metriku Kč/příjemce dotace. Technická pomoc pro MZe a SZIF je z příjemcovské metriky vyřazená.',
+    rationale: 'Je to nejpřímější veřejný zdroj pro dotační větev MZe. Atlas z něj skládá rodiny opatření a používá jej pro fallback metriku Kč/příjemce tam, kde není k dispozici věcnější jednotka.',
     url: 'https://szif.gov.cz/cs/seznam-prijemcu-dotaci',
+  },
+  agriculture_lpis_user_area: {
+    datasetKey: 'agriculture_lpis_user_area',
+    title: 'MZe pLPIS: výměra uživatelů',
+    description: 'Agregovaná výměra dílů půdních bloků podle uživatele z datovaného veřejného exportu LPIS, spojená s veřejnou WFS vrstvou kvůli identifikaci uživatele.',
+    freshness: 'Atlas používá konkrétní datovaný export LPIS DPB a doplňuje k němu jména uživatelů z aktuální veřejné WFS vrstvy. Jde o nejlepší veřejně dostupný hektarový proxy, ale ne o oficiální uzavřený výkaz podporovaných hektarů.',
+    rationale: 'U největších plošných opatření je hektar nejbližší věcný jmenovatel. Atlas jej používá jen pro area-family větev a jen nad uživateli, které se podaří spárovat s příjemcovskou vrstvou SZIF.',
+    url: 'https://mze.gov.cz/public/app/eagriapp/LpisData/Cr.aspx',
   },
   atlas_inferred: {
     datasetKey: 'atlas.inferred',

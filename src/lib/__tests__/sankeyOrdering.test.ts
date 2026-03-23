@@ -213,32 +213,32 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(tollLink)).toBe('transport_toll_vehicle');
   });
 
-  it('maps agriculture subsidy links to recipient-based normalization', () => {
-    const subsidyLink: SankeyLink = {
+  it('maps agriculture family links to the correct normalization groups', () => {
+    const recipientFamilyLink: SankeyLink = {
       source: 'agriculture:ministry:mze',
       target: 'agriculture:subsidy:total',
       value: 100,
       amountCzk: 100,
       year: 2024,
-      flowType: 'agriculture_subsidy_branch',
+      flowType: 'agriculture_subsidy_family_recipient',
       basis: 'allocated',
       certainty: 'observed',
       sourceDataset: 'test',
     };
-    const fundingLink: SankeyLink = {
-      ...subsidyLink,
-      target: 'agriculture:subsidy:eu',
-      flowType: 'agriculture_subsidy_funding',
+    const areaFamilyLink: SankeyLink = {
+      ...recipientFamilyLink,
+      target: 'agriculture:subsidy:family:area',
+      flowType: 'agriculture_subsidy_family_area',
     };
-    const recipientLink: SankeyLink = {
-      ...subsidyLink,
+    const recipientDetailLink: SankeyLink = {
+      ...recipientFamilyLink,
       target: 'agriculture:recipient:12345678',
-      flowType: 'agriculture_subsidy_recipient',
+      flowType: 'agriculture_subsidy_recipient_detail',
     };
 
-    expect(normalizationGroup(subsidyLink)).toBe('agriculture_subsidy_recipient');
-    expect(normalizationGroup(fundingLink)).toBe('agriculture_subsidy_recipient');
-    expect(normalizationGroup(recipientLink)).toBe('agriculture_subsidy_recipient');
+    expect(normalizationGroup(recipientFamilyLink)).toBe('agriculture_subsidy_recipient');
+    expect(normalizationGroup(areaFamilyLink)).toBe('agriculture_area_hectare');
+    expect(normalizationGroup(recipientDetailLink)).toBeNull();
   });
 
   it('normalizes transport investor drilldowns by project count', () => {
