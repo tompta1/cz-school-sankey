@@ -213,8 +213,12 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(tollLink)).toBe('transport_toll_vehicle');
   });
 
-  it('keeps transport investor drilldowns unsupported in normalized mode without capacities', () => {
-    const capacityMap = new Map<string, number>([['transport:sfdi:rail', 191893200]]);
+  it('normalizes transport investor drilldowns by project count', () => {
+    const capacityMap = new Map<string, number>([
+      ['transport:sfdi:rail', 191893200],
+      ['transport:investor:123', 4],
+      ['transport:project:1', 1],
+    ]);
     const branchLink: SankeyLink = {
       source: 'transport:ministry:md',
       target: 'transport:sfdi:rail',
@@ -238,8 +242,22 @@ describe('sankeyOrdering', () => {
       sourceDataset: 'test',
     };
 
+    const projectLink: SankeyLink = {
+      source: 'transport:investor:123',
+      target: 'transport:project:1',
+      value: 250000000,
+      amountCzk: 250000000,
+      year: 2024,
+      flowType: 'transport_sfdi_project',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+
     expect(normalizationCapacity(branchLink, capacityMap, true)).toBe(191893200);
-    expect(normalizationCapacity(investorLink, capacityMap, true)).toBeNull();
-    expect(normalizedValue(investorLink.amountCzk, normalizationCapacity(investorLink, capacityMap, true), true)).toBe(0);
+    expect(normalizationCapacity(investorLink, capacityMap, true)).toBe(4);
+    expect(normalizedValue(investorLink.amountCzk, normalizationCapacity(investorLink, capacityMap, true), true)).toBe(250000000);
+    expect(normalizationCapacity(projectLink, capacityMap, true)).toBe(1);
+    expect(normalizationGroup(projectLink)).toBe('transport_project_count');
   });
 });

@@ -87,6 +87,8 @@ function metricDescriptorForGroup(group: string | null, fallbackPerUnitLabel: st
       return { perUnitLabel: 'prodanou známku', countLabel: 'prodaných známek' };
     case 'transport_toll_vehicle':
       return { perUnitLabel: 'zpoplatněné vozidlo', countLabel: 'zpoplatněných vozidel' };
+    case 'transport_project_count':
+      return { perUnitLabel: 'akci', countLabel: 'akcí' };
     case 'justice_resolved_case':
       return { perUnitLabel: 'vyřízenou věc', countLabel: 'vyřízených věcí' };
     case 'justice_inmate':

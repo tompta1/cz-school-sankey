@@ -70,6 +70,7 @@ interface TransportInvestorAggregate {
   investorName: string;
   investorIco: string;
   paidCzk: number;
+  projectCount: number;
 }
 
 interface TransportBranchSummary extends TransportBranchConfig {
@@ -79,6 +80,7 @@ interface TransportBranchSummary extends TransportBranchConfig {
   note: string;
   sourceDataset: string;
   projectRows: TransportSfdiProject[];
+  allocationMultiplier: number;
 }
 
 type TransportProjectClass =
@@ -104,8 +106,8 @@ const TRANSPORT_INVESTOR_PREFIX = 'transport:investor:';
 const TRANSPORT_PROJECT_PREFIX = 'transport:project:';
 
 const TRANSPORT_BRANCHES: TransportBranchConfig[] = [
-  { id: TRANSPORT_ROADS_VIGNETTE_ID, name: 'Dalnice pro osobni auta', drilldownAvailable: false },
-  { id: TRANSPORT_ROADS_TOLL_ID, name: 'Mytna sit tezkych vozidel', drilldownAvailable: false },
+  { id: TRANSPORT_ROADS_VIGNETTE_ID, name: 'Dalnice pro osobni auta', drilldownAvailable: true },
+  { id: TRANSPORT_ROADS_TOLL_ID, name: 'Mytna sit tezkych vozidel', drilldownAvailable: true },
   { id: TRANSPORT_ROADS_OTHER_ID, name: 'Ostatni silnicni infrastruktura', drilldownAvailable: true },
   { id: TRANSPORT_RAIL_ID, name: 'Zeleznice', drilldownAvailable: true },
   { id: TRANSPORT_WATERWAYS_ID, name: 'Vodni cesty', drilldownAvailable: true },
@@ -198,6 +200,7 @@ function createTransportInvestorNode(row: TransportInvestorAggregate): AtlasNode
     category: 'other',
     level: 3,
     metadata: {
+      capacity: row.projectCount,
       focus: 'transport',
     },
   };
@@ -210,6 +213,7 @@ function createTransportProjectNode(row: TransportSfdiProject): AtlasNode {
     category: 'other',
     level: 4,
     metadata: {
+      capacity: 1,
       focus: 'transport',
     },
   };
@@ -325,8 +329,10 @@ function aggregateInvestors(rows: TransportSfdiProject[]): TransportInvestorAggr
       investorName: row.investorName,
       investorIco: row.investorIco,
       paidCzk: 0,
+      projectCount: 0,
     };
     existing.paidCzk += row.paidCzk;
+    existing.projectCount += 1;
     grouped.set(investorKey, existing);
   }
   return [...grouped.values()].sort(
@@ -506,7 +512,8 @@ function buildTransportBranchSummaries(
         year,
       ),
       sourceDataset: 'atlas.inferred',
-      projectRows: [],
+      projectRows: motorwayRows,
+      allocationMultiplier: vignetteShare,
     },
     {
       id: TRANSPORT_ROADS_TOLL_ID,
@@ -521,7 +528,8 @@ function buildTransportBranchSummaries(
         year,
       ),
       sourceDataset: 'atlas.inferred',
-      projectRows: [],
+      projectRows: motorwayRows,
+      allocationMultiplier: tollShare,
     },
     {
       id: TRANSPORT_ROADS_OTHER_ID,
@@ -533,6 +541,7 @@ function buildTransportBranchSummaries(
       note: 'Silniční projekty mimo dálniční tahy, ponechané bez srovnávací jednotky',
       sourceDataset: 'transport_sfdi_projects',
       projectRows: roadOtherRows,
+      allocationMultiplier: 1,
     },
     {
       id: TRANSPORT_RAIL_ID,
@@ -544,6 +553,7 @@ function buildTransportBranchSummaries(
       note: appendMetricCoverage('SFDI železniční projekty se srovnávací jednotkou podle počtu cestujících v železniční osobní dopravě', railMetric, year),
       sourceDataset: railMetric?.sourceDataset ?? 'transport_sfdi_projects',
       projectRows: railRows,
+      allocationMultiplier: 1,
     },
     {
       id: TRANSPORT_WATERWAYS_ID,
@@ -555,6 +565,7 @@ function buildTransportBranchSummaries(
       note: transportNote('branch'),
       sourceDataset: 'transport_sfdi_projects',
       projectRows: waterwaysRows,
+      allocationMultiplier: 1,
     },
     {
       id: TRANSPORT_URBAN_RAIL_ID,
@@ -566,6 +577,7 @@ function buildTransportBranchSummaries(
       note: transportNote('branch'),
       sourceDataset: 'transport_sfdi_projects',
       projectRows: urbanRailRows,
+      allocationMultiplier: 1,
     },
     {
       id: TRANSPORT_OTHER_ID,
@@ -577,6 +589,7 @@ function buildTransportBranchSummaries(
       note: transportNote('branch'),
       sourceDataset: 'transport_sfdi_projects',
       projectRows: otherRows,
+      allocationMultiplier: 1,
     },
   ].filter((summary) => summary.amount > 0);
 }
@@ -632,6 +645,7 @@ export function appendTransportBranch(
       note: 'Výdaje Ministerstva dopravy mimo projektové čerpání SFDI',
       sourceDataset: 'transport_budget_entities',
       projectRows: [],
+      allocationMultiplier: 1,
     };
     addNode(nodes, createTransportBranchNode(adminSummary));
     links.push(
@@ -673,6 +687,7 @@ export function appendTransportBranch(
       note: 'Rozdíl mezi výdaji SFDI z Monitoru a sumou projektového čerpání v otevřeném CSV',
       sourceDataset: 'transport_budget_entities',
       projectRows: [],
+      allocationMultiplier: 1,
     };
     addNode(nodes, createTransportBranchNode(residualSummary));
     links.push(
@@ -733,16 +748,19 @@ function buildTransportInvestorGraph(
   ];
 
   for (const investor of aggregateInvestors(branchProjects)) {
+    const investorAmount = investor.paidCzk * branchSummary.allocationMultiplier;
     addNode(nodes, createTransportInvestorNode(investor));
     links.push(
       makeLink(
         branchSummary.id,
         investorNodeId(investor.investorKey),
-        investor.paidCzk,
+        investorAmount,
         year,
         'transport_sfdi_investor',
-        transportNote('investor'),
-        'transport_sfdi_projects',
+        branchSummary.allocationMultiplier === 1
+          ? transportNote('investor')
+          : 'Investor allocation within a synthetically split motorway branch',
+        branchSummary.sourceDataset,
       ),
     );
   }
@@ -784,7 +802,17 @@ function buildTransportProjectGraph(
   const links: AtlasLink[] = [
     makeLink(STATE_ID, TRANSPORT_ROOT_ID, rootTotal, year, 'state_to_transport_resort', transportNote('root'), 'transport_budget_entities'),
     makeLink(TRANSPORT_ROOT_ID, branchSummary.id, branchSummary.amount, year, branchSummary.flowType, branchSummary.note, branchSummary.sourceDataset),
-    makeLink(branchSummary.id, investorNodeId(investor.investorKey), investor.paidCzk, year, 'transport_sfdi_investor', transportNote('investor'), 'transport_sfdi_projects'),
+    makeLink(
+      branchSummary.id,
+      investorNodeId(investor.investorKey),
+      investor.paidCzk * branchSummary.allocationMultiplier,
+      year,
+      'transport_sfdi_investor',
+      branchSummary.allocationMultiplier === 1
+        ? transportNote('investor')
+        : 'Investor allocation within a synthetically split motorway branch',
+      branchSummary.sourceDataset,
+    ),
   ];
 
   for (const row of investorProjects) {
@@ -793,11 +821,13 @@ function buildTransportProjectGraph(
       makeLink(
         investorNodeId(investor.investorKey),
         projectNodeId(row),
-        row.paidCzk,
+        row.paidCzk * branchSummary.allocationMultiplier,
         year,
         'transport_sfdi_project',
-        transportNote('project'),
-        row.sourceDataset,
+        branchSummary.allocationMultiplier === 1
+          ? transportNote('project')
+          : 'Project allocation within a synthetically split motorway branch',
+        branchSummary.sourceDataset,
       ),
     );
   }
