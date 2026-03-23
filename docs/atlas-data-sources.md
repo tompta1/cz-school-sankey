@@ -22,6 +22,7 @@ Current main source families:
 - Transport: Monitor MF for MD/SFDI, SFDI project execution CSVs, and annual transport usage proxies.
 - Agriculture: Monitor MF for MZe/SZIF administration and SZIF recipient payment lists for subsidy outflows.
 - Environment: Monitor MF for MŽP/SFŽP administration and the open SFŽP support registry for support-program drilldowns.
+- Regional development: MMR open budget CSVs and DotaceEU IROP recipient workbooks.
 
 Some links are intentionally synthetic:
 
@@ -48,6 +49,7 @@ Current branch metrics:
 - Agriculture area-linked subsidies: `Kč/ha`
 - Agriculture other subsidy families: `Kč/příjemce dotace`
 - Environment support programs: `Kč/příjemce podpory`
+- MMR project-backed branches: `Kč/příjemce podpory`
 
 Agriculture caveat:
 
@@ -62,6 +64,13 @@ Environment caveat:
 - the support-program and recipient drilldowns are then allocated by shares from the open SFŽP support registry
 - this is a strong public reconstruction of the support structure, but not a published annual SFŽP accounting split by program family
 - `SFZP podpory` therefore has a real top-level amount and a real recipient metric, while lower family and recipient amounts are explained synthetic allocations
+
+MMR caveat:
+
+- top-level MMR amounts come from the official open budget CSV of the ministry
+- recipient and IČO drilldown comes only from the public IROP workbook on DotaceEU
+- the regional-development and housing drilldowns therefore allocate the real MMR budget branches by IROP recipient shares
+- this gives a truthful recipient-level picture for the supported branches, but it is still an inferred join between chapter totals and project-register structure
 
 Why the transport branch is mixed:
 

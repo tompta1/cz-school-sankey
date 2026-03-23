@@ -34,6 +34,9 @@ const AGRICULTURE_ADMIN_ID = 'agriculture:admin';
 const ENVIRONMENT_ROOT_ID = 'environment:ministry:mzp';
 const ENVIRONMENT_SUPPORT_ID = 'environment:sfzp:support';
 const ENVIRONMENT_ADMIN_ID = 'environment:admin';
+const MMR_ROOT_ID = 'mmr:ministry:mmr';
+const MMR_BRANCH_REGION_ID = 'mmr:branch:regional';
+const MMR_BRANCH_HOUSING_ID = 'mmr:branch:housing';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -145,6 +148,13 @@ function isClickableEnvironmentNode(node: SankeyNode): boolean {
   return false;
 }
 
+function isClickableMmrNode(node: SankeyNode): boolean {
+  if (node.id === MMR_ROOT_ID) return true;
+  if (node.id === MMR_BRANCH_REGION_ID || node.id === MMR_BRANCH_HOUSING_ID) return true;
+  if (node.id.startsWith('mmr:region:')) return true;
+  return false;
+}
+
 export function AtlasDashboard() {
   const [years, setYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -214,6 +224,11 @@ export function AtlasDashboard() {
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
       if (currentView.offset > 0) params.set('offset', String(currentView.offset));
       path = `/api/atlas/environment?${params.toString()}`;
+    } else if (currentView.scope === 'mmr') {
+      const params = new URLSearchParams({ year: String(selectedYear) });
+      if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
+      if (currentView.offset > 0) params.set('offset', String(currentView.offset));
+      path = `/api/atlas/mmr?${params.toString()}`;
     } else if (currentView.scope === 'justice') {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
@@ -364,6 +379,22 @@ function handleMvNodeClick(node: SankeyNode) {
     setViewStack((prev) => pushAtlasView(prev, { scope: 'environment', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
+  function handleMmrNodeClick(node: SankeyNode) {
+    if (node.id === PREV_WINDOW_ID || node.id === NEXT_WINDOW_ID) {
+      setViewStack((prev) => {
+        const current = prev.at(-1);
+        if (!current || current.scope !== 'mmr') return prev;
+        const step = node.id === PREV_WINDOW_ID ? -28 : 28;
+        return pageAtlasView(prev, step);
+      });
+      return;
+    }
+
+    if (!isClickableMmrNode(node)) return;
+    const nextNodeId = node.id === MMR_ROOT_ID ? null : node.id;
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'mmr', nodeId: nextNodeId, label: node.name, offset: 0 }));
+  }
+
   function handleNodeClick(nodeId: string) {
     const node = graph?.nodes.find((entry) => entry.id === nodeId);
     if (!node) return;
@@ -387,6 +418,10 @@ function handleMvNodeClick(node: SankeyNode) {
       }
       if (node.id.startsWith('environment:')) {
         handleEnvironmentNodeClick(node);
+        return;
+      }
+      if (node.id.startsWith('mmr:')) {
+        handleMmrNodeClick(node);
         return;
       }
       if (node.id.startsWith('health:') || node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID) {
@@ -424,6 +459,11 @@ function handleMvNodeClick(node: SankeyNode) {
 
     if (currentView.scope === 'environment') {
       handleEnvironmentNodeClick(node);
+      return;
+    }
+
+    if (currentView.scope === 'mmr') {
+      handleMmrNodeClick(node);
       return;
     }
 

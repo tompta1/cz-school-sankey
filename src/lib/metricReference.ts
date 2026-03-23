@@ -117,6 +117,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Podpory SFŽP jsou porovnávány proti počtu jedinečných příjemců v otevřeném registru podpor za rok podpisu rozhodnutí.',
     rationale: 'U první iterace MŽP je počet příjemců nejbližší obhajitelný jmenovatel; atlas tím neříká nic o dopadu na emise či odpady, pouze o šíři dotační distribuce.',
   },
+  mmr_support_recipient: {
+    group: 'mmr_support_recipient',
+    perUnitLabel: 'příjemce podpory',
+    countLabel: 'příjemců podpory',
+    title: 'Kč/příjemce podpory',
+    description: 'Projektově podložené větve MMR jsou porovnávány proti počtu jedinečných příjemců IROP v otevřeném seznamu operací.',
+    rationale: 'Recipient-level IČO je v IROP workbooku zveřejněné přímo, takže jde o nejčistší první denominator bez předstírání počtu obyvatel, bytů nebo projektových uživatelů.',
+  },
   transport_rail_passenger: {
     group: 'transport_rail_passenger',
     perUnitLabel: 'cestujícího',

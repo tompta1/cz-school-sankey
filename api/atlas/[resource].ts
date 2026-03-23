@@ -3,6 +3,7 @@ import {
   getAtlasEnvironmentGraph,
   getAtlasHealthGraph,
   getAtlasJusticeGraph,
+  getAtlasMmrGraph,
   getAtlasMvGraph,
   getAtlasOverview,
   getAtlasTransportGraph,
@@ -101,6 +102,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const graph = await getAtlasEnvironmentGraph(year, nodeId, offset);
     if (!graph) return notFound(res, `No environment atlas data for year ${year}`);
+    return json(res, 200, graph);
+  }
+
+  if (resource === 'mmr') {
+    const year = Number(req.query.year);
+    if (!Number.isInteger(year)) return badRequest(res, 'Missing or invalid year');
+    const nodeId = typeof req.query.nodeId === 'string' ? req.query.nodeId.trim() : null;
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    if (!Number.isInteger(offset)) return badRequest(res, 'Invalid offset');
+
+    const graph = await getAtlasMmrGraph(year, nodeId, offset);
+    if (!graph) return notFound(res, `No MMR atlas data for year ${year}`);
     return json(res, 200, graph);
   }
 

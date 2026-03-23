@@ -170,6 +170,22 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     rationale: 'Pro první iteraci MŽP je to nejpraktičtější veřejný recipient-level zdroj. Používá se pro recipient counts a pro programové share při rozdělení skutečných výdajů SFŽP.',
     url: 'https://otevrenadata.sfzp.cz/',
   },
+  mmr_budget_aggregates: {
+    datasetKey: 'mmr_budget_aggregates',
+    title: 'MMR: otevřené rozpočtové ukazatele',
+    description: 'Oficiální CSV rozpočtových ukazatelů MMR po hlavních výdajových blocích.',
+    freshness: 'Roční otevřený CSV export. V atlasu jsou zatím nahrané roky 2024 a 2025.',
+    rationale: 'Je to nejjednodušší a nejpřímější otevřený top-level zdroj pro větev MMR.',
+    url: 'https://mmr.gov.cz/cs/ministerstvo/urad/povinne-zverejnene-informace/otevrena-data-mmr',
+  },
+  mmr_irop_operations: {
+    datasetKey: 'mmr_irop_operations',
+    title: 'DotaceEU / IROP: seznam operací příjemců',
+    description: 'Měsíční workbook operací s názvem projektu, příjemcem, IČ, krajem a přidělenými způsobilými výdaji.',
+    freshness: 'Průběžně aktualizovaný měsíční export. Atlas používá prosincové snapshoty pro 2024 a 2025.',
+    rationale: 'U MMR je to nejsilnější recipient-level otevřený zdroj, který umožňuje drilldown do kraje a IČO bez vymýšlení neveřejných vazeb.',
+    url: 'https://www.dotaceeu.cz/cs/informace-o-cerpani/seznamy-prijemcu',
+  },
   atlas_inferred: {
     datasetKey: 'atlas.inferred',
     title: 'Odvozené atlasové alokace',

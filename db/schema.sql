@@ -771,6 +771,52 @@ create index if not exists environment_sfzp_support_year_program_amount_idx
 create index if not exists environment_sfzp_support_year_recipient_idx
   on raw.environment_sfzp_support_yearly (reporting_year, recipient_key);
 
+create table if not exists raw.mmr_budget_aggregate (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  metric_code text not null,
+  metric_name text not null,
+  metric_group text not null,
+  amount_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mmr_budget_aggregate_year_code_idx
+  on raw.mmr_budget_aggregate (reporting_year, metric_code);
+
+create table if not exists raw.mmr_irop_operation_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  branch_code text not null,
+  branch_name text not null,
+  region_code text,
+  region_name text,
+  recipient_key text not null,
+  recipient_name text not null,
+  recipient_ico text,
+  project_id text not null,
+  project_name text not null,
+  priority_name text,
+  intervention_name text,
+  allocated_total_czk numeric(18,2) not null,
+  union_support_czk numeric(18,2) not null,
+  national_public_czk numeric(18,2) not null,
+  charged_total_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mmr_irop_operation_year_branch_region_idx
+  on raw.mmr_irop_operation_yearly (reporting_year, branch_code, region_code);
+
+create index if not exists mmr_irop_operation_year_recipient_idx
+  on raw.mmr_irop_operation_yearly (reporting_year, branch_code, recipient_key);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -1401,6 +1447,106 @@ select
   sum(paid_czk) as paid_czk
 from mart.environment_sfzp_support_yearly_latest
 group by reporting_year;
+
+create or replace view mart.mmr_budget_aggregate_latest as
+select distinct on (r.reporting_year, r.metric_code)
+  r.reporting_year,
+  r.metric_code,
+  r.metric_name,
+  r.metric_group,
+  r.amount_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mmr_budget_aggregate r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.metric_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mmr_irop_operation_yearly_latest as
+select distinct on (r.reporting_year, r.branch_code, r.project_id)
+  r.reporting_year,
+  r.branch_code,
+  r.branch_name,
+  r.region_code,
+  r.region_name,
+  r.recipient_key,
+  r.recipient_name,
+  r.recipient_ico,
+  r.project_id,
+  r.project_name,
+  r.priority_name,
+  r.intervention_name,
+  r.allocated_total_czk,
+  r.union_support_czk,
+  r.national_public_czk,
+  r.charged_total_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mmr_irop_operation_yearly r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.branch_code,
+  r.project_id,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mmr_irop_recipient_metric_latest as
+select
+  reporting_year,
+  branch_code,
+  max(branch_name) as branch_name,
+  count(distinct recipient_key)::integer as recipient_count,
+  count(*)::integer as project_count,
+  sum(allocated_total_czk) as allocated_total_czk,
+  sum(union_support_czk) as union_support_czk,
+  sum(national_public_czk) as national_public_czk,
+  sum(charged_total_czk) as charged_total_czk
+from mart.mmr_irop_operation_yearly_latest
+group by reporting_year, branch_code;
+
+create or replace view mart.mmr_irop_region_metric_latest as
+select
+  reporting_year,
+  branch_code,
+  max(branch_name) as branch_name,
+  coalesce(region_code, 'UNKNOWN') as region_code,
+  max(coalesce(region_name, 'Neurceny kraj')) as region_name,
+  count(distinct recipient_key)::integer as recipient_count,
+  count(*)::integer as project_count,
+  sum(allocated_total_czk) as allocated_total_czk,
+  sum(union_support_czk) as union_support_czk,
+  sum(national_public_czk) as national_public_czk,
+  sum(charged_total_czk) as charged_total_czk
+from mart.mmr_irop_operation_yearly_latest
+group by reporting_year, branch_code, coalesce(region_code, 'UNKNOWN');
+
+create or replace view mart.mmr_irop_recipient_yearly_latest as
+select
+  reporting_year,
+  branch_code,
+  max(branch_name) as branch_name,
+  coalesce(region_code, 'UNKNOWN') as region_code,
+  max(coalesce(region_name, 'Neurceny kraj')) as region_name,
+  recipient_key,
+  max(recipient_name) as recipient_name,
+  max(recipient_ico) as recipient_ico,
+  count(*)::integer as project_count,
+  sum(allocated_total_czk) as allocated_total_czk,
+  sum(union_support_czk) as union_support_czk,
+  sum(national_public_czk) as national_public_czk,
+  sum(charged_total_czk) as charged_total_czk
+from mart.mmr_irop_operation_yearly_latest
+group by reporting_year, branch_code, coalesce(region_code, 'UNKNOWN'), recipient_key;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

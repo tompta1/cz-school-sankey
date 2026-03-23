@@ -236,6 +236,36 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(recipientLink)).toBe('environment_support_recipient');
   });
 
+  it('maps MMR supported branches to recipient metrics', () => {
+    const branchLink: SankeyLink = {
+      source: 'mmr:ministry:mmr',
+      target: 'mmr:branch:regional',
+      value: 100,
+      amountCzk: 100,
+      year: 2025,
+      flowType: 'mmr_budget_group',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const regionLink: SankeyLink = {
+      ...branchLink,
+      source: 'mmr:branch:regional',
+      target: 'mmr:region:regional|CZ020',
+      flowType: 'mmr_irop_region_allocated',
+    };
+    const recipientLink: SankeyLink = {
+      ...branchLink,
+      source: 'mmr:region:regional|CZ020',
+      target: 'mmr:recipient:regional|00266094',
+      flowType: 'mmr_irop_recipient_allocated',
+    };
+
+    expect(normalizationGroup(branchLink)).toBe('mmr_support_recipient');
+    expect(normalizationGroup(regionLink)).toBe('mmr_support_recipient');
+    expect(normalizationGroup(recipientLink)).toBe('mmr_support_recipient');
+  });
+
   it('maps agriculture family links to the correct normalization groups', () => {
     const recipientFamilyLink: SankeyLink = {
       source: 'agriculture:ministry:mze',

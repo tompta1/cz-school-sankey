@@ -90,6 +90,16 @@ export function normalizationGroup(link: SankeyLink): string | null {
     return 'environment_support_recipient';
   }
 
+  if (
+    (link.flowType === 'mmr_budget_group' &&
+      (link.target === 'mmr:branch:regional' || link.target === 'mmr:branch:housing')) ||
+    link.flowType === 'mmr_irop_region_allocated' ||
+    link.flowType === 'mmr_irop_recipient_allocated' ||
+    link.flowType === 'mmr_irop_recipient_page'
+  ) {
+    return 'mmr_support_recipient';
+  }
+
   if (link.flowType === 'justice_branch_cost') {
     if (link.target === 'justice:courts') return 'justice_resolved_case';
     if (link.target === 'justice:prison-service') return 'justice_inmate';

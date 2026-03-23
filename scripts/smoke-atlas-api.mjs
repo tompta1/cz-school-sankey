@@ -38,6 +38,10 @@ async function main() {
     overview2024.links.some((link) => link.target === 'environment:ministry:mzp'),
     'overview 2024 is missing environment root link',
   );
+  assert(
+    overview2024.links.some((link) => link.target === 'mmr:ministry:mmr'),
+    'overview 2024 is missing MMR root link',
+  );
 
   const transport2024 = await fetchJson('/api/atlas/transport?year=2024');
   assert(
@@ -93,6 +97,18 @@ async function main() {
   assert(
     environmentSupport2024.nodes.some((node) => node.id.startsWith('environment:family:')),
     'environment 2024 is missing support-family drilldown',
+  );
+
+  const mmr2024 = await fetchJson('/api/atlas/mmr?year=2024');
+  assert(
+    mmr2024.nodes.some((node) => node.id === 'mmr:branch:regional' && node.metadata?.capacity),
+    'MMR 2024 is missing recipient-backed regional branch',
+  );
+
+  const mmrRegional2024 = await fetchJson('/api/atlas/mmr?year=2024&nodeId=mmr:branch:regional');
+  assert(
+    mmrRegional2024.nodes.some((node) => node.id.startsWith('mmr:region:')),
+    'MMR 2024 is missing regional drilldown',
   );
 
   console.log(`Atlas smoke checks passed for ${baseUrl}`);
