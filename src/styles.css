@@ -198,6 +198,136 @@ button, select, input { font: inherit; }
 /* Mobile search icon toggle — hidden on desktop */
 .search-icon-btn { display: none; }
 
+.reference-backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: rgba(2, 6, 23, 0.46);
+  z-index: 29;
+}
+
+.reference-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(480px, 100vw);
+  height: 100dvh;
+  padding: 20px 18px 24px;
+  background: rgba(7, 13, 26, 0.98);
+  border-left: 1px solid rgba(148,163,184,0.16);
+  box-shadow: -20px 0 48px rgba(0,0,0,0.42);
+  backdrop-filter: blur(16px);
+  z-index: 30;
+  overflow-y: auto;
+  transform: translateX(102%);
+  transition: transform 0.18s ease;
+}
+
+.reference-panel--open {
+  transform: translateX(0);
+}
+
+.reference-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.reference-panel__eyebrow {
+  color: rgba(125,211,252,0.78);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.reference-panel__title {
+  font-size: 1.2rem;
+  color: #f8fbff;
+}
+
+.reference-panel__close {
+  border: 1px solid rgba(148,163,184,0.22);
+  background: rgba(15,23,42,0.9);
+  color: #cbd5e1;
+  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.reference-panel__section {
+  margin-bottom: 20px;
+}
+
+.reference-panel__section h3 {
+  font-size: 0.96rem;
+  color: #e5eefc;
+  margin-bottom: 10px;
+}
+
+.reference-panel__section p {
+  color: rgba(226,232,240,0.86);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.reference-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reference-card {
+  border: 1px solid rgba(148,163,184,0.14);
+  background: rgba(15,23,42,0.72);
+  border-radius: 14px;
+  padding: 12px 13px;
+}
+
+.reference-card__title {
+  color: #f8fbff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.reference-card__title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.reference-card__title a:hover {
+  text-decoration: underline;
+}
+
+.reference-card__text {
+  color: rgba(226,232,240,0.88);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.reference-card__meta {
+  color: rgba(148,163,184,0.82);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.reference-note-list {
+  padding-left: 18px;
+  color: rgba(226,232,240,0.88);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* ── Chart area ──────────────────────────────────────────── */
 
 .chart-area {
@@ -988,6 +1118,11 @@ button, select, input { font: inherit; }
   .year-toggle-btn {
     font-size: 0.78rem;
     padding: 4px 8px;
+  }
+
+  .reference-panel {
+    width: 100vw;
+    padding: 18px 16px 22px;
   }
 
   .health-shell {

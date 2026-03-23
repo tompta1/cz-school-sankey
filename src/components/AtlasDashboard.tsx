@@ -13,6 +13,7 @@ import {
 } from '../lib/graph';
 import { formatCompactCzk } from '../lib/format';
 import type { ApiGraph, AtlasSearchHit, AtlasSearchResponse, AtlasYearsResponse, HoverInfo, SankeyNode } from '../types';
+import { AtlasReferencePanel } from './AtlasReferencePanel';
 import { SankeyChartCard } from './SankeyChartCard';
 
 const ROOT_TITLE = 'Sjednoceny Sankey';
@@ -124,6 +125,7 @@ export function AtlasDashboard() {
   const [searchResults, setSearchResults] = useState<AtlasSearchHit[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   const currentView = viewStack.at(-1) ?? { scope: 'root' as const };
@@ -383,7 +385,7 @@ function handleMvNodeClick(node: SankeyNode) {
                 {viewStack.map((entry) => entry.label).join(' › ')}
               </span>
             ) : (
-              <span className="topbar__hover-context">Rok {selectedYear} · {perPerson ? 'srovnávací metrika' : 'náklady'}</span>
+              <span className="topbar__hover-context">Rok {selectedYear} · {perPerson ? 'srovnávací metrika' : 'celkem'}</span>
             )}
           </div>
 
@@ -406,6 +408,12 @@ function handleMvNodeClick(node: SankeyNode) {
                 {year}
               </button>
             ))}
+            <button
+              className={`year-toggle-btn${referenceOpen ? ' year-toggle-btn--active' : ''}`}
+              onClick={() => setReferenceOpen((value) => !value)}
+            >
+              Metodika
+            </button>
             <button
               className="search-icon-btn"
               onClick={() => setSearchExpanded((value) => !value)}
@@ -472,6 +480,14 @@ function handleMvNodeClick(node: SankeyNode) {
           onLinkHover={setHoverInfo}
         />
       </div>
+
+      <AtlasReferencePanel
+        open={referenceOpen}
+        onClose={() => setReferenceOpen(false)}
+        graph={graph}
+        perUnit={perPerson}
+        selectedYear={selectedYear}
+      />
 
       {error && <div className="atlas-error atlas-error--inline">Chyba API: {error}</div>}
     </div>
