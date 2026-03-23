@@ -110,8 +110,6 @@ export function normalizationGroup(link: SankeyLink): string | null {
   }
 
   if (
-    link.flowType === 'mk_support_culture_branch' ||
-    link.flowType === 'mk_support_heritage_branch' ||
     link.flowType === 'mk_support_program' ||
     link.flowType === 'mk_support_recipient' ||
     link.flowType === 'mk_support_region' ||

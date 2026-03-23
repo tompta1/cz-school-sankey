@@ -296,7 +296,7 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(recipientLink)).toBe('mpo_support_recipient');
   });
 
-  it('maps MK supported branches to recipient metrics', () => {
+  it('normalizes only explicit MK support drilldowns', () => {
     const branchLink: SankeyLink = {
       source: 'mk:ministry:mk',
       target: 'mk:support:heritage',
@@ -321,7 +321,7 @@ describe('sankeyOrdering', () => {
       flowType: 'mk_support_region',
     };
 
-    expect(normalizationGroup(branchLink)).toBe('mk_support_recipient');
+    expect(normalizationGroup(branchLink)).toBeNull();
     expect(normalizationGroup(programLink)).toBe('mk_support_recipient');
     expect(normalizationGroup(regionLink)).toBe('mk_support_recipient');
   });
