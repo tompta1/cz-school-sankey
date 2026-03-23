@@ -946,6 +946,72 @@ create index if not exists mk_region_metric_year_program_idx
 create index if not exists mk_region_metric_year_region_idx
   on raw.mk_region_metric (reporting_year, region_code);
 
+create table if not exists raw.mzv_budget_entity (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  period_code text not null,
+  entity_ico text not null,
+  entity_name text not null,
+  entity_kind text not null,
+  expenses_czk numeric(18,2) not null,
+  costs_czk numeric(18,2) not null,
+  revenues_czk numeric(18,2) not null,
+  result_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mzv_budget_entity_year_ico_idx
+  on raw.mzv_budget_entity (reporting_year, entity_ico);
+
+create table if not exists raw.mzv_diplomatic_metric (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  metric_code text not null,
+  metric_name text not null,
+  count_value integer not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mzv_diplomatic_metric_year_code_idx
+  on raw.mzv_diplomatic_metric (reporting_year, metric_code);
+
+create table if not exists raw.mzv_aid_operation_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  branch_code text not null,
+  branch_name text not null,
+  source_workbook text not null,
+  section_code text,
+  section_name text,
+  country_name text not null,
+  sector_name text,
+  manager_code text,
+  manager_name text,
+  recipient_key text not null,
+  recipient_name text not null,
+  recipient_ico text,
+  project_key text not null,
+  project_name text not null,
+  planned_czk numeric(18,2) not null,
+  actual_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mzv_aid_operation_year_branch_country_idx
+  on raw.mzv_aid_operation_yearly (reporting_year, branch_code, country_name);
+
+create index if not exists mzv_aid_operation_year_project_idx
+  on raw.mzv_aid_operation_yearly (reporting_year, project_key);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -1898,6 +1964,127 @@ select
   sum(awarded_czk) as awarded_czk
 from mart.mk_support_award_latest
 group by reporting_year, program_code, recipient_key;
+
+create or replace view mart.mzv_budget_entity_latest as
+select distinct on (r.reporting_year, r.entity_ico)
+  r.reporting_year,
+  r.period_code,
+  r.entity_ico,
+  r.entity_name,
+  r.entity_kind,
+  r.expenses_czk,
+  r.costs_czk,
+  r.revenues_czk,
+  r.result_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mzv_budget_entity r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.entity_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mzv_diplomatic_metric_latest as
+select distinct on (r.reporting_year, r.metric_code)
+  r.reporting_year,
+  r.metric_code,
+  r.metric_name,
+  r.count_value,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mzv_diplomatic_metric r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.metric_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mzv_aid_operation_yearly_latest as
+select distinct on (r.reporting_year, r.source_workbook, r.project_key)
+  r.reporting_year,
+  r.branch_code,
+  r.branch_name,
+  r.source_workbook,
+  r.section_code,
+  r.section_name,
+  r.country_name,
+  r.sector_name,
+  r.manager_code,
+  r.manager_name,
+  r.recipient_key,
+  r.recipient_name,
+  r.recipient_ico,
+  r.project_key,
+  r.project_name,
+  r.planned_czk,
+  r.actual_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mzv_aid_operation_yearly r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.source_workbook,
+  r.project_key,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mzv_aid_branch_metric_latest as
+select
+  reporting_year,
+  branch_code,
+  max(branch_name) as branch_name,
+  count(*)::integer as project_count,
+  count(distinct recipient_key)::integer as recipient_count,
+  sum(actual_czk) as actual_czk,
+  sum(planned_czk) as planned_czk
+from mart.mzv_aid_operation_yearly_latest
+group by reporting_year, branch_code;
+
+create or replace view mart.mzv_aid_country_metric_latest as
+select
+  reporting_year,
+  branch_code,
+  max(branch_name) as branch_name,
+  country_name,
+  count(*)::integer as project_count,
+  count(distinct recipient_key)::integer as recipient_count,
+  sum(actual_czk) as actual_czk,
+  sum(planned_czk) as planned_czk
+from mart.mzv_aid_operation_yearly_latest
+group by reporting_year, branch_code, country_name;
+
+create or replace view mart.mzv_aid_project_latest as
+select
+  reporting_year,
+  branch_code,
+  max(branch_name) as branch_name,
+  country_name,
+  project_key,
+  max(project_name) as project_name,
+  max(recipient_key) as recipient_key,
+  max(recipient_name) as recipient_name,
+  max(recipient_ico) as recipient_ico,
+  max(sector_name) as sector_name,
+  max(manager_code) as manager_code,
+  max(manager_name) as manager_name,
+  max(source_workbook) as source_workbook,
+  sum(actual_czk) as actual_czk,
+  sum(planned_czk) as planned_czk
+from mart.mzv_aid_operation_yearly_latest
+group by reporting_year, branch_code, country_name, project_key;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

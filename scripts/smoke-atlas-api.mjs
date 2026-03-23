@@ -50,6 +50,10 @@ async function main() {
     overview2024.links.some((link) => link.target === 'mk:ministry:mk'),
     'overview 2024 is missing MK root link',
   );
+  assert(
+    overview2024.links.some((link) => link.target === 'mzv:ministry:mzv'),
+    'overview 2024 is missing MZV root link',
+  );
 
   const transport2024 = await fetchJson('/api/atlas/transport?year=2024');
   assert(
@@ -153,6 +157,32 @@ async function main() {
   assert(
     mkCulture2024.nodes.some((node) => node.id === 'mk:program:culture-museums'),
     'MK 2024 is missing culture subprogram node',
+  );
+
+  const mzv2024 = await fetchJson('/api/atlas/mzv?year=2024');
+  assert(
+    mzv2024.nodes.some((node) => node.id === 'mzv:foreign-service' && node.metadata?.capacity),
+    'MZV 2024 is missing foreign service branch',
+  );
+  assert(
+    mzv2024.nodes.some((node) => node.id === 'mzv:aid:development' && node.metadata?.capacity),
+    'MZV 2024 is missing development aid branch',
+  );
+  assert(
+    mzv2024.nodes.some((node) => node.id === 'mzv:aid:humanitarian' && node.metadata?.capacity),
+    'MZV 2024 is missing humanitarian aid branch',
+  );
+
+  const mzvDevelopment2024 = await fetchJson('/api/atlas/mzv?year=2024&nodeId=mzv:aid:development');
+  assert(
+    mzvDevelopment2024.nodes.some((node) => node.id.startsWith('mzv:country:development|')),
+    'MZV 2024 is missing development country drilldown',
+  );
+
+  const mzvForeignService2024 = await fetchJson('/api/atlas/mzv?year=2024&nodeId=mzv:foreign-service');
+  assert(
+    mzvForeignService2024.nodes.some((node) => node.id === 'mzv:post-type:embassy'),
+    'MZV 2024 is missing foreign-post type drilldown',
   );
 
   console.log(`Atlas smoke checks passed for ${baseUrl}`);

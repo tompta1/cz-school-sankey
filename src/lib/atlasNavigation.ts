@@ -8,6 +8,7 @@ export type AtlasDrilldownState =
   | { scope: 'mmr'; nodeId: string | null; label: string; offset: number }
   | { scope: 'mpo'; nodeId: string | null; label: string; offset: number }
   | { scope: 'mk'; nodeId: string | null; label: string; offset: number }
+  | { scope: 'mzv'; nodeId: string | null; label: string; offset: number }
   | { scope: 'justice'; nodeId: string | null; label: string; offset: number };
 
 export function pushAtlasView(

@@ -44,6 +44,10 @@ const MK_CULTURE_ID = 'mk:support:culture';
 const MK_HERITAGE_ID = 'mk:support:heritage';
 const MK_CULTURE_PROGRAM_ID = 'mk:program:culture-museums';
 const MK_HERITAGE_PROGRAM_ID = 'mk:program:pzad';
+const MZV_ROOT_ID = 'mzv:ministry:mzv';
+const MZV_FOREIGN_SERVICE_ID = 'mzv:foreign-service';
+const MZV_DEVELOPMENT_ID = 'mzv:aid:development';
+const MZV_HUMANITARIAN_ID = 'mzv:aid:humanitarian';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -177,6 +181,15 @@ function isClickableMkNode(node: SankeyNode): boolean {
   return false;
 }
 
+function isClickableMzvNode(node: SankeyNode): boolean {
+  if (node.id === MZV_ROOT_ID) return true;
+  if (node.id === MZV_FOREIGN_SERVICE_ID) return true;
+  if (node.id === MZV_DEVELOPMENT_ID) return true;
+  if (node.id === MZV_HUMANITARIAN_ID) return true;
+  if (node.id.startsWith('mzv:country:')) return true;
+  return false;
+}
+
 export function AtlasDashboard() {
   const [years, setYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -261,6 +274,10 @@ export function AtlasDashboard() {
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
       if (currentView.offset > 0) params.set('offset', String(currentView.offset));
       path = `/api/atlas/mk?${params.toString()}`;
+    } else if (currentView.scope === 'mzv') {
+      const params = new URLSearchParams({ year: String(selectedYear) });
+      if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
+      path = `/api/atlas/mzv?${params.toString()}`;
     } else if (currentView.scope === 'justice') {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
@@ -459,6 +476,12 @@ function handleMvNodeClick(node: SankeyNode) {
     setViewStack((prev) => pushAtlasView(prev, { scope: 'mk', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
+  function handleMzvNodeClick(node: SankeyNode) {
+    if (!isClickableMzvNode(node)) return;
+    const nextNodeId = node.id === MZV_ROOT_ID ? null : node.id;
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'mzv', nodeId: nextNodeId, label: node.name, offset: 0 }));
+  }
+
   function handleNodeClick(nodeId: string) {
     const node = graph?.nodes.find((entry) => entry.id === nodeId);
     if (!node) return;
@@ -494,6 +517,10 @@ function handleMvNodeClick(node: SankeyNode) {
       }
       if (node.id.startsWith('mk:')) {
         handleMkNodeClick(node);
+        return;
+      }
+      if (node.id.startsWith('mzv:')) {
+        handleMzvNodeClick(node);
         return;
       }
       if (node.id.startsWith('health:') || node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID) {
@@ -546,6 +573,11 @@ function handleMvNodeClick(node: SankeyNode) {
 
     if (currentView.scope === 'mk') {
       handleMkNodeClick(node);
+      return;
+    }
+
+    if (currentView.scope === 'mzv') {
+      handleMzvNodeClick(node);
       return;
     }
 

@@ -173,6 +173,22 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Investor a projekt v dopravě jsou v drilldownu porovnávány podle počtu akcí.',
     rationale: 'Na detailní úrovni už nejsou k dispozici věrohodné provozní denominátory, proto se vracíme k projektové granularitě.',
   },
+  mzv_foreign_post: {
+    group: 'mzv_foreign_post',
+    perUnitLabel: 'zastupitelský úřad',
+    countLabel: 'zastupitelských úřadů',
+    title: 'Kč/zastupitelský úřad',
+    description: 'Reziduální provoz zahraniční služby vztažený k počtu zastupitelských úřadů a úřadů ČR v zahraničí.',
+    rationale: 'U zahraniční služby je počet úřadů nejčitelnější veřejně dostupný denominátor; detailní provozní data po ambasádách MZV nepublikuje.',
+  },
+  mzv_aid_project: {
+    group: 'mzv_aid_project',
+    perUnitLabel: 'projekt',
+    countLabel: 'projektů',
+    title: 'Kč/projekt',
+    description: 'Rozvojová a humanitární pomoc MZV/ČRA vztažená k počtu explicitně zveřejněných projektů.',
+    rationale: 'Výroční workbooky MZV a ČRA zveřejňují projektové řádky přímo, takže projekt je nejčistší srovnávací jednotka pro tuto větev.',
+  },
 };
 
 export function metricDescriptorForGroup(
