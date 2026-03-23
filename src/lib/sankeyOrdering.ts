@@ -100,6 +100,15 @@ export function normalizationGroup(link: SankeyLink): string | null {
     return 'mmr_support_recipient';
   }
 
+  if (
+    link.flowType === 'mpo_optak_support_branch' ||
+    link.flowType === 'mpo_optak_region_allocated' ||
+    link.flowType === 'mpo_optak_recipient_allocated' ||
+    link.flowType === 'mpo_optak_recipient_page'
+  ) {
+    return 'mpo_support_recipient';
+  }
+
   if (link.flowType === 'justice_branch_cost') {
     if (link.target === 'justice:courts') return 'justice_resolved_case';
     if (link.target === 'justice:prison-service') return 'justice_inmate';

@@ -6,6 +6,7 @@ export type AtlasDrilldownState =
   | { scope: 'agriculture'; nodeId: string | null; label: string; offset: number }
   | { scope: 'environment'; nodeId: string | null; label: string; offset: number }
   | { scope: 'mmr'; nodeId: string | null; label: string; offset: number }
+  | { scope: 'mpo'; nodeId: string | null; label: string; offset: number }
   | { scope: 'justice'; nodeId: string | null; label: string; offset: number };
 
 export function pushAtlasView(

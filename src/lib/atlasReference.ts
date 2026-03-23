@@ -186,6 +186,22 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     rationale: 'U MMR je to nejsilnější recipient-level otevřený zdroj, který umožňuje drilldown do kraje a IČO bez vymýšlení neveřejných vazeb.',
     url: 'https://www.dotaceeu.cz/cs/informace-o-cerpani/seznamy-prijemcu',
   },
+  mpo_budget_entities: {
+    datasetKey: 'mpo_budget_entities',
+    title: 'Monitor MF: MPO',
+    description: 'Roční rozpočtové a nákladové údaje Ministerstva průmyslu a obchodu.',
+    freshness: 'Roční účetní data. V atlasu jsou nahrané roky 2024 a 2025.',
+    rationale: 'Dává skutečný horní výdajový obal pro MPO, i když detailní recipient-level drilldown je zatím dostupný jen pro dotační část.',
+    url: 'https://monitor.statnipokladna.gov.cz',
+  },
+  mpo_optak_operations: {
+    datasetKey: 'mpo_optak_operations',
+    title: 'DotaceEU / OP TAK: seznam operací příjemců',
+    description: 'Měsíční workbook 2021+ programů s projektem, příjemcem, IČ, krajem a přidělenými způsobilými výdaji. Atlas z něj používá program OP TAK.',
+    freshness: 'Průběžně aktualizovaný měsíční export. Atlas používá prosincové snapshoty pro 2024 a 2025.',
+    rationale: 'Je to nejsilnější veřejný recipient-level zdroj pro dotační větev MPO a umožňuje drilldown až do IČO.',
+    url: 'https://www.dotaceeu.cz/cs/statistiky-a-analyzy/seznam-operaci-%28prijemcu%29',
+  },
   atlas_inferred: {
     datasetKey: 'atlas.inferred',
     title: 'Odvozené atlasové alokace',

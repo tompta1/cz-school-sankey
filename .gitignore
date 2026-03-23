@@ -24,5 +24,6 @@ etl/data/raw/transport/
 etl/data/raw/agriculture/
 etl/data/raw/environment/
 etl/data/raw/mmr/
+etl/data/raw/mpo/
 .vercel
 .neon

@@ -125,6 +125,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Projektově podložené větve MMR jsou porovnávány proti počtu jedinečných příjemců IROP v otevřeném seznamu operací.',
     rationale: 'Recipient-level IČO je v IROP workbooku zveřejněné přímo, takže jde o nejčistší první denominator bez předstírání počtu obyvatel, bytů nebo projektových uživatelů.',
   },
+  mpo_support_recipient: {
+    group: 'mpo_support_recipient',
+    perUnitLabel: 'příjemce podpory',
+    countLabel: 'příjemců podpory',
+    title: 'Kč/příjemce podpory',
+    description: 'Podpory MPO jsou v první iteraci porovnávány proti počtu jedinečných příjemců OP TAK v otevřeném seznamu operací.',
+    rationale: 'U MPO je recipient-level IČO v OP TAK workbooku veřejné a stabilní, takže jde o nejlepší první jmenovatel bez předstírání výrobních, exportních nebo energetických efektů.',
+  },
   transport_rail_passenger: {
     group: 'transport_rail_passenger',
     perUnitLabel: 'cestujícího',

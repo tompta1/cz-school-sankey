@@ -37,6 +37,8 @@ const ENVIRONMENT_ADMIN_ID = 'environment:admin';
 const MMR_ROOT_ID = 'mmr:ministry:mmr';
 const MMR_BRANCH_REGION_ID = 'mmr:branch:regional';
 const MMR_BRANCH_HOUSING_ID = 'mmr:branch:housing';
+const MPO_ROOT_ID = 'mpo:ministry:mpo';
+const MPO_SUPPORT_ID = 'mpo:optak:support';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -155,6 +157,12 @@ function isClickableMmrNode(node: SankeyNode): boolean {
   return false;
 }
 
+function isClickableMpoNode(node: SankeyNode): boolean {
+  if (node.id === MPO_ROOT_ID) return true;
+  if (node.id === MPO_SUPPORT_ID) return true;
+  return false;
+}
+
 export function AtlasDashboard() {
   const [years, setYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -229,6 +237,11 @@ export function AtlasDashboard() {
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
       if (currentView.offset > 0) params.set('offset', String(currentView.offset));
       path = `/api/atlas/mmr?${params.toString()}`;
+    } else if (currentView.scope === 'mpo') {
+      const params = new URLSearchParams({ year: String(selectedYear) });
+      if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
+      if (currentView.offset > 0) params.set('offset', String(currentView.offset));
+      path = `/api/atlas/mpo?${params.toString()}`;
     } else if (currentView.scope === 'justice') {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
@@ -395,6 +408,22 @@ function handleMvNodeClick(node: SankeyNode) {
     setViewStack((prev) => pushAtlasView(prev, { scope: 'mmr', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
+  function handleMpoNodeClick(node: SankeyNode) {
+    if (node.id === PREV_WINDOW_ID || node.id === NEXT_WINDOW_ID) {
+      setViewStack((prev) => {
+        const current = prev.at(-1);
+        if (!current || current.scope !== 'mpo') return prev;
+        const step = node.id === PREV_WINDOW_ID ? -28 : 28;
+        return pageAtlasView(prev, step);
+      });
+      return;
+    }
+
+    if (!isClickableMpoNode(node)) return;
+    const nextNodeId = node.id === MPO_ROOT_ID ? null : node.id;
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'mpo', nodeId: nextNodeId, label: node.name, offset: 0 }));
+  }
+
   function handleNodeClick(nodeId: string) {
     const node = graph?.nodes.find((entry) => entry.id === nodeId);
     if (!node) return;
@@ -422,6 +451,10 @@ function handleMvNodeClick(node: SankeyNode) {
       }
       if (node.id.startsWith('mmr:')) {
         handleMmrNodeClick(node);
+        return;
+      }
+      if (node.id.startsWith('mpo:')) {
+        handleMpoNodeClick(node);
         return;
       }
       if (node.id.startsWith('health:') || node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID) {
@@ -464,6 +497,11 @@ function handleMvNodeClick(node: SankeyNode) {
 
     if (currentView.scope === 'mmr') {
       handleMmrNodeClick(node);
+      return;
+    }
+
+    if (currentView.scope === 'mpo') {
+      handleMpoNodeClick(node);
       return;
     }
 

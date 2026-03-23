@@ -266,6 +266,36 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(recipientLink)).toBe('mmr_support_recipient');
   });
 
+  it('maps MPO supported branches to recipient metrics', () => {
+    const branchLink: SankeyLink = {
+      source: 'mpo:ministry:mpo',
+      target: 'mpo:optak:support',
+      value: 100,
+      amountCzk: 100,
+      year: 2025,
+      flowType: 'mpo_optak_support_branch',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const regionLink: SankeyLink = {
+      ...branchLink,
+      source: 'mpo:optak:support',
+      target: 'mpo:region:CZ020',
+      flowType: 'mpo_optak_region_allocated',
+    };
+    const recipientLink: SankeyLink = {
+      ...branchLink,
+      source: 'mpo:region:CZ020',
+      target: 'mpo:recipient:12345678',
+      flowType: 'mpo_optak_recipient_allocated',
+    };
+
+    expect(normalizationGroup(branchLink)).toBe('mpo_support_recipient');
+    expect(normalizationGroup(regionLink)).toBe('mpo_support_recipient');
+    expect(normalizationGroup(recipientLink)).toBe('mpo_support_recipient');
+  });
+
   it('maps agriculture family links to the correct normalization groups', () => {
     const recipientFamilyLink: SankeyLink = {
       source: 'agriculture:ministry:mze',

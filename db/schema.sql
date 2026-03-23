@@ -817,6 +817,55 @@ create index if not exists mmr_irop_operation_year_branch_region_idx
 create index if not exists mmr_irop_operation_year_recipient_idx
   on raw.mmr_irop_operation_yearly (reporting_year, branch_code, recipient_key);
 
+create table if not exists raw.mpo_budget_entity (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  period_code text not null,
+  entity_ico text not null,
+  entity_name text not null,
+  entity_kind text not null,
+  expenses_czk numeric(18,2) not null,
+  costs_czk numeric(18,2) not null,
+  revenues_czk numeric(18,2) not null,
+  result_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mpo_budget_entity_year_ico_idx
+  on raw.mpo_budget_entity (reporting_year, entity_ico);
+
+create table if not exists raw.mpo_optak_operation_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  region_code text,
+  region_name text,
+  recipient_key text not null,
+  recipient_name text not null,
+  recipient_ico text,
+  project_id text not null,
+  project_name text not null,
+  priority_name text,
+  specific_objective_name text,
+  intervention_name text,
+  allocated_total_czk numeric(18,2) not null,
+  union_support_czk numeric(18,2) not null,
+  national_public_czk numeric(18,2) not null,
+  charged_total_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mpo_optak_operation_year_region_idx
+  on raw.mpo_optak_operation_yearly (reporting_year, region_code);
+
+create index if not exists mpo_optak_operation_year_recipient_idx
+  on raw.mpo_optak_operation_yearly (reporting_year, recipient_key);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -1547,6 +1596,102 @@ select
   sum(charged_total_czk) as charged_total_czk
 from mart.mmr_irop_operation_yearly_latest
 group by reporting_year, branch_code, coalesce(region_code, 'UNKNOWN'), recipient_key;
+
+create or replace view mart.mpo_budget_entity_latest as
+select distinct on (r.reporting_year, r.entity_ico)
+  r.reporting_year,
+  r.period_code,
+  r.entity_ico,
+  r.entity_name,
+  r.entity_kind,
+  r.expenses_czk,
+  r.costs_czk,
+  r.revenues_czk,
+  r.result_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mpo_budget_entity r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.entity_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mpo_optak_operation_yearly_latest as
+select distinct on (r.reporting_year, r.project_id)
+  r.reporting_year,
+  r.region_code,
+  r.region_name,
+  r.recipient_key,
+  r.recipient_name,
+  r.recipient_ico,
+  r.project_id,
+  r.project_name,
+  r.priority_name,
+  r.specific_objective_name,
+  r.intervention_name,
+  r.allocated_total_czk,
+  r.union_support_czk,
+  r.national_public_czk,
+  r.charged_total_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mpo_optak_operation_yearly r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.project_id,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mpo_optak_recipient_metric_latest as
+select
+  reporting_year,
+  count(distinct recipient_key)::integer as recipient_count,
+  count(*)::integer as project_count,
+  sum(allocated_total_czk) as allocated_total_czk,
+  sum(union_support_czk) as union_support_czk,
+  sum(national_public_czk) as national_public_czk,
+  sum(charged_total_czk) as charged_total_czk
+from mart.mpo_optak_operation_yearly_latest
+group by reporting_year;
+
+create or replace view mart.mpo_optak_region_metric_latest as
+select
+  reporting_year,
+  coalesce(region_code, 'UNKNOWN') as region_code,
+  max(coalesce(region_name, 'Neurceny kraj')) as region_name,
+  count(distinct recipient_key)::integer as recipient_count,
+  count(*)::integer as project_count,
+  sum(allocated_total_czk) as allocated_total_czk,
+  sum(union_support_czk) as union_support_czk,
+  sum(national_public_czk) as national_public_czk,
+  sum(charged_total_czk) as charged_total_czk
+from mart.mpo_optak_operation_yearly_latest
+group by reporting_year, coalesce(region_code, 'UNKNOWN');
+
+create or replace view mart.mpo_optak_recipient_yearly_latest as
+select
+  reporting_year,
+  coalesce(region_code, 'UNKNOWN') as region_code,
+  max(coalesce(region_name, 'Neurceny kraj')) as region_name,
+  recipient_key,
+  max(recipient_name) as recipient_name,
+  max(recipient_ico) as recipient_ico,
+  count(*)::integer as project_count,
+  sum(allocated_total_czk) as allocated_total_czk,
+  sum(union_support_czk) as union_support_czk,
+  sum(national_public_czk) as national_public_czk,
+  sum(charged_total_czk) as charged_total_czk
+from mart.mpo_optak_operation_yearly_latest
+group by reporting_year, coalesce(region_code, 'UNKNOWN'), recipient_key;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

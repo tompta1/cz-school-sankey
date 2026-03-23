@@ -23,6 +23,7 @@ Current main source families:
 - Agriculture: Monitor MF for MZe/SZIF administration and SZIF recipient payment lists for subsidy outflows.
 - Environment: Monitor MF for MŽP/SFŽP administration and the open SFŽP support registry for support-program drilldowns.
 - Regional development: MMR open budget CSVs and DotaceEU IROP recipient workbooks.
+- Industry and trade: Monitor MF for MPO and DotaceEU OP TAK recipient workbooks.
 
 Some links are intentionally synthetic:
 
@@ -50,6 +51,7 @@ Current branch metrics:
 - Agriculture other subsidy families: `Kč/příjemce dotace`
 - Environment support programs: `Kč/příjemce podpory`
 - MMR project-backed branches: `Kč/příjemce podpory`
+- MPO project-backed branch: `Kč/příjemce podpory`
 
 Agriculture caveat:
 
@@ -71,6 +73,13 @@ MMR caveat:
 - recipient and IČO drilldown comes only from the public IROP workbook on DotaceEU
 - the regional-development and housing drilldowns therefore allocate the real MMR budget branches by IROP recipient shares
 - this gives a truthful recipient-level picture for the supported branches, but it is still an inferred join between chapter totals and project-register structure
+
+MPO caveat:
+
+- top-level MPO amount comes from Monitor MF, not from the OP TAK workbook
+- the drilldown branch is built only from OP TAK operations in the public 2021+ DotaceEU workbook
+- OP TAK public commitments can exceed one annual chapter spend of MPO, so the atlas clips the branch to the observed annual MPO amount and uses the OP TAK data only for shares, recipient counts, and drilldown structure
+- the second layer is therefore a public proxy for supported business beneficiaries, not a full decomposition of all MPO outlays
 
 Why the transport branch is mixed:
 
