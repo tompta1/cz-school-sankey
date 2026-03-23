@@ -1012,6 +1012,56 @@ create index if not exists mzv_aid_operation_year_branch_country_idx
 create index if not exists mzv_aid_operation_year_project_idx
   on raw.mzv_aid_operation_yearly (reporting_year, project_key);
 
+create table if not exists raw.mo_budget_entity (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  period_code text not null,
+  entity_ico text not null,
+  entity_name text not null,
+  entity_kind text not null,
+  expenses_czk numeric(18,2) not null,
+  costs_czk numeric(18,2) not null,
+  revenues_czk numeric(18,2) not null,
+  result_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mo_budget_entity_year_ico_idx
+  on raw.mo_budget_entity (reporting_year, entity_ico);
+
+create table if not exists raw.mo_budget_aggregate (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  metric_code text not null,
+  metric_name text not null,
+  amount_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mo_budget_aggregate_year_metric_idx
+  on raw.mo_budget_aggregate (reporting_year, metric_code);
+
+create table if not exists raw.mo_personnel_metric (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  metric_code text not null,
+  metric_name text not null,
+  count_value integer not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists mo_personnel_metric_year_metric_idx
+  on raw.mo_personnel_metric (reporting_year, metric_code);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -2085,6 +2135,68 @@ select
   sum(planned_czk) as planned_czk
 from mart.mzv_aid_operation_yearly_latest
 group by reporting_year, branch_code, country_name, project_key;
+
+create or replace view mart.mo_budget_entity_latest as
+select distinct on (r.reporting_year, r.entity_ico)
+  r.reporting_year,
+  r.period_code,
+  r.entity_ico,
+  r.entity_name,
+  r.entity_kind,
+  r.expenses_czk,
+  r.costs_czk,
+  r.revenues_czk,
+  r.result_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mo_budget_entity r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.entity_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mo_budget_aggregate_latest as
+select distinct on (r.reporting_year, r.metric_code)
+  r.reporting_year,
+  r.metric_code,
+  r.metric_name,
+  r.amount_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mo_budget_aggregate r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.metric_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.mo_personnel_metric_latest as
+select distinct on (r.reporting_year, r.metric_code)
+  r.reporting_year,
+  r.metric_code,
+  r.metric_name,
+  r.count_value,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.mo_personnel_metric r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.metric_code,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

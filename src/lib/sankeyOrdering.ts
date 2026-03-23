@@ -78,6 +78,10 @@ export function normalizationGroup(link: SankeyLink): string | null {
     return 'mzv_aid_project';
   }
 
+  if (link.flowType === 'defense_ministry_total' || link.flowType === 'defense_budget_category') {
+    return 'defense_professional_soldier';
+  }
+
   if (
     link.flowType === 'agriculture_subsidy_family_recipient'
   ) {

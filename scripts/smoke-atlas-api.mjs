@@ -54,6 +54,10 @@ async function main() {
     overview2024.links.some((link) => link.target === 'mzv:ministry:mzv'),
     'overview 2024 is missing MZV root link',
   );
+  assert(
+    overview2024.links.some((link) => link.target === 'defense:ministry:mo'),
+    'overview 2024 is missing MO root link',
+  );
 
   const transport2024 = await fetchJson('/api/atlas/transport?year=2024');
   assert(
@@ -183,6 +187,16 @@ async function main() {
   assert(
     mzvForeignService2024.nodes.some((node) => node.id === 'mzv:post-type:embassy'),
     'MZV 2024 is missing foreign-post type drilldown',
+  );
+
+  const mo2024 = await fetchJson('/api/atlas/mo?year=2024');
+  assert(
+    mo2024.nodes.some((node) => node.id === 'defense:ministry:mo' && node.metadata?.capacity),
+    'MO 2024 is missing defense ministry denominator',
+  );
+  assert(
+    mo2024.nodes.some((node) => node.id === 'defense:program-financing'),
+    'MO 2024 is missing program financing branch',
   );
 
   console.log(`Atlas smoke checks passed for ${baseUrl}`);

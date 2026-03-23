@@ -189,6 +189,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Rozvojová a humanitární pomoc MZV/ČRA vztažená k počtu explicitně zveřejněných projektů.',
     rationale: 'Výroční workbooky MZV a ČRA zveřejňují projektové řádky přímo, takže projekt je nejčistší srovnávací jednotka pro tuto větev.',
   },
+  defense_professional_soldier: {
+    group: 'defense_professional_soldier',
+    perUnitLabel: 'vojáka z povolání/rok',
+    countLabel: 'vojáků z povolání',
+    title: 'Kč/vojáka z povolání/rok',
+    description: 'Obranné výdaje vztažené k počtu vojáků z povolání podle oficiální tabulky Ministerstva obrany.',
+    rationale: 'Pro první iteraci MO je počet vojáků z povolání nejčitelnější veřejný denominátor, který je zveřejněný pro 2024 i 2025 a dovoluje porovnat celý kapitolní objem i jeho tři základní kategorie.',
+  },
 };
 
 export function metricDescriptorForGroup(

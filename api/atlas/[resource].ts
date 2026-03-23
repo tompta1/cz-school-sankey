@@ -4,6 +4,7 @@ import {
   getAtlasHealthGraph,
   getAtlasJusticeGraph,
   getAtlasMkGraph,
+  getAtlasMoGraph,
   getAtlasMmrGraph,
   getAtlasMpoGraph,
   getAtlasMvGraph,
@@ -151,6 +152,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const graph = await getAtlasMzvGraph(year, nodeId);
     if (!graph) return notFound(res, `No MZV atlas data for year ${year}`);
+    return json(res, 200, graph);
+  }
+
+  if (resource === 'mo') {
+    const year = Number(req.query.year);
+    if (!Number.isInteger(year)) return badRequest(res, 'Missing or invalid year');
+    const nodeId = typeof req.query.nodeId === 'string' ? req.query.nodeId.trim() : null;
+
+    const graph = await getAtlasMoGraph(year, nodeId);
+    if (!graph) return notFound(res, `No MO atlas data for year ${year}`);
     return json(res, 200, graph);
   }
 

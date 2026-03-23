@@ -213,6 +213,29 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(tollLink)).toBe('transport_toll_vehicle');
   });
 
+  it('maps defense links to professional-soldier metrics', () => {
+    const ministryLink: SankeyLink = {
+      source: 'state:cr',
+      target: 'defense:ministry:mo',
+      value: 100,
+      amountCzk: 100,
+      year: 2025,
+      flowType: 'defense_ministry_total',
+      basis: 'realized',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const branchLink: SankeyLink = {
+      ...ministryLink,
+      source: 'defense:ministry:mo',
+      target: 'defense:program-financing',
+      flowType: 'defense_budget_category',
+    };
+
+    expect(normalizationGroup(ministryLink)).toBe('defense_professional_soldier');
+    expect(normalizationGroup(branchLink)).toBe('defense_professional_soldier');
+  });
+
   it('maps environment support links to recipient metrics', () => {
     const familyLink: SankeyLink = {
       source: 'environment:sfzp:support',
