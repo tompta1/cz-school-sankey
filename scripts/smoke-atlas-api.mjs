@@ -30,6 +30,10 @@ async function main() {
     overview2024.links.some((link) => link.target === 'transport:ministry:md'),
     'overview 2024 is missing transport root link',
   );
+  assert(
+    overview2024.links.some((link) => link.target === 'agriculture:ministry:mze'),
+    'overview 2024 is missing agriculture root link',
+  );
 
   const transport2024 = await fetchJson('/api/atlas/transport?year=2024');
   assert(
@@ -55,6 +59,12 @@ async function main() {
   assert(
     justice2024.nodes.some((node) => node.id === 'justice:courts'),
     'justice 2024 is missing courts branch',
+  );
+
+  const agriculture2024 = await fetchJson('/api/atlas/agriculture?year=2024');
+  assert(
+    agriculture2024.nodes.some((node) => node.id === 'agriculture:subsidy:total' && node.metadata?.capacity),
+    'agriculture 2024 is missing subsidy denominator',
   );
 
   console.log(`Atlas smoke checks passed for ${baseUrl}`);

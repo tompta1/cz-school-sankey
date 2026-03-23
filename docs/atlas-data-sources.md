@@ -20,6 +20,7 @@ Current main source families:
 - Interior: MV chapter aggregates, police crime statistics, and HZS annual activity statistics.
 - Justice: MSp chapter aggregates plus court and prison activity denominators.
 - Transport: Monitor MF for MD/SFDI, SFDI project execution CSVs, and annual transport usage proxies.
+- Agriculture: Monitor MF for MZe/SZIF administration and SZIF recipient payment lists for subsidy outflows.
 
 Some links are intentionally synthetic:
 
@@ -43,6 +44,12 @@ Current branch metrics:
 - Motorway passenger-car branch: `Kč/prodanou známku`
 - Heavy-vehicle toll branch: `Kč/zpoplatněné vozidlo`
 - Transport investor/project drilldown: `Kč/akci`
+- Agriculture subsidies: `Kč/příjemce dotace`
+
+Agriculture caveat:
+
+- the MZe comparative metric uses unique annual subsidy recipients published by SZIF
+- technical-assistance payments to `MZe` and `SZIF` themselves are excluded from that denominator and amount, so the branch reflects subsidy recipients rather than administration financing
 
 Why the transport branch is mixed:
 

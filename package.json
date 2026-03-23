@@ -61,6 +61,10 @@
     "transport:sfdi:load": "python3 etl/load_transport_raw.py --dataset transport_sfdi_projects --database-url \"${DATABASE_URL}\"",
     "transport:activity:pull": "python3 etl/transport/fetch_activity_metrics.py --year 2024 --year 2025",
     "transport:activity:load": "python3 etl/load_transport_raw.py --dataset transport_activity_metrics --database-url \"${DATABASE_URL}\"",
+    "agriculture:budget:pull": "python3 etl/agriculture/fetch_budget_entities.py --year 2024 --year 2025",
+    "agriculture:budget:load": "python3 etl/load_agriculture_raw.py --dataset agriculture_budget_entities --database-url \"${DATABASE_URL}\"",
+    "agriculture:subsidies:pull": "python3 etl/agriculture/fetch_szif_payments.py --year 2024",
+    "agriculture:subsidies:load": "python3 etl/load_agriculture_raw.py --dataset agriculture_szif_payments --database-url \"${DATABASE_URL}\"",
     "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:providers:ico && npm run health:claims:payers && npm run health:insurers"
   },
   "dependencies": {

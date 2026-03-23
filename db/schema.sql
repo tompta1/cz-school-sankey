@@ -629,6 +629,57 @@ create table if not exists raw.transport_activity_metric (
 create index if not exists transport_activity_metric_year_code_idx
   on raw.transport_activity_metric (reporting_year, activity_domain, metric_code);
 
+create table if not exists raw.agriculture_budget_entity (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  period_code text not null,
+  entity_ico text not null,
+  entity_name text not null,
+  entity_kind text not null,
+  expenses_czk numeric(20, 2) not null default 0,
+  costs_czk numeric(20, 2) not null default 0,
+  revenues_czk numeric(20, 2) not null default 0,
+  result_czk numeric(20, 2) not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists agriculture_budget_entity_year_ico_idx
+  on raw.agriculture_budget_entity (reporting_year, entity_ico);
+
+drop view if exists mart.agriculture_szif_recipient_metric_latest;
+drop view if exists mart.agriculture_szif_recipient_yearly_latest;
+drop view if exists mart.agriculture_szif_payment_latest;
+drop table if exists raw.agriculture_szif_payment;
+
+create table if not exists raw.agriculture_szif_recipient_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  funding_source_code text not null,
+  funding_source_name text not null,
+  recipient_name text not null,
+  recipient_ico text,
+  recipient_key text not null,
+  municipality text,
+  district text,
+  eu_source_czk numeric(20, 2) not null default 0,
+  cz_source_czk numeric(20, 2) not null default 0,
+  amount_czk numeric(20, 2) not null default 0,
+  payment_count integer not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists agriculture_szif_recipient_year_source_recipient_idx
+  on raw.agriculture_szif_recipient_yearly (reporting_year, funding_source_code, recipient_key);
+
+create index if not exists agriculture_szif_recipient_year_source_amount_idx
+  on raw.agriculture_szif_recipient_yearly (reporting_year, funding_source_code, amount_czk desc);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -1040,6 +1091,94 @@ order by
   d.snapshot_label desc,
   r.loaded_at desc,
   r.raw_id desc;
+
+create or replace view mart.agriculture_budget_entity_latest as
+select distinct on (r.reporting_year, r.entity_ico)
+  r.reporting_year,
+  r.period_code,
+  r.entity_ico,
+  r.entity_name,
+  r.entity_kind,
+  r.expenses_czk,
+  r.costs_czk,
+  r.revenues_czk,
+  r.result_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.agriculture_budget_entity r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.entity_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.agriculture_szif_recipient_yearly_latest as
+select distinct on (r.reporting_year, r.funding_source_code, r.recipient_key)
+  r.reporting_year,
+  r.funding_source_code,
+  r.funding_source_name,
+  r.recipient_name,
+  r.recipient_ico,
+  r.recipient_key,
+  r.municipality,
+  r.district,
+  r.eu_source_czk,
+  r.cz_source_czk,
+  r.amount_czk,
+  r.payment_count,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.agriculture_szif_recipient_yearly r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.funding_source_code,
+  r.recipient_key,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.agriculture_szif_recipient_metric_latest as
+with per_source as (
+  select
+    reporting_year,
+    funding_source_code,
+    max(funding_source_name) as funding_source_name,
+    count(*) filter (where amount_czk > 0)::integer as recipient_count,
+    sum(amount_czk) as amount_czk
+  from mart.agriculture_szif_recipient_yearly_latest
+  group by reporting_year, funding_source_code
+),
+all_sources as (
+  select
+    reporting_year,
+    recipient_key,
+    sum(amount_czk) as total_amount_czk
+  from mart.agriculture_szif_recipient_yearly_latest
+  group by reporting_year, recipient_key
+)
+select
+  reporting_year,
+  funding_source_code,
+  funding_source_name,
+  recipient_count,
+  amount_czk
+from per_source
+union all
+select
+  reporting_year,
+  'TOTAL' as funding_source_code,
+  'Zemedelske dotace pres SZIF' as funding_source_name,
+  count(*) filter (where total_amount_czk > 0)::integer as recipient_count,
+  sum(total_amount_czk) as amount_czk
+from all_sources
+group by reporting_year;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

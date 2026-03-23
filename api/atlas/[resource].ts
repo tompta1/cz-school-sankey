@@ -1,4 +1,5 @@
 import {
+  getAtlasAgricultureGraph,
   getAtlasHealthGraph,
   getAtlasJusticeGraph,
   getAtlasMvGraph,
@@ -71,6 +72,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const graph = await getAtlasTransportGraph(year, nodeId);
     if (!graph) return notFound(res, `No transport atlas data for year ${year}`);
+    return json(res, 200, graph);
+  }
+
+  if (resource === 'agriculture') {
+    const year = Number(req.query.year);
+    if (!Number.isInteger(year)) return badRequest(res, 'Missing or invalid year');
+    const nodeId = typeof req.query.nodeId === 'string' ? req.query.nodeId.trim() : null;
+    const offset = Math.max(0, Number(req.query.offset || 0));
+    if (!Number.isInteger(offset)) return badRequest(res, 'Invalid offset');
+
+    const graph = await getAtlasAgricultureGraph(year, nodeId, offset);
+    if (!graph) return notFound(res, `No agriculture atlas data for year ${year}`);
     return json(res, 200, graph);
   }
 

@@ -130,6 +130,22 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     freshness: 'Roční oficiální publikace; některé denominatorové řady mohou zaostávat za rozpočtovým rokem o jeden rok.',
     rationale: 'Oddělují železnici, osobní dálniční provoz a těžká vozidla bez předstírání jednotné dopravní metriky.',
   },
+  agriculture_budget_entities: {
+    datasetKey: 'agriculture_budget_entities',
+    title: 'Monitor MF: MZe a SZIF správa',
+    description: 'Roční rozpočtové a nákladové údaje Ministerstva zemědělství a provozu SZIF.',
+    freshness: 'Roční účetní data z Monitoru MF. V atlasu slouží jako správní vrstva resortu.',
+    rationale: 'Oddělují provozní správu resortu od skutečně vyplacených zemědělských dotací.',
+    url: 'https://monitor.statnipokladna.gov.cz',
+  },
+  agriculture_szif_payments: {
+    datasetKey: 'agriculture_szif_payments',
+    title: 'SZIF: seznamy příjemců dotací',
+    description: 'Otevřené CSV seznamů příjemců dotací z fondů EU a z národních zdrojů včetně identifikace příjemce, opatření a vyplacené částky.',
+    freshness: 'Uzavřené fiskální roky EU mají samostatné roční soubory; atlas zatím používá uzavřený rok 2024.',
+    rationale: 'Je to nejpřímější veřejný zdroj pro dotační větev MZe a pro metriku Kč/příjemce dotace. Technická pomoc pro MZe a SZIF je z příjemcovské metriky vyřazená.',
+    url: 'https://szif.gov.cz/cs/seznam-prijemcu-dotaci',
+  },
   atlas_inferred: {
     datasetKey: 'atlas.inferred',
     title: 'Odvozené atlasové alokace',

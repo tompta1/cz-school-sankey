@@ -64,6 +64,14 @@ export function normalizationGroup(link: SankeyLink): string | null {
     return 'transport_project_count';
   }
 
+  if (
+    link.flowType === 'agriculture_subsidy_branch' ||
+    link.flowType === 'agriculture_subsidy_funding' ||
+    link.flowType === 'agriculture_subsidy_recipient'
+  ) {
+    return 'agriculture_subsidy_recipient';
+  }
+
   if (link.flowType === 'justice_branch_cost') {
     if (link.target === 'justice:courts') return 'justice_resolved_case';
     if (link.target === 'justice:prison-service') return 'justice_inmate';

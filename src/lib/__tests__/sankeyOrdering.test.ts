@@ -213,6 +213,34 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(tollLink)).toBe('transport_toll_vehicle');
   });
 
+  it('maps agriculture subsidy links to recipient-based normalization', () => {
+    const subsidyLink: SankeyLink = {
+      source: 'agriculture:ministry:mze',
+      target: 'agriculture:subsidy:total',
+      value: 100,
+      amountCzk: 100,
+      year: 2024,
+      flowType: 'agriculture_subsidy_branch',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const fundingLink: SankeyLink = {
+      ...subsidyLink,
+      target: 'agriculture:subsidy:eu',
+      flowType: 'agriculture_subsidy_funding',
+    };
+    const recipientLink: SankeyLink = {
+      ...subsidyLink,
+      target: 'agriculture:recipient:12345678',
+      flowType: 'agriculture_subsidy_recipient',
+    };
+
+    expect(normalizationGroup(subsidyLink)).toBe('agriculture_subsidy_recipient');
+    expect(normalizationGroup(fundingLink)).toBe('agriculture_subsidy_recipient');
+    expect(normalizationGroup(recipientLink)).toBe('agriculture_subsidy_recipient');
+  });
+
   it('normalizes transport investor drilldowns by project count', () => {
     const capacityMap = new Map<string, number>([
       ['transport:sfdi:rail', 191893200],

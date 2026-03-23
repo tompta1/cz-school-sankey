@@ -24,6 +24,10 @@ const HEALTH_ZZS_ID = 'health:zzs';
 const MV_MINISTRY_ID = 'security:ministry:mv';
 const MV_POLICE_ID = 'security:police';
 const TRANSPORT_ROOT_ID = 'transport:ministry:md';
+const AGRICULTURE_ROOT_ID = 'agriculture:ministry:mze';
+const AGRICULTURE_SUBSIDY_TOTAL_ID = 'agriculture:subsidy:total';
+const AGRICULTURE_SUBSIDY_EU_ID = 'agriculture:subsidy:eu';
+const AGRICULTURE_SUBSIDY_NATIONAL_ID = 'agriculture:subsidy:national';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -108,6 +112,13 @@ function isClickableTransportNode(node: SankeyNode): boolean {
   return false;
 }
 
+function isClickableAgricultureNode(node: SankeyNode): boolean {
+  if (node.id === AGRICULTURE_ROOT_ID) return true;
+  if (node.id === AGRICULTURE_SUBSIDY_TOTAL_ID) return true;
+  if (node.id === AGRICULTURE_SUBSIDY_EU_ID || node.id === AGRICULTURE_SUBSIDY_NATIONAL_ID) return true;
+  return false;
+}
+
 function isClickableJusticeNode(node: SankeyNode): boolean {
   return node.id === JUSTICE_MINISTRY_ID;
 }
@@ -170,6 +181,11 @@ export function AtlasDashboard() {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
       path = `/api/atlas/transport?${params.toString()}`;
+    } else if (currentView.scope === 'agriculture') {
+      const params = new URLSearchParams({ year: String(selectedYear) });
+      if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
+      if (currentView.offset > 0) params.set('offset', String(currentView.offset));
+      path = `/api/atlas/agriculture?${params.toString()}`;
     } else if (currentView.scope === 'justice') {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
@@ -282,6 +298,22 @@ function handleMvNodeClick(node: SankeyNode) {
     setViewStack((prev) => pushAtlasView(prev, { scope: 'transport', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
+  function handleAgricultureNodeClick(node: SankeyNode) {
+    if (node.id === PREV_WINDOW_ID || node.id === NEXT_WINDOW_ID) {
+      setViewStack((prev) => {
+        const current = prev.at(-1);
+        if (!current || current.scope !== 'agriculture') return prev;
+        const step = node.id === PREV_WINDOW_ID ? -28 : 28;
+        return pageAtlasView(prev, step);
+      });
+      return;
+    }
+
+    if (!isClickableAgricultureNode(node)) return;
+    const nextNodeId = node.id === AGRICULTURE_ROOT_ID ? null : node.id;
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'agriculture', nodeId: nextNodeId, label: node.name, offset: 0 }));
+  }
+
   function handleJusticeNodeClick(node: SankeyNode) {
     if (!isClickableJusticeNode(node)) return;
     const nextNodeId = node.id === JUSTICE_MINISTRY_ID ? null : node.id;
@@ -303,6 +335,10 @@ function handleMvNodeClick(node: SankeyNode) {
       }
       if (node.id.startsWith('transport:')) {
         handleTransportNodeClick(node);
+        return;
+      }
+      if (node.id.startsWith('agriculture:')) {
+        handleAgricultureNodeClick(node);
         return;
       }
       if (node.id.startsWith('health:') || node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID) {
@@ -330,6 +366,11 @@ function handleMvNodeClick(node: SankeyNode) {
 
     if (currentView.scope === 'transport') {
       handleTransportNodeClick(node);
+      return;
+    }
+
+    if (currentView.scope === 'agriculture') {
+      handleAgricultureNodeClick(node);
       return;
     }
 
@@ -473,7 +514,7 @@ function handleMvNodeClick(node: SankeyNode) {
           perPupil={perPerson}
           perUnitLabel="srovnávací jednotku"
           metricModeLabel="Srovnávací metrika"
-          unitCountLabel="žáků / pacientů / příjemců / případů / klientů za rok"
+          unitCountLabel="žáků / pacientů / příjemců / případů / zásahů / cestujících / příjemců dotace"
           totalAmountLabel="celkové náklady"
           onNodeClick={handleNodeClick}
           onNodeHover={setHoverInfo}

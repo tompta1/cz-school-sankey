@@ -93,6 +93,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Náhradní výživné vztažené k počtu příjemců dávky.',
     rationale: 'U této úzké dávky je počet příjemců přímo spojený s výplatou.',
   },
+  agriculture_subsidy_recipient: {
+    group: 'agriculture_subsidy_recipient',
+    perUnitLabel: 'příjemce dotace',
+    countLabel: 'příjemců dotace',
+    title: 'Kč/příjemce dotace',
+    description: 'Zemědělské dotace přes SZIF vztažené k počtu jedinečných příjemců s kladnou čistou částkou ve fiskálním roce.',
+    rationale: 'Počet zveřejněných příjemců SZIF je nejbližší obhajitelný denominátor pro dotační větev MZe bez předstírání obecného počtu všech zemědělců.',
+  },
   transport_rail_passenger: {
     group: 'transport_rail_passenger',
     perUnitLabel: 'cestujícího',
