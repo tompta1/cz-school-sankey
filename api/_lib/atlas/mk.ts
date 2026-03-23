@@ -74,12 +74,16 @@ interface MkRegionMetric {
 
 const STATE_ID = 'state:cr';
 const MK_MINISTRY_ID = 'mk:ministry:mk';
+const MK_INSTITUTIONS_ID = 'mk:institutions';
 const MK_CULTURE_ID = 'mk:support:culture';
 const MK_HERITAGE_ID = 'mk:support:heritage';
 const MK_FILM_ID = 'mk:film';
 const MK_CHURCH_ID = 'mk:churches';
+const MK_REGIONAL_INFRA_ID = 'mk:regional-infra';
 const MK_ADMIN_ID = 'mk:admin';
 const MK_PROGRAM_CULTURE_MUSEUMS_ID = 'mk:program:culture-museums';
+const MK_HERITAGE_OTHER_ID = 'mk:heritage:other';
+const MK_CULTURE_OTHER_ID = 'mk:culture:other';
 const MK_RECIPIENT_PREFIX = 'mk:recipient:';
 const MK_REGION_PREFIX = 'mk:region:';
 const PREV_WINDOW_ID = 'synthetic:prev-window';
@@ -88,7 +92,6 @@ const PAGE_SIZE = 28;
 
 const PROGRAM_IDS = {
   CULTURE_MUSEUMS: MK_PROGRAM_CULTURE_MUSEUMS_ID,
-  HERITAGE_ACTIVITIES: 'mk:program:heritage-activities',
   PZAD: 'mk:program:pzad',
 } as const;
 
@@ -217,11 +220,27 @@ function programMetric(rows: MkProgramMetric[], programCode: ProgramCode): MkPro
 }
 
 function mkCultureNote() {
-  return 'Větev používá zveřejněné výsledky programu Kulturní aktivity pro spolky v muzejnictví. Jde o přesně zdrojově podložený podprogram, nikoli o rozpad celé kapitoly MK.';
+  return 'Větev používá oficiální skutečnost 2024 pro ukazatel Kulturní služby, podpora živého umění. Drilldown dále rozlišuje explicitně zveřejněný podprogram Kulturní aktivity pro spolky v muzejnictví a zbytek ukazatele.';
 }
 
 function mkHeritageNote() {
-  return 'Větev památkové péče používá oficiální regionální agregace programu záchrany architektonického dědictví (PZAD).';
+  return 'Větev památkové péče používá oficiální skutečnost 2024 pro ukazatel Záchrana a obnova kulturních památek, veřejné služby muzeí. Drilldown dále rozlišuje explicitně zveřejněný program PZAD a zbytek ukazatele.';
+}
+
+function mkInstitutionsNote() {
+  return 'Větev používá oficiální skutečnost 2024 pro ukazatel Příspěvkové organizace zřízené Ministerstvem kultury.';
+}
+
+function mkChurchNote() {
+  return 'Větev používá oficiální skutečnost 2024 pro ukazatel Výdaje dle zákona o majetkovém vyrovnání s církvemi a náboženskými společnostmi.';
+}
+
+function mkRegionalInfraNote() {
+  return 'Větev používá oficiální skutečnost 2024 pro ukazatel Podpora rozvoje a obnovy materiálně technické základny regionálních kulturních zařízení.';
+}
+
+function mkFilmNote() {
+  return 'Větev používá oficiální skutečnost 2024 pro ukazatel Státní fond kinematografie a navazující Státní fond kultury ČR.';
 }
 
 export async function getMkBudgetEntities(year: number): Promise<MkBudgetEntity[]> {
@@ -384,14 +403,13 @@ export function appendMkBranch(
   const cultureMetric = programMetric(programMetrics, 'CULTURE_MUSEUMS');
   const pzadMetric = programMetric(programMetrics, 'PZAD');
 
-  const cultureAmount = cultureMetric?.awardedAmount ?? 0;
-  const heritageAmount = pzadMetric?.awardedAmount ?? 0;
-  const filmAmount =
-    budgetAggregateAmount(budgetAggregates, 'FILM_INCENTIVES') +
-    budgetAggregateAmount(budgetAggregates, 'FILM_FUND_OPERATING') +
-    budgetAggregateAmount(budgetAggregates, 'CULTURE_FUND');
-  const churchAmount = budgetAggregateAmount(budgetAggregates, 'CHURCH_SUPPORT');
-  const adminAmount = Math.max(totalBudget - cultureAmount - heritageAmount - filmAmount - churchAmount, 0);
+  const institutionsAmount = budgetAggregateAmount(budgetAggregates, 'MK_CONTRIBUTORY_ORGS_TOTAL');
+  const cultureAmount = budgetAggregateAmount(budgetAggregates, 'MK_CULTURAL_SERVICES_TOTAL');
+  const heritageAmount = budgetAggregateAmount(budgetAggregates, 'MK_HERITAGE_TOTAL');
+  const regionalInfraAmount = budgetAggregateAmount(budgetAggregates, 'MK_REGIONAL_INFRA_TOTAL');
+  const filmAmount = budgetAggregateAmount(budgetAggregates, 'MK_FILM_TOTAL');
+  const churchAmount = budgetAggregateAmount(budgetAggregates, 'CHURCH_SETTLEMENT_TOTAL');
+  const adminAmount = Math.max(totalBudget - institutionsAmount - cultureAmount - heritageAmount - regionalInfraAmount - filmAmount - churchAmount, 0);
 
   addNode(nodes, createMinistryNode());
   links.push(
@@ -406,9 +424,23 @@ export function appendMkBranch(
     ),
   );
 
-  if (cultureAmount > 0 && cultureMetric) {
-    addNode(nodes, createBranchNode(MK_CULTURE_ID, 'Kulturni granty pro spolky', 2, cultureMetric.recipientCount, true));
-    links.push(makeLink(MK_MINISTRY_ID, MK_CULTURE_ID, cultureAmount, year, 'mk_support_culture_branch', mkCultureNote(), cultureMetric.sourceDataset));
+  if (institutionsAmount > 0) {
+    addNode(nodes, createBranchNode(MK_INSTITUTIONS_ID, 'Prispevkove organizace MK', 2, null, false));
+    links.push(makeLink(MK_MINISTRY_ID, MK_INSTITUTIONS_ID, institutionsAmount, year, 'mk_institutions_branch', mkInstitutionsNote(), 'mk_budget_aggregates'));
+  }
+
+  if (cultureAmount > 0) {
+    addNode(
+      nodes,
+      createBranchNode(
+        MK_CULTURE_ID,
+        'Kulturni sluzby a zive umeni',
+        2,
+        cultureMetric?.recipientCount ?? null,
+        true,
+      ),
+    );
+    links.push(makeLink(MK_MINISTRY_ID, MK_CULTURE_ID, cultureAmount, year, 'mk_support_culture_branch', mkCultureNote(), 'mk_budget_aggregates'));
   }
 
   if (heritageAmount > 0) {
@@ -416,23 +448,28 @@ export function appendMkBranch(
       nodes,
       createBranchNode(
         MK_HERITAGE_ID,
-        'Pamatkova pece',
+        'Pamatkova pece a muzea',
         2,
         pzadMetric?.recipientCount ?? null,
         true,
       ),
     );
-    links.push(makeLink(MK_MINISTRY_ID, MK_HERITAGE_ID, heritageAmount, year, 'mk_support_heritage_branch', mkHeritageNote(), pzadMetric?.sourceDataset ?? 'mk_region_metrics'));
-  }
-
-  if (filmAmount > 0) {
-    addNode(nodes, createBranchNode(MK_FILM_ID, 'Filmove pobidky a kulturni fondy', 2, null, false));
-    links.push(makeLink(MK_MINISTRY_ID, MK_FILM_ID, filmAmount, year, 'mk_film_branch', 'Větev používá oficiální skutečnost 2024 z kapitoly MK pro filmové pobídky, provozní dotaci Státnímu fondu kinematografie a Státní fond kultury ČR.', 'mk_budget_aggregates'));
+    links.push(makeLink(MK_MINISTRY_ID, MK_HERITAGE_ID, heritageAmount, year, 'mk_support_heritage_branch', mkHeritageNote(), 'mk_budget_aggregates'));
   }
 
   if (churchAmount > 0) {
-    addNode(nodes, createBranchNode(MK_CHURCH_ID, 'Cirkve a nabozenske spolecnosti', 2, null, false));
-    links.push(makeLink(MK_MINISTRY_ID, MK_CHURCH_ID, churchAmount, year, 'mk_church_branch', 'Větev používá oficiální skutečnost 2024 z kapitoly MK pro příspěvek na podporu činnosti dotčených církví a náboženských společností.', 'mk_budget_aggregates'));
+    addNode(nodes, createBranchNode(MK_CHURCH_ID, 'Cirkve a majetkove narovnani', 2, null, false));
+    links.push(makeLink(MK_MINISTRY_ID, MK_CHURCH_ID, churchAmount, year, 'mk_church_branch', mkChurchNote(), 'mk_budget_aggregates'));
+  }
+
+  if (regionalInfraAmount > 0) {
+    addNode(nodes, createBranchNode(MK_REGIONAL_INFRA_ID, 'Regionalni kulturni infrastruktura', 2, null, false));
+    links.push(makeLink(MK_MINISTRY_ID, MK_REGIONAL_INFRA_ID, regionalInfraAmount, year, 'mk_regional_infra_branch', mkRegionalInfraNote(), 'mk_budget_aggregates'));
+  }
+
+  if (filmAmount > 0) {
+    addNode(nodes, createBranchNode(MK_FILM_ID, 'Kinematografie a kulturni fondy', 2, null, false));
+    links.push(makeLink(MK_MINISTRY_ID, MK_FILM_ID, filmAmount, year, 'mk_film_branch', mkFilmNote(), 'mk_budget_aggregates'));
   }
 
   if (adminAmount > 0) {
@@ -446,6 +483,50 @@ function buildMkRootGraph(year: number, budgetRows: MkBudgetEntity[], budgetAggr
   const links: AtlasLink[] = [];
   appendMkBranch(nodes, links, year, budgetRows, budgetAggregates, programMetrics);
   return links.length ? { year, nodes, links } : null;
+}
+
+function buildCultureProgramGraph(year: number, branchAmount: number, programMetricRows: MkProgramMetric[]) {
+  if (branchAmount <= 0) return null;
+
+  const cultureMetric = programMetric(programMetricRows, 'CULTURE_MUSEUMS');
+  const explicitAmount = cultureMetric?.awardedAmount ?? 0;
+  const residualAmount = Math.max(branchAmount - explicitAmount, 0);
+  const nodes: AtlasNode[] = [createBranchNode(MK_CULTURE_ID, 'Kulturni sluzby a zive umeni', 2, cultureMetric?.recipientCount ?? null, true)];
+  const links: AtlasLink[] = [];
+
+  if (explicitAmount > 0 && cultureMetric) {
+    addNode(nodes, createBranchNode(MK_PROGRAM_CULTURE_MUSEUMS_ID, 'Kulturni aktivity pro spolky v muzejnictvi', 3, cultureMetric.recipientCount, true));
+    links.push(makeLink(MK_CULTURE_ID, MK_PROGRAM_CULTURE_MUSEUMS_ID, explicitAmount, year, 'mk_support_program', mkCultureNote(), cultureMetric.sourceDataset));
+  }
+
+  if (residualAmount > 0) {
+    addNode(nodes, createBranchNode(MK_CULTURE_OTHER_ID, 'Ostatni kulturni sluzby a zive umeni', 3, null, false));
+    links.push(makeLink(MK_CULTURE_ID, MK_CULTURE_OTHER_ID, residualAmount, year, 'mk_support_culture_residual', 'Reziduální část oficiálního ukazatele Kulturní služby, podpora živého umění po oddělení explicitně zveřejněného podprogramu.', 'mk_budget_aggregates'));
+  }
+
+  return { year, nodes, links };
+}
+
+function buildHeritageProgramGraph(year: number, branchAmount: number, programMetricRows: MkProgramMetric[]) {
+  if (branchAmount <= 0) return null;
+
+  const pzadMetric = programMetric(programMetricRows, 'PZAD');
+  const explicitAmount = pzadMetric?.awardedAmount ?? 0;
+  const residualAmount = Math.max(branchAmount - explicitAmount, 0);
+  const nodes: AtlasNode[] = [createBranchNode(MK_HERITAGE_ID, 'Pamatkova pece a muzea', 2, pzadMetric?.recipientCount ?? null, true)];
+  const links: AtlasLink[] = [];
+
+  if (explicitAmount > 0 && pzadMetric) {
+    addNode(nodes, createBranchNode(PROGRAM_IDS.PZAD, 'PZAD', 3, pzadMetric.recipientCount, true));
+    links.push(makeLink(MK_HERITAGE_ID, PROGRAM_IDS.PZAD, explicitAmount, year, 'mk_support_program', 'Program záchrany architektonického dědictví (PZAD) podle zveřejněných výsledků MK.', pzadMetric.sourceDataset));
+  }
+
+  if (residualAmount > 0) {
+    addNode(nodes, createBranchNode(MK_HERITAGE_OTHER_ID, 'Ostatni pamatkova pece a muzea', 3, null, false));
+    links.push(makeLink(MK_HERITAGE_ID, MK_HERITAGE_OTHER_ID, residualAmount, year, 'mk_support_heritage_residual', 'Reziduální část oficiálního ukazatele památkové péče po oddělení explicitně zveřejněného programu PZAD.', 'mk_budget_aggregates'));
+  }
+
+  return { year, nodes, links };
 }
 
 function buildPagedRecipientGraph(
@@ -522,17 +603,27 @@ export async function getAtlasMkGraph(year: number, nodeId: string | null = null
 
   const cultureMetric = programMetric(programMetrics, 'CULTURE_MUSEUMS');
   const pzadMetric = programMetric(programMetrics, 'PZAD');
+  const cultureBranchAmount = budgetAggregateAmount(budgetAggregates, 'MK_CULTURAL_SERVICES_TOTAL');
+  const heritageBranchAmount = budgetAggregateAmount(budgetAggregates, 'MK_HERITAGE_TOTAL');
 
   if (nodeId === MK_CULTURE_ID) {
+    return buildCultureProgramGraph(year, cultureBranchAmount, programMetrics);
+  }
+
+  if (nodeId === MK_PROGRAM_CULTURE_MUSEUMS_ID) {
     if (!cultureMetric) return null;
     const recipientRows = await getMkRecipients(year, 'CULTURE_MUSEUMS');
-    return buildPagedRecipientGraph(year, MK_CULTURE_ID, 'Kulturni granty pro spolky', mkCultureNote(), cultureMetric, recipientRows, offset);
+    return buildPagedRecipientGraph(year, MK_PROGRAM_CULTURE_MUSEUMS_ID, 'Kulturni aktivity pro spolky v muzejnictvi', mkCultureNote(), cultureMetric, recipientRows, offset);
   }
 
   if (nodeId === MK_HERITAGE_ID) {
+    return buildHeritageProgramGraph(year, heritageBranchAmount, programMetrics);
+  }
+
+  if (nodeId === PROGRAM_IDS.PZAD) {
     if (!pzadMetric) return null;
     const regionRows = await getMkRegionMetrics(year, 'PZAD');
-    return buildPzadRegionGraph(year, pzadMetric, regionRows);
+    return buildPzadRegionGraph(year, pzadMetric, regionRows, PROGRAM_IDS.PZAD, 'PZAD');
   }
 
   return null;

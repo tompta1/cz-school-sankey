@@ -139,8 +139,20 @@ async function main() {
 
   const mkHeritage2024 = await fetchJson('/api/atlas/mk?year=2024&nodeId=mk:support:heritage');
   assert(
-    mkHeritage2024.nodes.some((node) => node.id.startsWith('mk:region:')),
+    mkHeritage2024.nodes.some((node) => node.id === 'mk:program:pzad'),
+    'MK 2024 is missing PZAD subprogram node',
+  );
+
+  const mkPzad2024 = await fetchJson('/api/atlas/mk?year=2024&nodeId=mk:program:pzad');
+  assert(
+    mkPzad2024.nodes.some((node) => node.id.startsWith('mk:region:')),
     'MK 2024 is missing PZAD regional drilldown',
+  );
+
+  const mkCulture2024 = await fetchJson('/api/atlas/mk?year=2024&nodeId=mk:support:culture');
+  assert(
+    mkCulture2024.nodes.some((node) => node.id === 'mk:program:culture-museums'),
+    'MK 2024 is missing culture subprogram node',
   );
 
   console.log(`Atlas smoke checks passed for ${baseUrl}`);

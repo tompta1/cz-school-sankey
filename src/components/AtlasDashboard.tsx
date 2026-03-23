@@ -42,6 +42,8 @@ const MPO_SUPPORT_ID = 'mpo:optak:support';
 const MK_ROOT_ID = 'mk:ministry:mk';
 const MK_CULTURE_ID = 'mk:support:culture';
 const MK_HERITAGE_ID = 'mk:support:heritage';
+const MK_CULTURE_PROGRAM_ID = 'mk:program:culture-museums';
+const MK_HERITAGE_PROGRAM_ID = 'mk:program:pzad';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -170,6 +172,8 @@ function isClickableMkNode(node: SankeyNode): boolean {
   if (node.id === MK_ROOT_ID) return true;
   if (node.id === MK_CULTURE_ID) return true;
   if (node.id === MK_HERITAGE_ID) return true;
+  if (node.id === MK_CULTURE_PROGRAM_ID) return true;
+  if (node.id === MK_HERITAGE_PROGRAM_ID) return true;
   return false;
 }
 
