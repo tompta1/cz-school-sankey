@@ -50,7 +50,7 @@ export function HealthDashboard() {
       .then((response) => {
         if (!active) return;
         setYears(response.years);
-        setSelectedYear((current) => current ?? response.years.at(-1) ?? null);
+        setSelectedYear((current) => current ?? (response.years.includes(2024) ? 2024 : response.years.at(-1)) ?? null);
       })
       .catch((e) => {
         if (!active) return;

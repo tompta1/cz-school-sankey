@@ -225,7 +225,7 @@ export function AtlasDashboard() {
         if (!active) return;
         const nextYears = response.years.map((row) => row.year);
         setYears(nextYears);
-        setSelectedYear((current) => current ?? nextYears.at(-1) ?? null);
+        setSelectedYear((current) => current ?? (nextYears.includes(2024) ? 2024 : nextYears.at(-1)) ?? null);
       })
       .catch((reason) => {
         if (!active) return;
