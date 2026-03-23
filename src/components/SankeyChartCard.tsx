@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 
 import { formatCompactCzk, formatInteger, formatPerPupil, formatPerUnit } from '../lib/format';
 import { metricDescriptorForGroup, metricDescriptorForLink } from '../lib/metricReference';
-import { comparableNodeMetric, normalizationCapacity, normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
+import { chartValuesForLinks, comparableNodeMetric, normalizationCapacity, normalizedValue, orderSankeyGraph } from '../lib/sankeyOrdering';
 import type { HoverInfo, SankeyLink, SankeyNode } from '../types';
 
 interface Props {
@@ -96,6 +96,7 @@ function buildActiveOption(
   // In per-pupil mode sort links descending by Kč/žák so higher-value flows
   // appear at the top and ECharts orders nodes accordingly.
   const { orderedNodes, orderedLinks } = orderSankeyGraph(nodes, links, capacityMap, perPupil);
+  const chartValues = chartValuesForLinks(orderedLinks, capacityMap, perPupil);
 
   return {
     backgroundColor: 'transparent',
@@ -182,12 +183,12 @@ function buildActiveOption(
         name: n.id,
         itemStyle: { color: COLOR[n.category] ?? COLOR.other, borderColor: '#0b1220', borderWidth: 1 },
       })),
-      links: orderedLinks.map((l) => {
+      links: orderedLinks.map((l, index) => {
         const cap = linkCapacity(l);
         return {
           source: l.source,
           target: l.target,
-          value: normalizedValue(l.amountCzk, cap, perPupil),
+          value: chartValues[index] ?? normalizedValue(l.amountCzk, cap, perPupil),
           amountCzk: l.amountCzk,
           capacity: cap,
           lineStyle: { opacity: perPupil && !cap ? 0.08 : l.certainty === 'observed' ? 0.55 : 0.28 },
@@ -206,6 +207,7 @@ function buildGhostOption(
 ) {
   const mobile = containerWidth < 640;
   const nodeGap = nodeGapForGraph(nodes, mobile);
+  const chartValues = chartValuesForLinks(links, capacityMap, perPupil);
   return {
     backgroundColor: 'transparent',
     series: [{
@@ -224,12 +226,12 @@ function buildGhostOption(
         name: n.id,
         itemStyle: { color: '#94a3b8', opacity: 0.22, borderWidth: 0 },
       })),
-      links: links.map((l) => {
+      links: links.map((l, index) => {
         const cap = normalizationCapacity(l, capacityMap, perPupil);
         return {
           source: l.source,
           target: l.target,
-          value: normalizedValue(l.amountCzk, cap, perPupil),
+          value: chartValues[index] ?? normalizedValue(l.amountCzk, cap, perPupil),
         };
       }),
     }],

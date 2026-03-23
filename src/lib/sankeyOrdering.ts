@@ -7,7 +7,6 @@ const NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES = new Set([
   'health_outpatient_region_group',
   'health_outpatient_specialty_group',
   'health_outpatient_provider_allocated_cost',
-  'agriculture_subsidy_recipient_detail',
 ]);
 
 export function normalizedValue(amountCzk: number, capacity: number | null, perUnit: boolean): number {
@@ -73,6 +72,14 @@ export function normalizationGroup(link: SankeyLink): string | null {
 
   if (link.flowType === 'agriculture_subsidy_family_area') {
     return 'agriculture_area_hectare';
+  }
+
+  if (
+    link.flowType === 'agriculture_subsidy_recipient_detail' ||
+    link.flowType === 'agriculture_subsidy_recipient_page'
+  ) {
+    if (link.source === 'agriculture:subsidy:family:area') return 'agriculture_area_hectare';
+    return 'agriculture_subsidy_recipient';
   }
 
   if (link.flowType === 'justice_branch_cost') {
@@ -167,4 +174,15 @@ export function orderSankeyGraph(
   });
 
   return { orderedNodes, orderedLinks };
+}
+
+export function chartValuesForLinks(
+  links: SankeyLink[],
+  capacityMap: Map<string, number>,
+  perUnit: boolean,
+): number[] {
+  const normalized = links.map((link) => linkWeight(link, capacityMap, perUnit));
+  if (!perUnit) return normalized;
+  if (normalized.some((value) => value > 0)) return normalized;
+  return links.map((link) => link.amountCzk);
 }

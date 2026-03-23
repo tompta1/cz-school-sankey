@@ -68,6 +68,7 @@ interface AgricultureRecipientAggregate {
   district: string | null;
   amount: number;
   paymentCount: number;
+  areaHa: number | null;
   sourceDataset: string;
 }
 
@@ -184,6 +185,9 @@ function createAgricultureBranchNode(
 }
 
 function createAgricultureRecipientNode(row: AgricultureRecipientAggregate): AtlasNode {
+  const capacity = row.familyCode === 'AREA'
+    ? (row.areaHa && row.areaHa > 0 ? row.areaHa : null)
+    : 1;
   return {
     id: agricultureRecipientNodeId(row.recipientKey),
     name: row.recipientName,
@@ -191,6 +195,7 @@ function createAgricultureRecipientNode(row: AgricultureRecipientAggregate): Atl
     level: 4,
     ico: row.recipientIco ?? undefined,
     metadata: {
+      ...(capacity ? { capacity } : {}),
       municipality: row.municipality,
       district: row.district,
       paymentCount: row.paymentCount,
@@ -421,22 +426,44 @@ export async function getAgricultureRecipientsByFamily(
 ): Promise<AgricultureRecipientAggregate[]> {
   const result = await query(
     `
+      with recipients as (
+        select
+          reporting_year,
+          family_code,
+          family_name,
+          recipient_key,
+          recipient_name,
+          recipient_name_normalized,
+          recipient_ico,
+          municipality,
+          district,
+          amount_czk,
+          payment_count
+        from mart.agriculture_szif_family_recipient_yearly_latest
+        where reporting_year = $1
+          and family_code = $2
+          and amount_czk > 0
+          and coalesce(recipient_ico, '') not in (${ADMIN_LIKE_RECIPIENT_ICOS.map((_, index) => `$${index + 3}`).join(', ')})
+      )
       select
-        reporting_year,
-        family_code,
-        family_name,
-        recipient_key,
-        recipient_name,
-        recipient_ico,
-        municipality,
-        district,
-        amount_czk,
-        payment_count
-      from mart.agriculture_szif_family_recipient_yearly_latest
-      where reporting_year = $1
-        and family_code = $2
-        and amount_czk > 0
-        and coalesce(recipient_ico, '') not in (${ADMIN_LIKE_RECIPIENT_ICOS.map((_, index) => `$${index + 3}`).join(', ')})
+        r.reporting_year,
+        r.family_code,
+        r.family_name,
+        r.recipient_key,
+        r.recipient_name,
+        r.recipient_ico,
+        r.municipality,
+        r.district,
+        r.amount_czk,
+        r.payment_count,
+        case
+          when r.family_code = 'AREA' then l.area_ha
+          else null
+        end as area_ha
+      from recipients r
+      left join mart.agriculture_lpis_user_area_yearly_latest l
+        on l.reporting_year = r.reporting_year
+       and l.user_name_normalized = r.recipient_name_normalized
       order by amount_czk desc, recipient_name asc
     `,
     [year, familyCode, ...ADMIN_LIKE_RECIPIENT_ICOS],
@@ -453,6 +480,7 @@ export async function getAgricultureRecipientsByFamily(
     district: row.district ? String(row.district) : null,
     amount: toNumber(row.amount_czk),
     paymentCount: Number(row.payment_count),
+    areaHa: row.area_ha == null ? null : toNumber(row.area_ha),
     sourceDataset: 'agriculture_szif_payments',
   }));
 }
@@ -630,7 +658,9 @@ function buildAgricultureRecipientGraph(
   offset = 0,
 ) {
   const sourceNodeId = familyNodeId(familyMetric.familyCode);
-  const familyCapacity = familyMetric.familyCode === 'AREA' ? null : familyMetric.recipientCount;
+  const familyCapacity = familyMetric.familyCode === 'AREA'
+    ? recipients.reduce((sum, row) => sum + (row.areaHa ?? 0), 0) || null
+    : familyMetric.recipientCount;
   const nodes: AtlasNode[] = [
     createAgricultureBranchNode(sourceNodeId, familyMetric.familyName, 3, familyCapacity, true),
   ];
@@ -640,8 +670,22 @@ function buildAgricultureRecipientGraph(
   const prevRows = recipients.slice(0, offset);
   const nextRows = recipients.slice(offset + PAGE_SIZE);
 
+  const aggregatePageCapacity = (rows: AgricultureRecipientAggregate[]) => {
+    if (!rows.length) return null;
+    if (familyMetric.familyCode === 'AREA') {
+      const area = rows.reduce((sum, row) => sum + (row.areaHa ?? 0), 0);
+      return area > 0 ? area : null;
+    }
+    return rows.length;
+  };
+
   if (prevRows.length > 0) {
-    addNode(nodes, createPagerNode(PREV_WINDOW_ID, createRecipientPagerLabel('prev', prevRows.length)));
+    const prevCapacity = aggregatePageCapacity(prevRows);
+    const prevNode = createPagerNode(PREV_WINDOW_ID, createRecipientPagerLabel('prev', prevRows.length));
+    if (prevCapacity) {
+      prevNode.metadata = { ...(prevNode.metadata ?? {}), capacity: prevCapacity };
+    }
+    addNode(nodes, prevNode);
     links.push(
       makeLink(
         sourceNodeId,
@@ -671,7 +715,12 @@ function buildAgricultureRecipientGraph(
   }
 
   if (nextRows.length > 0) {
-    addNode(nodes, createPagerNode(NEXT_WINDOW_ID, createRecipientPagerLabel('next', nextRows.length)));
+    const nextCapacity = aggregatePageCapacity(nextRows);
+    const nextNode = createPagerNode(NEXT_WINDOW_ID, createRecipientPagerLabel('next', nextRows.length));
+    if (nextCapacity) {
+      nextNode.metadata = { ...(nextNode.metadata ?? {}), capacity: nextCapacity };
+    }
+    addNode(nodes, nextNode);
     links.push(
       makeLink(
         sourceNodeId,

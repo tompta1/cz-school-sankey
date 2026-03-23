@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { comparableNodeMetric, normalizationCapacity, normalizationGroup, normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
+import { chartValuesForLinks, comparableNodeMetric, normalizationCapacity, normalizationGroup, normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
 import type { SankeyLink, SankeyNode } from '../../types';
 
 const nodes: SankeyNode[] = [
@@ -232,13 +232,84 @@ describe('sankeyOrdering', () => {
     };
     const recipientDetailLink: SankeyLink = {
       ...recipientFamilyLink,
+      source: 'agriculture:subsidy:family:investment',
       target: 'agriculture:recipient:12345678',
       flowType: 'agriculture_subsidy_recipient_detail',
+    };
+    const areaRecipientDetailLink: SankeyLink = {
+      ...recipientDetailLink,
+      source: 'agriculture:subsidy:family:area',
+    };
+    const recipientPageLink: SankeyLink = {
+      ...recipientDetailLink,
+      target: 'synthetic:next-window',
+      flowType: 'agriculture_subsidy_recipient_page',
     };
 
     expect(normalizationGroup(recipientFamilyLink)).toBe('agriculture_subsidy_recipient');
     expect(normalizationGroup(areaFamilyLink)).toBe('agriculture_area_hectare');
-    expect(normalizationGroup(recipientDetailLink)).toBeNull();
+    expect(normalizationGroup(recipientDetailLink)).toBe('agriculture_subsidy_recipient');
+    expect(normalizationGroup(areaRecipientDetailLink)).toBe('agriculture_area_hectare');
+    expect(normalizationGroup(recipientPageLink)).toBe('agriculture_subsidy_recipient');
+  });
+
+  it('normalizes agriculture recipient drilldowns by recipient or hectare where available', () => {
+    const capacityMap = new Map<string, number>([
+      ['agriculture:recipient:12345678', 1],
+      ['agriculture:recipient:87654321', 15.5],
+    ]);
+    const investmentRecipientLink: SankeyLink = {
+      source: 'agriculture:subsidy:family:investment',
+      target: 'agriculture:recipient:12345678',
+      value: 2500000,
+      amountCzk: 2500000,
+      year: 2024,
+      flowType: 'agriculture_subsidy_recipient_detail',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const areaRecipientLink: SankeyLink = {
+      ...investmentRecipientLink,
+      source: 'agriculture:subsidy:family:area',
+      target: 'agriculture:recipient:87654321',
+      amountCzk: 775000,
+      value: 775000,
+    };
+
+    expect(normalizationCapacity(investmentRecipientLink, capacityMap, true)).toBe(1);
+    expect(normalizationCapacity(areaRecipientLink, capacityMap, true)).toBe(15.5);
+    expect(normalizedValue(areaRecipientLink.amountCzk, normalizationCapacity(areaRecipientLink, capacityMap, true), true)).toBe(50000);
+  });
+
+  it('falls back to raw amounts for layout when a metric view graph has no comparable denominators', () => {
+    const capacityMap = new Map<string, number>();
+    const zeroMetricLinks: SankeyLink[] = [
+      {
+        source: 'agriculture:subsidy:family:area',
+        target: 'agriculture:recipient:1',
+        value: 100,
+        amountCzk: 100,
+        year: 2024,
+        flowType: 'agriculture_subsidy_recipient_detail',
+        basis: 'allocated',
+        certainty: 'observed',
+        sourceDataset: 'test',
+      },
+      {
+        source: 'agriculture:subsidy:family:area',
+        target: 'agriculture:recipient:2',
+        value: 50,
+        amountCzk: 50,
+        year: 2024,
+        flowType: 'agriculture_subsidy_recipient_detail',
+        basis: 'allocated',
+        certainty: 'observed',
+        sourceDataset: 'test',
+      },
+    ];
+
+    expect(chartValuesForLinks(zeroMetricLinks, capacityMap, true)).toEqual([100, 50]);
   });
 
   it('normalizes transport investor drilldowns by project count', () => {
