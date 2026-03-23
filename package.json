@@ -67,6 +67,10 @@
     "agriculture:subsidies:load": "python3 etl/load_agriculture_raw.py --dataset agriculture_szif_payments --database-url \"${DATABASE_URL}\"",
     "agriculture:lpis:pull": "python3 etl/agriculture/fetch_lpis_user_area.py --year 2024",
     "agriculture:lpis:load": "python3 etl/load_agriculture_raw.py --dataset agriculture_lpis_user_area --database-url \"${DATABASE_URL}\"",
+    "environment:budget:pull": "python3 etl/environment/fetch_budget_entities.py --year 2024 --year 2025",
+    "environment:budget:load": "python3 etl/load_environment_raw.py --dataset environment_budget_entities --database-url \"${DATABASE_URL}\"",
+    "environment:supports:pull": "python3 etl/environment/fetch_sfzp_supports.py --year 2024 --year 2025",
+    "environment:supports:load": "python3 etl/load_environment_raw.py --dataset environment_sfzp_supports --database-url \"${DATABASE_URL}\"",
     "health:fetch:all": "npm run health:providers && npm run health:claims:providers && npm run health:claims:providers:ico && npm run health:claims:payers && npm run health:insurers"
   },
   "dependencies": {

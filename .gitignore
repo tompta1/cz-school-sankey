@@ -22,5 +22,6 @@ etl/data/raw/social/
 etl/data/raw/justice/
 etl/data/raw/transport/
 etl/data/raw/agriculture/
+etl/data/raw/environment/
 .vercel
 .neon

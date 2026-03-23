@@ -213,6 +213,29 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(tollLink)).toBe('transport_toll_vehicle');
   });
 
+  it('maps environment support links to recipient metrics', () => {
+    const familyLink: SankeyLink = {
+      source: 'environment:sfzp:support',
+      target: 'environment:family:nzu',
+      value: 100,
+      amountCzk: 100,
+      year: 2025,
+      flowType: 'environment_support_family_allocated',
+      basis: 'allocated',
+      certainty: 'inferred',
+      sourceDataset: 'test',
+    };
+    const recipientLink: SankeyLink = {
+      ...familyLink,
+      source: 'environment:family:nzu',
+      target: 'environment:recipient:123',
+      flowType: 'environment_support_recipient_allocated',
+    };
+
+    expect(normalizationGroup(familyLink)).toBe('environment_support_recipient');
+    expect(normalizationGroup(recipientLink)).toBe('environment_support_recipient');
+  });
+
   it('maps agriculture family links to the correct normalization groups', () => {
     const recipientFamilyLink: SankeyLink = {
       source: 'agriculture:ministry:mze',

@@ -21,6 +21,7 @@ Current main source families:
 - Justice: MSp chapter aggregates plus court and prison activity denominators.
 - Transport: Monitor MF for MD/SFDI, SFDI project execution CSVs, and annual transport usage proxies.
 - Agriculture: Monitor MF for MZe/SZIF administration and SZIF recipient payment lists for subsidy outflows.
+- Environment: Monitor MF for MŽP/SFŽP administration and the open SFŽP support registry for support-program drilldowns.
 
 Some links are intentionally synthetic:
 
@@ -46,6 +47,7 @@ Current branch metrics:
 - Transport investor/project drilldown: `Kč/akci`
 - Agriculture area-linked subsidies: `Kč/ha`
 - Agriculture other subsidy families: `Kč/příjemce dotace`
+- Environment support programs: `Kč/příjemce podpory`
 
 Agriculture caveat:
 
@@ -53,6 +55,13 @@ Agriculture caveat:
 - area-linked supports use LPIS hectares matched to the area-family recipient cohort
 - livestock, investment, and mixed residual subsidy families still use unique annual subsidy recipients published by SZIF
 - technical-assistance payments to `MZe` and `SZIF` themselves are excluded from the subsidy denominator and amount, so the branch reflects subsidy recipients rather than administration financing
+
+Environment caveat:
+
+- the MŽP branch currently uses Monitor MF to get actual annual resort and SFŽP expense totals
+- the support-program and recipient drilldowns are then allocated by shares from the open SFŽP support registry
+- this is a strong public reconstruction of the support structure, but not a published annual SFŽP accounting split by program family
+- `SFZP podpory` therefore has a real top-level amount and a real recipient metric, while lower family and recipient amounts are explained synthetic allocations
 
 Why the transport branch is mixed:
 

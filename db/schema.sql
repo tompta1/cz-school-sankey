@@ -727,6 +727,50 @@ create table if not exists raw.agriculture_lpis_user_area_yearly (
 create index if not exists agriculture_lpis_user_area_year_name_idx
   on raw.agriculture_lpis_user_area_yearly (reporting_year, user_name_normalized);
 
+create table if not exists raw.environment_budget_entity (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  period_code text not null,
+  entity_ico text not null,
+  entity_name text not null,
+  entity_kind text not null,
+  expenses_czk numeric(18,2) not null,
+  costs_czk numeric(18,2) not null,
+  revenues_czk numeric(18,2) not null,
+  result_czk numeric(18,2) not null,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists environment_budget_entity_year_ico_idx
+  on raw.environment_budget_entity (reporting_year, entity_ico);
+
+create table if not exists raw.environment_sfzp_support_yearly (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id) on delete cascade,
+  reporting_year integer not null,
+  program_code text not null,
+  program_name text not null,
+  recipient_key text not null,
+  recipient_name text not null,
+  recipient_ico text,
+  municipality text,
+  support_czk numeric(18,2) not null,
+  paid_czk numeric(18,2) not null,
+  project_count integer not null default 1,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists environment_sfzp_support_year_program_amount_idx
+  on raw.environment_sfzp_support_yearly (reporting_year, program_code, support_czk desc);
+
+create index if not exists environment_sfzp_support_year_recipient_idx
+  on raw.environment_sfzp_support_yearly (reporting_year, recipient_key);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -1287,6 +1331,76 @@ order by
   d.snapshot_label desc,
   r.loaded_at desc,
   r.raw_id desc;
+
+create or replace view mart.environment_budget_entity_latest as
+select distinct on (r.reporting_year, r.entity_ico)
+  r.reporting_year,
+  r.period_code,
+  r.entity_ico,
+  r.entity_name,
+  r.entity_kind,
+  r.expenses_czk,
+  r.costs_czk,
+  r.revenues_czk,
+  r.result_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.environment_budget_entity r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.entity_ico,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.environment_sfzp_support_yearly_latest as
+select distinct on (r.reporting_year, r.program_code, r.recipient_key)
+  r.reporting_year,
+  r.program_code,
+  r.program_name,
+  r.recipient_key,
+  r.recipient_name,
+  r.recipient_ico,
+  r.municipality,
+  r.support_czk,
+  r.paid_czk,
+  r.project_count,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.environment_sfzp_support_yearly r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.program_code,
+  r.recipient_key,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.environment_sfzp_family_metric_latest as
+select
+  reporting_year,
+  program_code,
+  max(program_name) as program_name,
+  count(*) filter (where support_czk > 0)::integer as recipient_count,
+  sum(support_czk) as support_czk,
+  sum(paid_czk) as paid_czk
+from mart.environment_sfzp_support_yearly_latest
+group by reporting_year, program_code;
+
+create or replace view mart.environment_sfzp_recipient_metric_latest as
+select
+  reporting_year,
+  count(*) filter (where support_czk > 0)::integer as recipient_count,
+  sum(support_czk) as support_czk,
+  sum(paid_czk) as paid_czk
+from mart.environment_sfzp_support_yearly_latest
+group by reporting_year;
 
 create or replace view mart.health_provider_finance_yearly as
 with provider_directory as (

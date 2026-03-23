@@ -39,6 +39,13 @@ import {
   getAgricultureTotal,
   getAtlasAgricultureGraph,
 } from './atlas/agriculture.js';
+import {
+  appendEnvironmentBranch,
+  getAtlasEnvironmentGraph,
+  getEnvironmentBudgetEntities,
+  getEnvironmentRecipientMetrics,
+  getEnvironmentTotal,
+} from './atlas/environment.js';
 
 const STATE_ID = 'state:cr';
 const HEALTH_MINISTRY_ID = 'health:ministry:mzcr';
@@ -1066,6 +1073,8 @@ function buildCombinedRootGraph(
   transportActivityMetrics: Awaited<ReturnType<typeof getTransportActivityMetrics>>,
   agricultureBudgetRows: Awaited<ReturnType<typeof getAgricultureBudgetEntities>>,
   agricultureRecipientMetrics: Awaited<ReturnType<typeof getAgricultureRecipientMetrics>>,
+  environmentBudgetRows: Awaited<ReturnType<typeof getEnvironmentBudgetEntities>>,
+  environmentRecipientMetrics: Awaited<ReturnType<typeof getEnvironmentRecipientMetrics>>,
   healthRows: HealthFinanceRow[],
   mzAggregate: HealthMzAggregate | null,
   adminEntities: HealthMzAdminEntity[],
@@ -1080,6 +1089,7 @@ function buildCombinedRootGraph(
   const justiceTotal = getJusticeTotal(justiceBudgetRows);
   const transportTotal = getTransportTotal(transportBudgetRows, transportSfdiProjects);
   const agricultureTotal = getAgricultureTotal(agricultureBudgetRows, agricultureRecipientMetrics);
+  const environmentTotal = getEnvironmentTotal(environmentBudgetRows);
   const stateOtherLink = links.find((link) => link.source === STATE_ID && link.target === 'state:other');
 
   const hospitalRows = healthRows.filter((row) => row.focus === 'hospital');
@@ -1098,6 +1108,7 @@ function buildCombinedRootGraph(
     justiceTotal +
     transportTotal +
     agricultureTotal +
+    environmentTotal +
     hospitalAmount +
     zzsAmount +
     outpatientAmount +
@@ -1106,7 +1117,7 @@ function buildCombinedRootGraph(
   if (stateOtherLink) {
     stateOtherLink.amountCzk = Math.max(0, stateOtherLink.amountCzk - explicitAtlasTopLevelAmount);
     stateOtherLink.value = stateOtherLink.amountCzk;
-    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich, dopravnich, zemedelskych a zdravotnich vetvi atlasu';
+    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich, dopravnich, zemedelskych, environmentálních a zdravotnich vetvi atlasu';
   }
 
   appendSocialBranch(nodes, links, year, socialRows, socialRecipientMetrics);
@@ -1114,6 +1125,7 @@ function buildCombinedRootGraph(
   appendJusticeBranch(nodes, links, year, justiceBudgetRows, justiceActivityRows);
   appendTransportBranch(nodes, links, year, transportBudgetRows, transportSfdiProjects, transportActivityMetrics);
   appendAgricultureBranch(nodes, links, year, agricultureBudgetRows, agricultureRecipientMetrics);
+  appendEnvironmentBranch(nodes, links, year, environmentBudgetRows, environmentRecipientMetrics);
 
   if (hospitalRows.length > 0) {
     const ownerGroups = buildOwnerGroups(hospitalRows);
@@ -2060,6 +2072,8 @@ export async function getAtlasOverview(year: number) {
     transportActivityMetrics,
     agricultureBudgetRows,
     agricultureRecipientMetrics,
+    environmentBudgetRows,
+    environmentRecipientMetrics,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2080,6 +2094,8 @@ export async function getAtlasOverview(year: number) {
     getTransportActivityMetrics(year),
     getAgricultureBudgetEntities(year),
     getAgricultureRecipientMetrics(year),
+    getEnvironmentBudgetEntities(year),
+    getEnvironmentRecipientMetrics(year),
     getHealthFinanceRows(year),
     getHealthMzAggregate(year),
     getHealthMzAdminEntities(year),
@@ -2104,6 +2120,8 @@ export async function getAtlasOverview(year: number) {
     transportActivityMetrics,
     agricultureBudgetRows,
     agricultureRecipientMetrics,
+    environmentBudgetRows,
+    environmentRecipientMetrics,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2240,6 +2258,7 @@ export async function getAtlasJusticeGraph(year: number, nodeId: string | null =
 
 export { getAtlasTransportGraph };
 export { getAtlasAgricultureGraph };
+export { getAtlasEnvironmentGraph };
 
 export async function searchAtlasEntities(year: number, q: string, limit = 8) {
   const needle = q.trim();

@@ -154,6 +154,22 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     rationale: 'U největších plošných opatření je hektar nejbližší věcný jmenovatel. Atlas jej používá jen pro area-family větev a jen nad uživateli, které se podaří spárovat s příjemcovskou vrstvou SZIF.',
     url: 'https://mze.gov.cz/public/app/eagriapp/LpisData/Cr.aspx',
   },
+  environment_budget_entities: {
+    datasetKey: 'environment_budget_entities',
+    title: 'Monitor MF: MŽP a SFŽP',
+    description: 'Roční rozpočtové a nákladové údaje Ministerstva životního prostředí a Státního fondu životního prostředí.',
+    freshness: 'Roční účetní data. V atlasu jsou nahrané roky 2024 a 2025.',
+    rationale: 'Tvoří skutečný výdajový obal environmentální větve, ze kterého se odděluje fondová podpora SFŽP.',
+    url: 'https://monitor.statnipokladna.gov.cz',
+  },
+  environment_sfzp_supports: {
+    datasetKey: 'environment_sfzp_supports',
+    title: 'SFŽP: aktivní registr podpor',
+    description: 'Otevřený registr aktivních podpor SFŽP s příjemcem, obcí, částkou podpory, vyplacenou částkou a datem podpisu rozhodnutí.',
+    freshness: 'Průběžně aktualizovaný registr. Atlas z něj vytváří roční snapshot podle roku podpisu rozhodnutí.',
+    rationale: 'Pro první iteraci MŽP je to nejpraktičtější veřejný recipient-level zdroj. Používá se pro recipient counts a pro programové share při rozdělení skutečných výdajů SFŽP.',
+    url: 'https://otevrenadata.sfzp.cz/',
+  },
   atlas_inferred: {
     datasetKey: 'atlas.inferred',
     title: 'Odvozené atlasové alokace',

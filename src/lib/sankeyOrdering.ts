@@ -82,6 +82,14 @@ export function normalizationGroup(link: SankeyLink): string | null {
     return 'agriculture_subsidy_recipient';
   }
 
+  if (
+    link.flowType === 'environment_support_family_allocated' ||
+    link.flowType === 'environment_support_recipient_allocated' ||
+    link.flowType === 'environment_support_recipient_page'
+  ) {
+    return 'environment_support_recipient';
+  }
+
   if (link.flowType === 'justice_branch_cost') {
     if (link.target === 'justice:courts') return 'justice_resolved_case';
     if (link.target === 'justice:prison-service') return 'justice_inmate';

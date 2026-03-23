@@ -109,6 +109,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Plošné a krajinné podpory SZIF vztažené k hektarům LPIS spárovaným s area-family příjemci.',
     rationale: 'U největších plošných opatření je hektar nejbližší věcný jmenovatel; atlas jej používá jen pro area-family větev a nepřenáší ho do jiných zemědělských podpor.',
   },
+  environment_support_recipient: {
+    group: 'environment_support_recipient',
+    perUnitLabel: 'příjemce podpory',
+    countLabel: 'příjemců podpory',
+    title: 'Kč/příjemce podpory',
+    description: 'Podpory SFŽP jsou porovnávány proti počtu jedinečných příjemců v otevřeném registru podpor za rok podpisu rozhodnutí.',
+    rationale: 'U první iterace MŽP je počet příjemců nejbližší obhajitelný jmenovatel; atlas tím neříká nic o dopadu na emise či odpady, pouze o šíři dotační distribuce.',
+  },
   transport_rail_passenger: {
     group: 'transport_rail_passenger',
     perUnitLabel: 'cestujícího',

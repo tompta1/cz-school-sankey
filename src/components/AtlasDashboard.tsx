@@ -31,6 +31,9 @@ const AGRICULTURE_SUBSIDY_LIVESTOCK_ID = 'agriculture:subsidy:family:livestock';
 const AGRICULTURE_SUBSIDY_INVESTMENT_ID = 'agriculture:subsidy:family:investment';
 const AGRICULTURE_SUBSIDY_OTHER_ID = 'agriculture:subsidy:family:other';
 const AGRICULTURE_ADMIN_ID = 'agriculture:admin';
+const ENVIRONMENT_ROOT_ID = 'environment:ministry:mzp';
+const ENVIRONMENT_SUPPORT_ID = 'environment:sfzp:support';
+const ENVIRONMENT_ADMIN_ID = 'environment:admin';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -134,6 +137,14 @@ function isClickableJusticeNode(node: SankeyNode): boolean {
   return node.id === JUSTICE_MINISTRY_ID;
 }
 
+function isClickableEnvironmentNode(node: SankeyNode): boolean {
+  if (node.id === ENVIRONMENT_ROOT_ID) return true;
+  if (node.id === ENVIRONMENT_SUPPORT_ID) return true;
+  if (node.id === ENVIRONMENT_ADMIN_ID) return true;
+  if (node.id.startsWith('environment:family:')) return true;
+  return false;
+}
+
 export function AtlasDashboard() {
   const [years, setYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -198,6 +209,11 @@ export function AtlasDashboard() {
       if (currentView.offset > 0) params.set('offset', String(currentView.offset));
       params.set('metricMode', perPerson ? 'comparative' : 'amount');
       path = `/api/atlas/agriculture?${params.toString()}`;
+    } else if (currentView.scope === 'environment') {
+      const params = new URLSearchParams({ year: String(selectedYear) });
+      if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
+      if (currentView.offset > 0) params.set('offset', String(currentView.offset));
+      path = `/api/atlas/environment?${params.toString()}`;
     } else if (currentView.scope === 'justice') {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
@@ -332,6 +348,22 @@ function handleMvNodeClick(node: SankeyNode) {
     setViewStack((prev) => pushAtlasView(prev, { scope: 'justice', nodeId: nextNodeId, label: node.name, offset: 0 }));
   }
 
+  function handleEnvironmentNodeClick(node: SankeyNode) {
+    if (node.id === PREV_WINDOW_ID || node.id === NEXT_WINDOW_ID) {
+      setViewStack((prev) => {
+        const current = prev.at(-1);
+        if (!current || current.scope !== 'environment') return prev;
+        const step = node.id === PREV_WINDOW_ID ? -28 : 28;
+        return pageAtlasView(prev, step);
+      });
+      return;
+    }
+
+    if (!isClickableEnvironmentNode(node)) return;
+    const nextNodeId = node.id === ENVIRONMENT_ROOT_ID ? null : node.id;
+    setViewStack((prev) => pushAtlasView(prev, { scope: 'environment', nodeId: nextNodeId, label: node.name, offset: 0 }));
+  }
+
   function handleNodeClick(nodeId: string) {
     const node = graph?.nodes.find((entry) => entry.id === nodeId);
     if (!node) return;
@@ -351,6 +383,10 @@ function handleMvNodeClick(node: SankeyNode) {
       }
       if (node.id.startsWith('agriculture:')) {
         handleAgricultureNodeClick(node);
+        return;
+      }
+      if (node.id.startsWith('environment:')) {
+        handleEnvironmentNodeClick(node);
         return;
       }
       if (node.id.startsWith('health:') || node.id === HEALTH_INSURANCE_ID || node.id === HEALTH_MINISTRY_ID) {
@@ -383,6 +419,11 @@ function handleMvNodeClick(node: SankeyNode) {
 
     if (currentView.scope === 'agriculture') {
       handleAgricultureNodeClick(node);
+      return;
+    }
+
+    if (currentView.scope === 'environment') {
+      handleEnvironmentNodeClick(node);
       return;
     }
 

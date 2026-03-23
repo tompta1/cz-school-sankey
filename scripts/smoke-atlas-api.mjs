@@ -34,6 +34,10 @@ async function main() {
     overview2024.links.some((link) => link.target === 'agriculture:ministry:mze'),
     'overview 2024 is missing agriculture root link',
   );
+  assert(
+    overview2024.links.some((link) => link.target === 'environment:ministry:mzp'),
+    'overview 2024 is missing environment root link',
+  );
 
   const transport2024 = await fetchJson('/api/atlas/transport?year=2024');
   assert(
@@ -77,6 +81,18 @@ async function main() {
   assert(
     agricultureAdmin2024.nodes.some((node) => node.id.startsWith('agriculture:admin-entity:')),
     'agriculture 2024 is missing admin entity drilldown',
+  );
+
+  const environment2024 = await fetchJson('/api/atlas/environment?year=2024');
+  assert(
+    environment2024.nodes.some((node) => node.id === 'environment:sfzp:support' && node.metadata?.capacity),
+    'environment 2024 is missing SFZP support branch',
+  );
+
+  const environmentSupport2024 = await fetchJson('/api/atlas/environment?year=2024&nodeId=environment:sfzp:support');
+  assert(
+    environmentSupport2024.nodes.some((node) => node.id.startsWith('environment:family:')),
+    'environment 2024 is missing support-family drilldown',
   );
 
   console.log(`Atlas smoke checks passed for ${baseUrl}`);
