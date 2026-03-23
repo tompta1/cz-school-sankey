@@ -61,6 +61,7 @@ const AGRICULTURE_SUBSIDY_TOTAL_ID = 'agriculture:subsidy:total';
 const AGRICULTURE_SUBSIDY_EU_ID = 'agriculture:subsidy:eu';
 const AGRICULTURE_SUBSIDY_NATIONAL_ID = 'agriculture:subsidy:national';
 const AGRICULTURE_ADMIN_ID = 'agriculture:admin';
+const AGRICULTURE_ADMIN_ENTITY_PREFIX = 'agriculture:admin-entity:';
 const AGRICULTURE_RECIPIENT_PREFIX = 'agriculture:recipient:';
 const PREV_WINDOW_ID = 'synthetic:prev-window';
 const NEXT_WINDOW_ID = 'synthetic:next-window';
@@ -116,6 +117,10 @@ function agricultureRecipientNodeId(recipientKey: string): string {
   return `${AGRICULTURE_RECIPIENT_PREFIX}${recipientKey}`;
 }
 
+function agricultureAdminEntityNodeId(entityIco: string): string {
+  return `${AGRICULTURE_ADMIN_ENTITY_PREFIX}${entityIco}`;
+}
+
 function createAgricultureMinistryNode(): AtlasNode {
   return {
     id: AGRICULTURE_MINISTRY_ID,
@@ -165,6 +170,22 @@ function createAgricultureRecipientNode(row: AgricultureRecipientAggregate): Atl
   };
 }
 
+function createAgricultureAdminEntityNode(row: AgricultureBudgetEntity, amount: number, name = row.entityName): AtlasNode {
+  return {
+    id: agricultureAdminEntityNodeId(row.entityIco),
+    name,
+    category: row.entityKind === 'ministry' ? 'ministry' : 'other',
+    level: 3,
+    ico: row.entityIco,
+    metadata: {
+      ...(amount > 0 ? { capacity: amount } : {}),
+      drilldownAvailable: false,
+      focus: 'agriculture',
+      entityKind: row.entityKind,
+    },
+  };
+}
+
 function createPagerNode(id: typeof PREV_WINDOW_ID | typeof NEXT_WINDOW_ID, label: string): AtlasNode {
   return {
     id,
@@ -182,13 +203,30 @@ function agricultureAdminAmount(budgetRows: AgricultureBudgetEntity[]): number {
   return budgetRows.reduce((sum, row) => sum + budgetEntityAmount(row), 0);
 }
 
+function agricultureResidualAmount(
+  budgetRows: AgricultureBudgetEntity[],
+  metrics: AgricultureRecipientMetric[],
+): number {
+  const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
+  if (!totalMetric) return 0;
+  return Math.max(agricultureAdminAmount(budgetRows) - totalMetric.amount, 0);
+}
+
+function agricultureResidualEntityAmount(row: AgricultureBudgetEntity, subsidyAmount: number): number {
+  const amount = budgetEntityAmount(row);
+  if (row.entityIco === '48133981') {
+    return Math.max(amount - subsidyAmount, 0);
+  }
+  return amount;
+}
+
 export function getAgricultureTotal(
   budgetRows: AgricultureBudgetEntity[],
   metrics: AgricultureRecipientMetric[],
 ): number {
   const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
   if (!totalMetric || totalMetric.amount <= 0) return 0;
-  return agricultureAdminAmount(budgetRows) + totalMetric.amount;
+  return agricultureAdminAmount(budgetRows);
 }
 
 export async function getAgricultureBudgetEntities(year: number): Promise<AgricultureBudgetEntity[]> {
@@ -323,8 +361,8 @@ export function appendAgricultureBranch(
   const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
   if (!totalMetric || totalMetric.amount <= 0) return;
 
-  const adminAmount = agricultureAdminAmount(budgetRows);
-  const rootTotal = totalMetric.amount + adminAmount;
+  const residualAmount = agricultureResidualAmount(budgetRows, metrics);
+  const rootTotal = agricultureAdminAmount(budgetRows);
 
   addNode(nodes, createAgricultureMinistryNode());
   links.push(
@@ -334,7 +372,7 @@ export function appendAgricultureBranch(
       rootTotal,
       year,
       'state_to_agriculture_resort',
-      'Synteticka osa resortu zemedelstvi: MZe a SZIF sprava z Monitoru MF plus vyplacene dotace publikovane SZIF',
+      'Synteticka osa resortu zemedelstvi: celkove vydaje MZe a SZIF z Monitoru MF, z nichz je vyclenena primarni dotacni vetev publikovana SZIF',
       'atlas.inferred',
     ),
   );
@@ -361,16 +399,16 @@ export function appendAgricultureBranch(
     ),
   );
 
-  if (adminAmount > 0) {
-    addNode(nodes, createAgricultureBranchNode(AGRICULTURE_ADMIN_ID, 'MZe a SZIF sprava', 2, null, false));
+  if (residualAmount > 0) {
+    addNode(nodes, createAgricultureBranchNode(AGRICULTURE_ADMIN_ID, 'MZe a SZIF ostatni vydaje', 2, null, true));
     links.push(
       makeLink(
         AGRICULTURE_MINISTRY_ID,
         AGRICULTURE_ADMIN_ID,
-        adminAmount,
+        residualAmount,
         year,
         'agriculture_admin_branch',
-        'Monitor MF: vydaje a naklady MZe a provozu SZIF mimo prime dotacni platby',
+        'Monitor MF: rezidualni vydaje MZe a SZIF po odecteni primych dotaci publikovanych v seznamech SZIF',
         'agriculture_budget_entities',
       ),
     );
@@ -385,7 +423,7 @@ function buildAgricultureRootGraph(
   const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
   if (!totalMetric || totalMetric.amount <= 0) return null;
 
-  const adminAmount = agricultureAdminAmount(budgetRows);
+  const residualAmount = agricultureResidualAmount(budgetRows, metrics);
   const nodes: AtlasNode[] = [createAgricultureMinistryNode()];
   const links: AtlasLink[] = [];
 
@@ -411,17 +449,50 @@ function buildAgricultureRootGraph(
     ),
   );
 
-  if (adminAmount > 0) {
-    addNode(nodes, createAgricultureBranchNode(AGRICULTURE_ADMIN_ID, 'MZe a SZIF sprava', 2, null, false));
+  if (residualAmount > 0) {
+    addNode(nodes, createAgricultureBranchNode(AGRICULTURE_ADMIN_ID, 'MZe a SZIF ostatni vydaje', 2, null, true));
     links.push(
       makeLink(
         AGRICULTURE_MINISTRY_ID,
         AGRICULTURE_ADMIN_ID,
-        adminAmount,
+        residualAmount,
         year,
         'agriculture_admin_branch',
-        'Monitor MF: vydaje a naklady MZe a provozu SZIF mimo prime dotacni platby',
+        'Monitor MF: rezidualni vydaje MZe a SZIF po odecteni primych dotaci publikovanych v seznamech SZIF',
         'agriculture_budget_entities',
+      ),
+    );
+  }
+
+  return { year, nodes, links };
+}
+
+function buildAgricultureAdminGraph(year: number, budgetRows: AgricultureBudgetEntity[], metrics: AgricultureRecipientMetric[]) {
+  const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
+  if (!totalMetric || totalMetric.amount <= 0) return null;
+
+  const adminRows = budgetRows
+    .map((row) => ({ ...row, amount: agricultureResidualEntityAmount(row, totalMetric.amount) }))
+    .filter((row) => row.amount > 0)
+    .sort((a, b) => b.amount - a.amount || a.entityName.localeCompare(b.entityName, 'cs'));
+
+  if (adminRows.length === 0) return null;
+
+  const nodes: AtlasNode[] = [createAgricultureBranchNode(AGRICULTURE_ADMIN_ID, 'MZe a SZIF ostatni vydaje', 2, null, true)];
+  const links: AtlasLink[] = [];
+
+  for (const row of adminRows) {
+    const name = row.entityIco === '48133981' ? 'SZIF mimo prime dotace' : row.entityName;
+    addNode(nodes, createAgricultureAdminEntityNode(row, row.amount, name));
+    links.push(
+      makeLink(
+        AGRICULTURE_ADMIN_ID,
+        agricultureAdminEntityNodeId(row.entityIco),
+        row.amount,
+        year,
+        'agriculture_admin_entity',
+        'Monitor MF: rozpad rezidualni vrstvy MZe a SZIF po odecteni primych dotaci vyplacenych pres SZIF',
+        row.sourceDataset,
       ),
     );
   }
@@ -565,6 +636,11 @@ export async function getAtlasAgricultureGraph(year: number, nodeId: string | nu
   if (nodeId === AGRICULTURE_SUBSIDY_TOTAL_ID) {
     const metrics = await getAgricultureRecipientMetrics(year);
     return buildAgricultureFundingGraph(year, metrics);
+  }
+
+  if (nodeId === AGRICULTURE_ADMIN_ID) {
+    const [budgetRows, metrics] = await Promise.all([getAgricultureBudgetEntities(year), getAgricultureRecipientMetrics(year)]);
+    return buildAgricultureAdminGraph(year, budgetRows, metrics);
   }
 
   if (nodeId === AGRICULTURE_SUBSIDY_EU_ID || nodeId === AGRICULTURE_SUBSIDY_NATIONAL_ID) {

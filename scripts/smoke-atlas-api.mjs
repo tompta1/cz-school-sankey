@@ -67,6 +67,12 @@ async function main() {
     'agriculture 2024 is missing subsidy denominator',
   );
 
+  const agricultureAdmin2024 = await fetchJson('/api/atlas/agriculture?year=2024&nodeId=agriculture:admin');
+  assert(
+    agricultureAdmin2024.nodes.some((node) => node.id.startsWith('agriculture:admin-entity:')),
+    'agriculture 2024 is missing admin entity drilldown',
+  );
+
   console.log(`Atlas smoke checks passed for ${baseUrl}`);
 }
 

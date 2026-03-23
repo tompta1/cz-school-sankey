@@ -28,6 +28,7 @@ const AGRICULTURE_ROOT_ID = 'agriculture:ministry:mze';
 const AGRICULTURE_SUBSIDY_TOTAL_ID = 'agriculture:subsidy:total';
 const AGRICULTURE_SUBSIDY_EU_ID = 'agriculture:subsidy:eu';
 const AGRICULTURE_SUBSIDY_NATIONAL_ID = 'agriculture:subsidy:national';
+const AGRICULTURE_ADMIN_ID = 'agriculture:admin';
 const JUSTICE_MINISTRY_ID = 'justice:ministry:msp';
 const SCHOOL_ROOT_ID = 'school:root';
 const MAX_RESULTS = 8;
@@ -115,6 +116,7 @@ function isClickableTransportNode(node: SankeyNode): boolean {
 function isClickableAgricultureNode(node: SankeyNode): boolean {
   if (node.id === AGRICULTURE_ROOT_ID) return true;
   if (node.id === AGRICULTURE_SUBSIDY_TOTAL_ID) return true;
+  if (node.id === AGRICULTURE_ADMIN_ID) return true;
   if (node.id === AGRICULTURE_SUBSIDY_EU_ID || node.id === AGRICULTURE_SUBSIDY_NATIONAL_ID) return true;
   return false;
 }
