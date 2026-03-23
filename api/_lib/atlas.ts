@@ -27,6 +27,7 @@ import {
 import {
   appendTransportBranch,
   getAtlasTransportGraph,
+  getTransportActivityMetrics,
   getTransportBudgetEntities,
   getTransportSfdiProjects,
   getTransportTotal,
@@ -1055,6 +1056,7 @@ function buildCombinedRootGraph(
   justiceActivityRows: Awaited<ReturnType<typeof getJusticeActivityAggregates>>,
   transportBudgetRows: Awaited<ReturnType<typeof getTransportBudgetEntities>>,
   transportSfdiProjects: Awaited<ReturnType<typeof getTransportSfdiProjects>>,
+  transportActivityMetrics: Awaited<ReturnType<typeof getTransportActivityMetrics>>,
   healthRows: HealthFinanceRow[],
   mzAggregate: HealthMzAggregate | null,
   adminEntities: HealthMzAdminEntity[],
@@ -1092,7 +1094,7 @@ function buildCombinedRootGraph(
   appendSocialBranch(nodes, links, year, socialRows, socialRecipientMetrics);
   appendMvBranch(nodes, links, year, mvBudgetRows, mvPoliceCrimeRows, mvFireRescueRows);
   appendJusticeBranch(nodes, links, year, justiceBudgetRows, justiceActivityRows);
-  appendTransportBranch(nodes, links, year, transportBudgetRows, transportSfdiProjects);
+  appendTransportBranch(nodes, links, year, transportBudgetRows, transportSfdiProjects, transportActivityMetrics);
 
   if (hospitalRows.length > 0) {
     const ownerGroups = buildOwnerGroups(hospitalRows);
@@ -2036,6 +2038,7 @@ export async function getAtlasOverview(year: number) {
     justiceActivityRows,
     transportBudgetRows,
     transportSfdiProjects,
+    transportActivityMetrics,
     healthRows,
     mzAggregate,
     adminEntities,
@@ -2053,6 +2056,7 @@ export async function getAtlasOverview(year: number) {
     getJusticeActivityAggregates(year),
     getTransportBudgetEntities(year),
     getTransportSfdiProjects(year),
+    getTransportActivityMetrics(year),
     getHealthFinanceRows(year),
     getHealthMzAggregate(year),
     getHealthMzAdminEntities(year),
@@ -2074,6 +2078,7 @@ export async function getAtlasOverview(year: number) {
     justiceActivityRows,
     transportBudgetRows,
     transportSfdiProjects,
+    transportActivityMetrics,
     healthRows,
     mzAggregate,
     adminEntities,

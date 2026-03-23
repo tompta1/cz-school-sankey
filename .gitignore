@@ -20,5 +20,6 @@ etl/data/raw/health/
 etl/data/raw/mv/
 etl/data/raw/social/
 etl/data/raw/justice/
+etl/data/raw/transport/
 .vercel
 .neon

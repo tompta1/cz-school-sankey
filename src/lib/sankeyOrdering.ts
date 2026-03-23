@@ -7,6 +7,8 @@ const NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES = new Set([
   'health_outpatient_region_group',
   'health_outpatient_specialty_group',
   'health_outpatient_provider_allocated_cost',
+  'transport_sfdi_investor',
+  'transport_sfdi_project',
 ]);
 
 export function normalizedValue(amountCzk: number, capacity: number | null, perUnit: boolean): number {
@@ -46,6 +48,18 @@ export function normalizationGroup(link: SankeyLink): string | null {
 
   if (link.flowType === 'mv_fire_rescue_region_allocated_cost') {
     return 'fire_rescue_intervention';
+  }
+
+  if (link.flowType === 'transport_rail_branch') {
+    return 'transport_rail_passenger';
+  }
+
+  if (link.flowType === 'transport_road_vignette_branch') {
+    return 'transport_vignette_sale';
+  }
+
+  if (link.flowType === 'transport_road_toll_branch') {
+    return 'transport_toll_vehicle';
   }
 
   if (link.flowType === 'justice_branch_cost') {

@@ -17,6 +17,7 @@ RAW_ROOT = ROOT / "etl" / "data" / "raw" / "transport"
 SOURCES = {
     "transport_monitor_entities": ("Monitor MF", "https://monitor.statnipokladna.gov.cz"),
     "transport_sfdi_projects": ("SFDI", "https://kz.sfdi.cz"),
+    "transport_activity_metrics": ("SYDOS / eDalnice / CzechToll", "https://www.sydos.cz"),
 }
 
 
@@ -30,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         action="append",
-        choices=["transport_budget_entities", "transport_sfdi_projects"],
+        choices=["transport_budget_entities", "transport_sfdi_projects", "transport_activity_metrics"],
         help="Restrict loading to one or more dataset codes.",
     )
     return parser.parse_args()
@@ -295,9 +296,65 @@ def load_transport_sfdi_projects(conn: psycopg.Connection, path: Path) -> tuple[
     return dataset_release_id, inserted
 
 
+def load_transport_activity_metrics(conn: psycopg.Connection, path: Path) -> tuple[int, int]:
+    snapshot_label = snapshot_label_for(path)
+    sidecar = sidecar_for(path)
+    source_system_id = upsert_source_system(conn, "transport_activity_metrics", *SOURCES["transport_activity_metrics"])
+    reporting_years = sidecar.get("years") or []
+    source_url = ((sidecar.get("sources") or [None])[0]) or None
+    dataset_release_id = upsert_dataset_release(
+        conn,
+        source_system_id=source_system_id,
+        dataset_code="transport_activity_metrics",
+        snapshot_label=snapshot_label,
+        source_url=source_url,
+        local_path=path,
+        metadata=sidecar,
+        content_sha256=None,
+        reporting_year=max(reporting_years) if reporting_years else None,
+    )
+
+    with conn.cursor() as cur:
+        cur.execute("delete from raw.transport_activity_metric where dataset_release_id = %s", (dataset_release_id,))
+        inserted = 0
+        for row in read_rows(path):
+            cur.execute(
+                """
+                insert into raw.transport_activity_metric (
+                  dataset_release_id,
+                  reporting_year,
+                  activity_domain,
+                  metric_code,
+                  metric_name,
+                  count_value,
+                  reference_amount_czk,
+                  source_url,
+                  payload
+                )
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    dataset_release_id,
+                    int(row["reporting_year"]),
+                    row["activity_domain"],
+                    row["metric_code"],
+                    row["metric_name"],
+                    parse_decimal(row["count_value"]),
+                    parse_decimal(row["reference_amount_czk"]),
+                    row.get("source_url"),
+                    Jsonb(row),
+                ),
+            )
+            inserted += 1
+
+    finalize_dataset_release(conn, dataset_release_id=dataset_release_id, row_count=inserted)
+    return dataset_release_id, inserted
+
+
 LOADERS = {
     "transport_budget_entities": load_transport_budget_entities,
     "transport_sfdi_projects": load_transport_sfdi_projects,
+    "transport_activity_metrics": load_transport_activity_metrics,
 }
 
 

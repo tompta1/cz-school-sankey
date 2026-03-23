@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { comparableNodeMetric, normalizationCapacity, normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
+import { comparableNodeMetric, normalizationCapacity, normalizationGroup, normalizedValue, orderSankeyGraph } from '../sankeyOrdering';
 import type { SankeyLink, SankeyNode } from '../../types';
 
 const nodes: SankeyNode[] = [
@@ -183,5 +183,63 @@ describe('sankeyOrdering', () => {
         true,
       ),
     ).toBe(0);
+  });
+
+  it('maps transport branch metrics to specific denominator groups', () => {
+    const railLink: SankeyLink = {
+      source: 'transport:ministry:md',
+      target: 'transport:sfdi:rail',
+      value: 100,
+      amountCzk: 100,
+      year: 2025,
+      flowType: 'transport_rail_branch',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const vignetteLink: SankeyLink = {
+      ...railLink,
+      target: 'transport:sfdi:roads-vignette',
+      flowType: 'transport_road_vignette_branch',
+    };
+    const tollLink: SankeyLink = {
+      ...railLink,
+      target: 'transport:sfdi:roads-toll',
+      flowType: 'transport_road_toll_branch',
+    };
+
+    expect(normalizationGroup(railLink)).toBe('transport_rail_passenger');
+    expect(normalizationGroup(vignetteLink)).toBe('transport_vignette_sale');
+    expect(normalizationGroup(tollLink)).toBe('transport_toll_vehicle');
+  });
+
+  it('keeps transport investor drilldowns unsupported in normalized mode without capacities', () => {
+    const capacityMap = new Map<string, number>([['transport:sfdi:rail', 191893200]]);
+    const branchLink: SankeyLink = {
+      source: 'transport:ministry:md',
+      target: 'transport:sfdi:rail',
+      value: 63112226149,
+      amountCzk: 63112226149,
+      year: 2024,
+      flowType: 'transport_rail_branch',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const investorLink: SankeyLink = {
+      source: 'transport:sfdi:rail',
+      target: 'transport:investor:123',
+      value: 1000000000,
+      amountCzk: 1000000000,
+      year: 2024,
+      flowType: 'transport_sfdi_investor',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+
+    expect(normalizationCapacity(branchLink, capacityMap, true)).toBe(191893200);
+    expect(normalizationCapacity(investorLink, capacityMap, true)).toBeNull();
+    expect(normalizedValue(investorLink.amountCzk, normalizationCapacity(investorLink, capacityMap, true), true)).toBe(0);
   });
 });

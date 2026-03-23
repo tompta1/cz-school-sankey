@@ -612,6 +612,23 @@ create table if not exists raw.transport_sfdi_project (
 create index if not exists transport_sfdi_project_year_action_idx
   on raw.transport_sfdi_project (reporting_year, action_id, budget_area_code);
 
+create table if not exists raw.transport_activity_metric (
+  raw_id bigserial primary key,
+  dataset_release_id bigint not null references meta.dataset_release(dataset_release_id),
+  reporting_year integer not null,
+  activity_domain text not null,
+  metric_code text not null,
+  metric_name text not null,
+  count_value numeric(20, 2) not null default 0,
+  reference_amount_czk numeric(20, 2) not null default 0,
+  source_url text,
+  payload jsonb not null default '{}'::jsonb,
+  loaded_at timestamptz not null default now()
+);
+
+create index if not exists transport_activity_metric_year_code_idx
+  on raw.transport_activity_metric (reporting_year, activity_domain, metric_code);
+
 create or replace view mart.school_available_years as
 select distinct reporting_year as year
 from raw.school_entities
@@ -998,6 +1015,28 @@ order by
   r.action_id,
   r.budget_area_code,
   r.investor_name,
+  d.snapshot_label desc,
+  r.loaded_at desc,
+  r.raw_id desc;
+
+create or replace view mart.transport_activity_metric_latest as
+select distinct on (r.reporting_year, r.activity_domain, r.metric_code)
+  r.reporting_year,
+  r.activity_domain,
+  r.metric_code,
+  r.metric_name,
+  r.count_value,
+  r.reference_amount_czk,
+  r.source_url,
+  r.payload,
+  d.snapshot_label,
+  d.dataset_release_id
+from raw.transport_activity_metric r
+join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+order by
+  r.reporting_year,
+  r.activity_domain,
+  r.metric_code,
   d.snapshot_label desc,
   r.loaded_at desc,
   r.raw_id desc;
