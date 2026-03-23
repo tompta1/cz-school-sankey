@@ -199,6 +199,11 @@ function createPagerNode(id: typeof PREV_WINDOW_ID | typeof NEXT_WINDOW_ID, labe
   };
 }
 
+function createRecipientPagerLabel(direction: 'prev' | 'next', hiddenCount: number): string {
+  const arrow = direction === 'prev' ? '↑' : '↓';
+  return `${arrow} dalsi prijemci (${hiddenCount})`;
+}
+
 function agricultureAdminAmount(budgetRows: AgricultureBudgetEntity[]): number {
   return budgetRows.reduce((sum, row) => sum + budgetEntityAmount(row), 0);
 }
@@ -577,7 +582,7 @@ function buildAgricultureRecipientGraph(
   const nextRows = recipients.slice(offset + PAGE_SIZE);
 
   if (prevRows.length > 0) {
-    addNode(nodes, createPagerNode(PREV_WINDOW_ID, '↑ dalsi prijemci'));
+    addNode(nodes, createPagerNode(PREV_WINDOW_ID, createRecipientPagerLabel('prev', prevRows.length)));
     links.push(
       makeLink(
         sourceNodeId,
@@ -607,7 +612,7 @@ function buildAgricultureRecipientGraph(
   }
 
   if (nextRows.length > 0) {
-    addNode(nodes, createPagerNode(NEXT_WINDOW_ID, '↓ dalsi prijemci'));
+    addNode(nodes, createPagerNode(NEXT_WINDOW_ID, createRecipientPagerLabel('next', nextRows.length)));
     links.push(
       makeLink(
         sourceNodeId,
