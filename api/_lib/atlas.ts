@@ -1168,6 +1168,9 @@ function buildCombinedRootGraph(
   const ministryTotal = mzAggregate?.amount ?? publicHealthAmount;
   const namedAdminAmount = sumAdminAmount(adminEntities);
   const adminAmount = Math.max(ministryTotal - publicHealthAmount - namedAdminAmount, 0);
+  // VZP (public health insurance) is excluded from the state-budget deduction:
+  // hospitals and outpatient care are financed through insurance premiums,
+  // not directly from the state budget.
   const explicitAtlasTopLevelAmount =
     socialTotal +
     mvTotal +
@@ -1181,9 +1184,7 @@ function buildCombinedRootGraph(
     mfTotal +
     agricultureTotal +
     environmentTotal +
-    hospitalAmount +
     zzsAmount +
-    outpatientAmount +
     ministryTotal;
 
   if (stateOtherLink) {
@@ -1207,19 +1208,9 @@ function buildCombinedRootGraph(
 
   if (hospitalRows.length > 0) {
     const ownerGroups = buildOwnerGroups(hospitalRows);
-    addNode(nodes, createInsuranceNode(sumPeople(hospitalRows) || null));
-    links.push(
-      makeLink(
-        STATE_ID,
-        HEALTH_INSURANCE_ID,
-        hospitalAmount + outpatientAmount,
-        year,
-        'state_to_public_health_insurance',
-        outpatientAggregate && outpatientAggregate.sourceYear !== year
-          ? `Synteticka osa pro nemocnice a ambulantni peci pod verejnym zdravotnim pojistenim; ambulantni agregat pouziva rok ${outpatientAggregate.sourceYear}`
-          : 'Synteticka osa pro nemocnice a ambulantni peci pod verejnym zdravotnim pojistenim',
-      ),
-    );
+    // VZP is a top-level source node (level 0) alongside state:cr — it is funded
+    // through insurance premiums, not the state budget.
+    addNode(nodes, { ...createInsuranceNode(sumPeople(hospitalRows) || null), level: 0 });
 
     for (const group of ownerGroups) {
       const node = ownerNode(group.ownerBranch);
