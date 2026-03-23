@@ -197,6 +197,14 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Obranné výdaje vztažené k počtu vojáků z povolání podle oficiální tabulky Ministerstva obrany.',
     rationale: 'Pro první iteraci MO je počet vojáků z povolání nejčitelnější veřejný denominátor, který je zveřejněný pro 2024 i 2025 a dovoluje porovnat celý kapitolní objem i jeho tři základní kategorie.',
   },
+  mf_tax_subject: {
+    group: 'mf_tax_subject',
+    perUnitLabel: 'daňový subjekt',
+    countLabel: 'daňových subjektů',
+    title: 'Kč/daňový subjekt',
+    description: 'Výdaje na správu daní a celnictví vztažené k počtu daňových subjektů registrovaných u Finanční správy ČR.',
+    rationale: 'Počet daňových subjektů je nejčitelnější veřejný denominátor pro finanční správu; je každoročně publikovaný ve výroční zprávě Finanční správy a dovoluje základní srovnání meziroční efektivity.',
+  },
 };
 
 export function metricDescriptorForGroup(

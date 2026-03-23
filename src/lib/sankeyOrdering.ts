@@ -82,6 +82,10 @@ export function normalizationGroup(link: SankeyLink): string | null {
     return 'defense_professional_soldier';
   }
 
+  if (link.flowType === 'mf_ministry_total' || link.flowType === 'mf_budget_entity') {
+    return 'mf_tax_subject';
+  }
+
   if (
     link.flowType === 'agriculture_subsidy_family_recipient'
   ) {

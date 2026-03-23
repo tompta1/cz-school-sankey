@@ -282,6 +282,22 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     rationale: 'Počet vojáků z povolání je první obhajitelný veřejný denominator pro jednoduchou obrannou větev; MO nepublikuje otevřená výkonová data, která by dovolovala pravdivější jednotku pro celý resort.',
     url: 'https://mocr.mo.gov.cz/finance-a-zakazky/resortni-rozpocet/-resortni-rozpocet-254181/',
   },
+  mf_budget_entities: {
+    datasetKey: 'mf_budget_entities',
+    title: 'Monitor MF: Ministerstvo financí, GFŘ, GŘC',
+    description: 'Roční rozpočtové a nákladové údaje kapitoly MF jako součet tří organizačních složek státu: Ministerstvo financí (IČO 00006947), Generální finanční ředitelství (IČO 72080043) a Generální ředitelství cel (IČO 71214011).',
+    freshness: 'Roční účetní data z Monitoru MF. V atlasu jsou nahrané roky 2024.',
+    rationale: 'Kapitola MF zahrnuje tři samostatné OSS s vlastními IČO; jejich součet dává přímý pozorovaný objem bez nutnosti odhadů nebo škálování.',
+    url: 'https://monitor.statnipokladna.gov.cz',
+  },
+  mf_activity_metrics: {
+    datasetKey: 'mf_activity_metrics',
+    title: 'Finanční správa ČR: počet daňových subjektů',
+    description: 'Počet registrovaných daňových subjektů z výroční zprávy Finanční správy ČR. Slouží jako denominátor pro výpočet výdajů na daňového poplatníka.',
+    freshness: 'Roční statistika. V atlasu je nahraný rok 2024.',
+    rationale: 'Počet daňových subjektů je nejčitelnější veřejný denominator pro daňovou správu a je každoročně publikovaný ve výroční zprávě Finanční správy.',
+    url: 'https://www.financnisprava.cz/cs/financni-sprava/zpravy-a-analyzy/vyrocni-zpravy',
+  },
   atlas_inferred: {
     datasetKey: 'atlas.inferred',
     title: 'Odvozené atlasové alokace',
