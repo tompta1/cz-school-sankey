@@ -81,8 +81,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const nodeId = typeof req.query.nodeId === 'string' ? req.query.nodeId.trim() : null;
     const offset = Math.max(0, Number(req.query.offset || 0));
     if (!Number.isInteger(offset)) return badRequest(res, 'Invalid offset');
+    const metricMode = typeof req.query.metricMode === 'string' ? req.query.metricMode.trim() : 'amount';
+    if (metricMode !== 'amount' && metricMode !== 'comparative') {
+      return badRequest(res, 'Invalid metricMode');
+    }
 
-    const graph = await getAtlasAgricultureGraph(year, nodeId, offset);
+    const graph = await getAtlasAgricultureGraph(year, nodeId, offset, metricMode);
     if (!graph) return notFound(res, `No agriculture atlas data for year ${year}`);
     return json(res, 200, graph);
   }

@@ -196,6 +196,7 @@ export function AtlasDashboard() {
       const params = new URLSearchParams({ year: String(selectedYear) });
       if (currentView.nodeId) params.set('nodeId', currentView.nodeId);
       if (currentView.offset > 0) params.set('offset', String(currentView.offset));
+      params.set('metricMode', perPerson ? 'comparative' : 'amount');
       path = `/api/atlas/agriculture?${params.toString()}`;
     } else if (currentView.scope === 'justice') {
       const params = new URLSearchParams({ year: String(selectedYear) });
@@ -219,7 +220,7 @@ export function AtlasDashboard() {
       });
 
     return () => controller.abort();
-  }, [selectedYear, viewStack]);
+  }, [selectedYear, viewStack, perPerson]);
 
   useEffect(() => {
     function onPointerDown(e: PointerEvent) {

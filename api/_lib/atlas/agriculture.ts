@@ -237,6 +237,14 @@ function createRecipientPagerLabel(direction: 'prev' | 'next', hiddenCount: numb
   return `${arrow} dalsi prijemci (${hiddenCount})`;
 }
 
+function agricultureRecipientMetricValue(row: AgricultureRecipientAggregate): number {
+  if (row.familyCode === 'AREA') {
+    if (!row.areaHa || row.areaHa <= 0) return -1;
+    return row.amount / row.areaHa;
+  }
+  return row.amount;
+}
+
 function agricultureAdminAmount(budgetRows: AgricultureBudgetEntity[]): number {
   return budgetRows.reduce((sum, row) => sum + budgetEntityAmount(row), 0);
 }
@@ -737,7 +745,12 @@ function buildAgricultureRecipientGraph(
   return { year, nodes, links };
 }
 
-export async function getAtlasAgricultureGraph(year: number, nodeId: string | null = null, offset = 0) {
+export async function getAtlasAgricultureGraph(
+  year: number,
+  nodeId: string | null = null,
+  offset = 0,
+  metricMode: 'amount' | 'comparative' = 'amount',
+) {
   if (!nodeId || nodeId === AGRICULTURE_MINISTRY_ID) {
     const [budgetRows, metrics] = await Promise.all([
       getAgricultureBudgetEntities(year),
@@ -776,7 +789,14 @@ export async function getAtlasAgricultureGraph(year: number, nodeId: string | nu
     ]);
     const familyMetric = familyMetricByCode(familyMetrics, familyCode);
     if (!familyMetric || familyMetric.amount <= 0) return null;
-    return buildAgricultureRecipientGraph(year, familyMetric, recipients, offset);
+    const sortedRecipients = [...recipients].sort((a, b) => {
+      if (metricMode === 'comparative') {
+        const metricDiff = agricultureRecipientMetricValue(b) - agricultureRecipientMetricValue(a);
+        if (metricDiff !== 0) return metricDiff;
+      }
+      return b.amount - a.amount || a.recipientName.localeCompare(b.recipientName, 'cs');
+    });
+    return buildAgricultureRecipientGraph(year, familyMetric, sortedRecipients, offset);
   }
 
   return null;
