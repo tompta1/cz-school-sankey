@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest openpyxl requests "psycopg[binary]"
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Run frontend build
+        run: npm run build
+
+      - name: Run deterministic ETL tests
+        run: python3 -m pytest etl/test_build_school_year.py etl/test_fetch_founder_budgets.py etl/test_fetch_msmt_registry.py -v

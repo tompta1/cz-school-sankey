@@ -91,6 +91,7 @@ If you want to run the Vite frontend against a remote API instead, set
 ```bash
 npm test           # vitest run (all unit tests)
 npm run test:watch # watch mode
+npm run smoke:prod # smoke-check the live Vercel atlas API
 ```
 
 The test suite covers:
@@ -109,6 +110,10 @@ npm run build      # tsc + vite build → dist/
 GitHub Pages deployment is automated via [.github/workflows/deploy-pages.yml](/var/home/tom/Documents/Projects/cz-school-sankey/.github/workflows/deploy-pages.yml). The Pages build expects the repository variable `PAGES_API_BASE_URL` to point at the production Vercel API origin.
 
 Neon warehouse refresh is automated via [.github/workflows/refresh-neon-school-data.yml](/var/home/tom/Documents/Projects/cz-school-sankey/.github/workflows/refresh-neon-school-data.yml). That workflow expects the repository secret `NEON_DATABASE_URL`.
+
+General repository validation is automated via [.github/workflows/ci.yml](/var/home/tom/Documents/Projects/cz-school-sankey/.github/workflows/ci.yml), which runs the frontend test/build plus the deterministic ETL tests on every push and pull request.
+
+Production API smoke checks are automated via [.github/workflows/smoke-production.yml](/var/home/tom/Documents/Projects/cz-school-sankey/.github/workflows/smoke-production.yml). The smoke workflow defaults to `https://cz-school-sankey.vercel.app`, and can optionally use the repository variable `PRODUCTION_API_BASE_URL`.
 
 ---
 

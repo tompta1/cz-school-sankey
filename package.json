@@ -10,6 +10,7 @@
     "typecheck:api": "tsc -p tsconfig.api.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke:prod": "node ./scripts/smoke-atlas-api.mjs",
     "preview": "vite preview",
     "db:up": "bash ./scripts/dev-db-up.sh",
     "db:down": "bash ./scripts/dev-db-down.sh",
