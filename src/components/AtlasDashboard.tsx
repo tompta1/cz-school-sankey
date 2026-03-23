@@ -643,6 +643,12 @@ function handleMvNodeClick(node: SankeyNode) {
     setSearchQuery('');
     setSearchOpen(false);
     setSearchExpanded(false);
+    if (result.domain === 'atlas') {
+      const scope = result.scope as AtlasDrilldownState['scope'];
+      const nodeId = result.nodeId ?? null;
+      setViewStack([{ scope, nodeId, label: result.name, offset: 0 } as AtlasDrilldownState]);
+      return;
+    }
     if (result.domain === 'health') {
       setViewStack([{ scope: 'health', nodeId: result.id, label: result.name, offset: 0 }]);
       return;
@@ -724,7 +730,7 @@ function handleMvNodeClick(node: SankeyNode) {
               <input
                 className="search-input"
                 type="search"
-                placeholder="Hledat školu, nemocnici, KHS…"
+                placeholder="Hledat školu, nemocnici, ministerstvo…"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -746,7 +752,7 @@ function handleMvNodeClick(node: SankeyNode) {
                       <span className="search-result__name">{result.name}</span>
                       <span className="search-result__meta">
                         {[
-                          result.domain === 'health' ? 'zdraví' : 'škola',
+                          result.domain === 'atlas' ? result.context : result.domain === 'health' ? 'zdraví' : 'škola',
                           result.municipality,
                           result.region,
                           result.providerType,

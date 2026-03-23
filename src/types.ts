@@ -152,12 +152,16 @@ export interface AtlasYearsResponse {
 export interface AtlasSearchHit {
   id: string;
   name: string;
-  domain: 'school' | 'health';
+  domain: 'school' | 'health' | 'atlas';
   region?: string;
   municipality?: string;
   providerType?: string;
   available?: boolean;
   reason?: string;
+  // For domain === 'atlas':
+  scope?: string;
+  nodeId?: string | null;
+  context?: string;
 }
 
 export interface AtlasSearchResponse {

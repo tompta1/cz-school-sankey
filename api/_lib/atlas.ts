@@ -2389,12 +2389,188 @@ export { getAtlasMzvGraph };
 export { getAtlasMoGraph };
 export { getAtlasMfGraph };
 
+interface AtlasStaticEntry {
+  scope: string;
+  nodeId: string | null;
+  name: string;
+  keywords: string[];
+  context: string;
+}
+
+const ATLAS_STATIC_NODES: AtlasStaticEntry[] = [
+  // Ministerstvo vnitra
+  { scope: 'mv', nodeId: null, name: 'Ministerstvo vnitra', keywords: ['MV', 'vnitro', 'bezpecnost', 'bezpečnost'], context: 'Ministerstvo vnitra' },
+  { scope: 'mv', nodeId: 'security:police', name: 'Policie ČR', keywords: ['PCR', 'PČR', 'policie', 'kriminalita', 'registrovane skutky', 'registrované skutky'], context: 'MV – Policie ČR' },
+  { scope: 'mv', nodeId: 'security:fire-rescue', name: 'Hasičský záchranný sbor', keywords: ['HZS', 'hasici', 'hasiči', 'zachrana', 'záchrana', 'zasah', 'zásah', 'pozar', 'požár'], context: 'MV – HZS' },
+  // Ministerstvo spravedlnosti
+  { scope: 'justice', nodeId: null, name: 'Ministerstvo spravedlnosti', keywords: ['MSp', 'spravedlnost', 'justice', 'soudy', 'vezenstvi', 'vězeňství', 'vezeni'], context: 'Ministerstvo spravedlnosti' },
+  // Ministerstvo dopravy
+  { scope: 'transport', nodeId: null, name: 'Ministerstvo dopravy', keywords: ['MD', 'doprava', 'SFDI', 'RSD', 'ŘSD', 'zeleznice', 'železnice'], context: 'Ministerstvo dopravy' },
+  { scope: 'transport', nodeId: 'transport:sfdi:rail', name: 'Správa železnic', keywords: ['SZ', 'SŽ', 'zeleznice', 'železnice', 'vlak', 'kolejova', 'kolejová', 'SZDC', 'SŽDC', 'trat', 'trať', 'rail'], context: 'MD – Správa železnic' },
+  { scope: 'transport', nodeId: 'transport:sfdi:roads-vignette', name: 'Dálniční síť – dálniční známky', keywords: ['dalnice', 'dálnice', 'vigneta', 'znamka', 'RSD', 'ŘSD', 'osobni doprava', 'osobní doprava', 'SFDI'], context: 'MD – dálniční síť' },
+  { scope: 'transport', nodeId: 'transport:sfdi:roads-toll', name: 'Dálniční síť – mýtné', keywords: ['myto', 'mýto', 'mytne', 'mýtné', 'RSD', 'ŘSD', 'tezka vozidla', 'těžká vozidla', 'nakladni', 'nákladní', 'SFDI'], context: 'MD – mýtný systém' },
+  // Ministerstvo zemědělství
+  { scope: 'agriculture', nodeId: null, name: 'Ministerstvo zemědělství', keywords: ['MZe', 'zemedelstvi', 'zemědělství', 'SZIF', 'farma', 'agriculture'], context: 'Ministerstvo zemědělství' },
+  { scope: 'agriculture', nodeId: 'agriculture:subsidy:total', name: 'Dotace SZIF', keywords: ['SZIF', 'dotace', 'subvence', 'prime platby', 'přímé platby', 'prijemci', 'příjemci'], context: 'MZe – SZIF dotace' },
+  { scope: 'agriculture', nodeId: 'agriculture:subsidy:family:area', name: 'Plošné dotace SZIF', keywords: ['area', 'hektar', 'LPIS', 'plosne', 'plošné', 'prime platby', 'přímé platby', 'SPS', 'Basic Payment'], context: 'MZe – plošné dotace' },
+  { scope: 'agriculture', nodeId: 'agriculture:subsidy:family:livestock', name: 'Dotace na zvířata', keywords: ['livestock', 'zvirata', 'zvířata', 'chov', 'hospodarsky', 'hospodářský', 'vepri', 'vepři', 'dojnice', 'skot', 'ovce'], context: 'MZe – dotace na zvířata' },
+  { scope: 'agriculture', nodeId: 'agriculture:subsidy:family:investment', name: 'Investiční dotace SZIF', keywords: ['investment', 'investice', 'investicni', 'investiční', 'modernizace', 'rozvoj venkova'], context: 'MZe – investiční dotace' },
+  { scope: 'agriculture', nodeId: 'agriculture:subsidy:family:other', name: 'Ostatní dotace SZIF', keywords: ['ostatni', 'ostatní', 'other', 'rozvoj venkova'], context: 'MZe – ostatní dotace' },
+  { scope: 'agriculture', nodeId: 'agriculture:admin', name: 'MZe správa resortu', keywords: ['sprava', 'správa', 'administrativa', 'veterinarni', 'veterinární', 'PZSP', 'SZPI', 'inspekce', 'ustredni'], context: 'MZe – správa' },
+  // Ministerstvo životního prostředí
+  { scope: 'environment', nodeId: null, name: 'Ministerstvo životního prostředí', keywords: ['MZP', 'MŽP', 'zivotni prostredi', 'životní prostředí', 'ekologie', 'klima', 'emise', 'CIZP', 'ČIŽP', 'AOPK', 'SFZP', 'SFŽP'], context: 'Ministerstvo životního prostředí' },
+  { scope: 'environment', nodeId: 'environment:sfzp:support', name: 'Podpora SFŽP', keywords: ['SFZP', 'SFŽP', 'fond zivotniho prostredi', 'fond životního prostředí', 'podpora', 'dotace', 'prijemci', 'příjemci'], context: 'MŽP – SFŽP podpora' },
+  { scope: 'environment', nodeId: 'environment:admin', name: 'MŽP správa resortu', keywords: ['sprava', 'správa', 'administrativa', 'CIZP', 'ČIŽP', 'AOPK', 'inspekce', 'ochrana prirody', 'ochrana přírody'], context: 'MŽP – správa' },
+  // Ministerstvo pro místní rozvoj
+  { scope: 'mmr', nodeId: null, name: 'Ministerstvo pro místní rozvoj', keywords: ['MMR', 'mistni rozvoj', 'místní rozvoj', 'IROP', 'bydleni', 'bydlení', 'regiony', 'koheze'], context: 'Ministerstvo pro místní rozvoj' },
+  { scope: 'mmr', nodeId: 'mmr:branch:regional', name: 'IROP – regionální rozvoj', keywords: ['IROP', 'regionalni', 'regionální', 'regiony', 'cestovni ruch', 'cestovní ruch', 'kohezni', 'kohezní'], context: 'MMR – regionální rozvoj' },
+  { scope: 'mmr', nodeId: 'mmr:branch:housing', name: 'IROP – podpora bydlení', keywords: ['bydleni', 'bydlení', 'byty', 'housing', 'IROP', 'dostupne bydleni', 'dostupné bydlení'], context: 'MMR – podpora bydlení' },
+  // Ministerstvo průmyslu a obchodu
+  { scope: 'mpo', nodeId: null, name: 'Ministerstvo průmyslu a obchodu', keywords: ['MPO', 'prumysl', 'průmysl', 'obchod', 'podnikani', 'podnikání', 'energetika', 'inovace'], context: 'Ministerstvo průmyslu a obchodu' },
+  { scope: 'mpo', nodeId: 'mpo:optak:support', name: 'OP TAK – podpory podnikům', keywords: ['OP TAK', 'OPTAK', 'technologie', 'podnikani', 'podnikání', 'podniky', 'MSP', 'inovace', 'digitalizace'], context: 'MPO – OP TAK' },
+  // Ministerstvo kultury
+  { scope: 'mk', nodeId: null, name: 'Ministerstvo kultury', keywords: ['MK', 'kultura', 'umeni', 'umění', 'kulturni', 'kulturní', 'heritage', 'dedictvi', 'dědictví'], context: 'Ministerstvo kultury' },
+  { scope: 'mk', nodeId: 'mk:support:culture', name: 'Dotace na kulturu a živé umění', keywords: ['kultura', 'umeni', 'umění', 'zive umeni', 'živé umění', 'spolky', 'muzea', 'galerie', 'divadla'], context: 'MK – kulturní dotace' },
+  { scope: 'mk', nodeId: 'mk:support:heritage', name: 'Dotace na kulturní památky', keywords: ['PZAD', 'architektura', 'pamatky', 'památky', 'heritage', 'zachrana', 'záchrana', 'dedictvi', 'dědictví', 'historicke', 'historické'], context: 'MK – dotace na památky' },
+  { scope: 'mk', nodeId: 'mk:program:culture-museums', name: 'Program kultury – muzea a spolky', keywords: ['muzea', 'spolky', 'NAKI', 'program kultury', 'kulturni aktivity', 'kulturní aktivity'], context: 'MK – program kultury' },
+  { scope: 'mk', nodeId: 'mk:program:pzad', name: 'PZAD – záchrana architektonického dědictví', keywords: ['PZAD', 'architektura', 'zachrana', 'záchrana', 'dedictvi', 'dědictví', 'pamatkova', 'památková', 'statni', 'státní'], context: 'MK – PZAD' },
+  // Ministerstvo zahraničních věcí
+  { scope: 'mzv', nodeId: null, name: 'Ministerstvo zahraničních věcí', keywords: ['MZV', 'zahranicni', 'zahraniční', 'diplomacie', 'velvyslanectvi', 'velvyslanectví', 'zahranicka politika'], context: 'Ministerstvo zahraničních věcí' },
+  { scope: 'mzv', nodeId: 'mzv:foreign-service', name: 'Zastupitelské úřady', keywords: ['ambasada', 'ambasáda', 'velvyslanectvi', 'velvyslanectví', 'konzulat', 'konzulát', 'ZU', 'ZÚ', 'zastupitelsky', 'zastupitelský', 'mise', 'zahranicni sluzba', 'zahraniční služba'], context: 'MZV – zahraniční služba' },
+  { scope: 'mzv', nodeId: 'mzv:aid:development', name: 'Rozvojová spolupráce', keywords: ['ODA', 'rozvojova', 'rozvojová', 'CRA', 'ČRA', 'pomoc', 'spoluprace', 'spolupráce', 'rozvojovy', 'rozvojový', 'aid'], context: 'MZV – rozvojová pomoc' },
+  { scope: 'mzv', nodeId: 'mzv:aid:humanitarian', name: 'Humanitární pomoc', keywords: ['humanitarni', 'humanitární', 'pomoc', 'krize', 'krizova', 'krizová', 'uprchlici', 'uprchlíci'], context: 'MZV – humanitární pomoc' },
+  // Ministerstvo obrany
+  { scope: 'mo', nodeId: null, name: 'Ministerstvo obrany', keywords: ['MO', 'obrana', 'armada', 'armáda', 'vojaci', 'vojáci', 'ACR', 'AČR', 'vojensky', 'vojenský', 'zbrojeni', 'zbrojení', 'NATO'], context: 'Ministerstvo obrany' },
+  // Ministerstvo financí
+  { scope: 'mf', nodeId: null, name: 'Ministerstvo financí', keywords: ['MF', 'finance', 'financni sprava', 'finanční správa', 'dane', 'daně', 'danovy', 'daňový'], context: 'Ministerstvo financí' },
+  { scope: 'mf', nodeId: 'mf:branch:tax-admin', name: 'Generální finanční ředitelství (GFŘ)', keywords: ['GFR', 'GFŘ', 'financni sprava', 'finanční správa', 'danova sprava', 'daňová správa', 'berni', 'berní', 'dane', 'daně', 'financni urad', 'finanční úřad'], context: 'MF – finanční správa' },
+  { scope: 'mf', nodeId: 'mf:branch:customs', name: 'Generální ředitelství cel (GŘC)', keywords: ['GRC', 'GŘC', 'celni sprava', 'celní správa', 'clo', 'celnictvi', 'celnictví', 'celni urad', 'celní úřad'], context: 'MF – celní správa' },
+];
+
+function normalizeForSearch(s: string): string {
+  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
+function searchStaticAtlasNodes(q: string, limit: number): { id: string; name: string; domain: 'atlas'; scope: string; nodeId: string | null; context: string; available: true }[] {
+  const needle = normalizeForSearch(q);
+  if (needle.length < 2) return [];
+  const results: { id: string; name: string; domain: 'atlas'; scope: string; nodeId: string | null; context: string; available: true }[] = [];
+  for (const entry of ATLAS_STATIC_NODES) {
+    if (normalizeForSearch(entry.name).includes(needle) || entry.keywords.some((k) => normalizeForSearch(k).includes(needle))) {
+      results.push({
+        id: `atlas:${entry.scope}:${entry.nodeId ?? 'root'}`,
+        name: entry.name,
+        domain: 'atlas',
+        scope: entry.scope,
+        nodeId: entry.nodeId,
+        context: entry.context,
+        available: true,
+      });
+    }
+    if (results.length >= limit) break;
+  }
+  return results;
+}
+
+async function searchAtlasDrilldownEntities(year: number, q: string, limit: number) {
+  const needle = q.trim();
+  if (needle.length < 2) return [];
+
+  const result = await query(
+    `
+      (
+        select
+          'mmr' as scope,
+          'mmr:region:' || lower(branch_code) || '|' || region_code as node_id,
+          region_name as name,
+          case when branch_code = 'HOUSING' then 'MMR – podpora bydlení (kraj)' else 'MMR – regionální rozvoj (kraj)' end as context
+        from mart.mmr_irop_region_metric_latest
+        where reporting_year = $1
+          and lower(region_name) like lower('%' || $2 || '%')
+      )
+      union all
+      (
+        select
+          'mzv' as scope,
+          'mzv:country:' || lower(branch_code) || '|' || country_name as node_id,
+          country_name as name,
+          case when branch_code = 'HUMANITARIAN' then 'MZV – humanitární pomoc' else 'MZV – rozvojová pomoc' end as context
+        from mart.mzv_aid_country_metric_latest
+        where reporting_year = $1
+          and lower(country_name) like lower('%' || $2 || '%')
+      )
+      union all
+      (
+        select distinct on (region_code)
+          'mv' as scope,
+          'security:police:region:' || region_code as node_id,
+          region_name as name,
+          'MV – Policie ČR (kraj)' as context
+        from mart.mv_police_crime_aggregate_latest
+        where reporting_year = $1
+          and lower(region_name) like lower('%' || $2 || '%')
+        order by region_code
+      )
+      union all
+      (
+        select distinct on (recipient_key)
+          'mpo' as scope,
+          'mpo:optak:support' as node_id,
+          recipient_name as name,
+          'MPO – OP TAK příjemce' as context
+        from mart.mpo_optak_operation_yearly_latest
+        where reporting_year = $1
+          and lower(recipient_name) like lower('%' || $2 || '%')
+        order by recipient_key, allocated_total_czk desc nulls last
+      )
+      union all
+      (
+        select
+          'mk' as scope,
+          case when program_code = 'PZAD' then 'mk:program:pzad' else 'mk:program:culture-museums' end as node_id,
+          recipient_name as name,
+          case when program_code = 'PZAD' then 'MK – PZAD příjemce' else 'MK – kultura příjemce' end as context
+        from mart.mk_support_recipient_latest
+        where reporting_year = $1
+          and lower(recipient_name) like lower('%' || $2 || '%')
+      )
+      union all
+      (
+        select
+          'agriculture' as scope,
+          'agriculture:admin' as node_id,
+          entity_name as name,
+          'MZe – správa resortu' as context
+        from mart.agriculture_budget_entity_latest
+        where reporting_year = $1
+          and entity_kind != 'ministry'
+          and lower(entity_name) like lower('%' || $2 || '%')
+      )
+      limit $3
+    `,
+    [year, needle, limit],
+  );
+
+  return result.rows.map((row) => ({
+    id: `atlas:drilldown:${String(row.scope)}:${String(row.node_id)}:${String(row.name)}`,
+    name: String(row.name),
+    domain: 'atlas' as const,
+    scope: String(row.scope),
+    nodeId: String(row.node_id),
+    context: String(row.context),
+    available: true as const,
+  }));
+}
+
 export async function searchAtlasEntities(year: number, q: string, limit = 8) {
   const needle = q.trim();
   if (needle.length < 2) return [];
 
   const perDomainLimit = Math.max(4, Math.ceil(limit / 2));
-  const [schoolResults, healthResult] = await Promise.all([
+  const staticAtlasHits = searchStaticAtlasNodes(needle, perDomainLimit);
+
+  const [dbAtlasHits, schoolResults, healthResult] = await Promise.all([
+    searchAtlasDrilldownEntities(year, needle, perDomainLimit),
     searchInstitutions(year, needle, perDomainLimit),
     query(
       `
@@ -2531,12 +2707,25 @@ export async function searchAtlasEntities(year: number, q: string, limit = 8) {
     reason: row.reason == null ? undefined : String(row.reason),
   }));
 
+  // Round-robin interleave: static atlas nodes first (most direct match), then DB drilldown, health, school
   const merged = [];
-  const maxLength = Math.max(schoolHits.length, healthHits.length);
+  const maxLength = Math.max(staticAtlasHits.length, dbAtlasHits.length, healthHits.length, schoolHits.length);
   for (let index = 0; index < maxLength; index += 1) {
+    if (staticAtlasHits[index]) merged.push(staticAtlasHits[index]);
+    if (dbAtlasHits[index]) merged.push(dbAtlasHits[index]);
     if (healthHits[index]) merged.push(healthHits[index]);
     if (schoolHits[index]) merged.push(schoolHits[index]);
   }
 
-  return merged.slice(0, limit);
+  // De-duplicate by id
+  const seen = new Set<string>();
+  const deduped = [];
+  for (const hit of merged) {
+    if (!seen.has(hit.id)) {
+      seen.add(hit.id);
+      deduped.push(hit);
+    }
+  }
+
+  return deduped.slice(0, limit);
 }
