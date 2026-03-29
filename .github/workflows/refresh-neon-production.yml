@@ -148,37 +148,45 @@ jobs:
                   exit 1
                 fi
 
-                python3 etl/parse_msmt_xlsx.py --year "${year}" --top 0
-                if ! timeout 15m python3 etl/fetch_eu_grants.py --year "${year}"; then
-                  if [[ -f "etl/data/raw/${year}/eu_projects.csv" ]]; then
-                    echo "Falling back to tracked school EU projects for ${year}" >&2
-                  else
-                    echo "Missing fallback school EU projects: etl/data/raw/${year}/eu_projects.csv" >&2
-                    exit 1
+                if [[ -f "etl/data/raw/${year}/msmt_allocations.csv" \
+                   && -f "etl/data/raw/${year}/eu_projects.csv" \
+                   && -f "etl/data/raw/${year}/founder_support.csv" \
+                   && -f "etl/data/raw/${year}/state_budget.csv" \
+                   && -f "etl/data/raw/${year}/school_entities.csv" ]]; then
+                  echo "Using tracked school source bundle for ${year}" >&2
+                else
+                  python3 etl/parse_msmt_xlsx.py --year "${year}" --top 0
+                  if ! timeout 15m python3 etl/fetch_eu_grants.py --year "${year}"; then
+                    if [[ -f "etl/data/raw/${year}/eu_projects.csv" ]]; then
+                      echo "Falling back to tracked school EU projects for ${year}" >&2
+                    else
+                      echo "Missing fallback school EU projects: etl/data/raw/${year}/eu_projects.csv" >&2
+                      exit 1
+                    fi
                   fi
-                fi
-                if ! timeout 15m python3 etl/fetch_founder_budgets.py --year "${year}"; then
-                  if [[ -f "etl/data/raw/${year}/founder_support.csv" ]]; then
-                    echo "Falling back to tracked school founder support for ${year}" >&2
-                  else
-                    echo "Missing fallback school founder support: etl/data/raw/${year}/founder_support.csv" >&2
-                    exit 1
+                  if ! timeout 15m python3 etl/fetch_founder_budgets.py --year "${year}"; then
+                    if [[ -f "etl/data/raw/${year}/founder_support.csv" ]]; then
+                      echo "Falling back to tracked school founder support for ${year}" >&2
+                    else
+                      echo "Missing fallback school founder support: etl/data/raw/${year}/founder_support.csv" >&2
+                      exit 1
+                    fi
                   fi
-                fi
-                if ! timeout 15m python3 etl/fetch_state_budget.py --year "${year}"; then
-                  if [[ -f "etl/data/raw/${year}/state_budget.csv" ]]; then
-                    echo "Falling back to tracked school state budget for ${year}" >&2
-                  else
-                    echo "Missing fallback school state budget: etl/data/raw/${year}/state_budget.csv" >&2
-                    exit 1
+                  if ! timeout 15m python3 etl/fetch_state_budget.py --year "${year}"; then
+                    if [[ -f "etl/data/raw/${year}/state_budget.csv" ]]; then
+                      echo "Falling back to tracked school state budget for ${year}" >&2
+                    else
+                      echo "Missing fallback school state budget: etl/data/raw/${year}/state_budget.csv" >&2
+                      exit 1
+                    fi
                   fi
-                fi
-                if ! timeout 15m python3 etl/fetch_msmt_registry.py --year "${year}" --update-csv; then
-                  if [[ -f "etl/data/raw/${year}/school_entities.csv" ]]; then
-                    echo "Falling back to tracked school registry entities for ${year}" >&2
-                  else
-                    echo "Missing fallback school registry entities: etl/data/raw/${year}/school_entities.csv" >&2
-                    exit 1
+                  if ! timeout 15m python3 etl/fetch_msmt_registry.py --year "${year}" --update-csv; then
+                    if [[ -f "etl/data/raw/${year}/school_entities.csv" ]]; then
+                      echo "Falling back to tracked school registry entities for ${year}" >&2
+                    else
+                      echo "Missing fallback school registry entities: etl/data/raw/${year}/school_entities.csv" >&2
+                      exit 1
+                    fi
                   fi
                 fi
               fi
