@@ -1,0 +1,15 @@
+{
+  "dataset": "agriculture_lpis_user_area",
+  "snapshot_label": "202410041639",
+  "reporting_years": [
+    2024
+  ],
+  "source_url": "etl/data/raw/agriculture/agriculture_lpis_area/dpb_verejny_gui_2024-08-01_202410041639_epsg5514.zip",
+  "zip_path": "etl/data/raw/agriculture/agriculture_lpis_area/dpb_verejny_gui_2024-08-01_202410041639_epsg5514.zip",
+  "name_lookup_source_url": "https://mze.gov.cz/public/app/wms/plpis_wfs.fcgi",
+  "row_count": 34704,
+  "unique_users": 34704,
+  "resolved_user_names": 29932,
+  "unresolved_user_names": 4772,
+  "note": "Hektarovy jmenovatel vychazi z datovaneho verejneho exportu LPIS DPB. Jmena uzivatelu jsou do nej doplnena z aktualni verejne WFS vrstvy LPIS_DPB_UCINNE. Pro nevyresene uzivatele zustava technicky placeholder podle ID_UZ."
+}
