@@ -1,0 +1,111 @@
+name: Deploy Vercel production
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Optional branch, tag, or commit SHA to deploy
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-vercel-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REPO_VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      REPO_VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Vercel token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN"
+
+      - name: Resolve linked Vercel project
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          import os
+          import pathlib
+          import sys
+
+          project_path = pathlib.Path(".vercel/project.json")
+          if not project_path.exists():
+              sys.exit("Missing .vercel/project.json")
+
+          project = json.loads(project_path.read_text(encoding="utf-8"))
+          linked_org = (project.get("orgId") or "").strip()
+          linked_project = (project.get("projectId") or "").strip()
+          repo_org = (os.environ.get("REPO_VERCEL_ORG_ID") or "").strip()
+          repo_project = (os.environ.get("REPO_VERCEL_PROJECT_ID") or "").strip()
+
+          if not linked_org or not linked_project:
+              sys.exit("Linked Vercel project file is missing orgId or projectId")
+          if repo_org and repo_org != linked_org:
+              sys.exit(
+                  f"Repository VERCEL_ORG_ID ({repo_org}) does not match linked .vercel orgId ({linked_org})"
+              )
+          if repo_project and repo_project != linked_project:
+              sys.exit(
+                  f"Repository VERCEL_PROJECT_ID ({repo_project}) does not match linked .vercel projectId ({linked_project})"
+              )
+
+          print(f"VERCEL_ORG_ID={repo_org or linked_org}")
+          print(f"VERCEL_PROJECT_ID={repo_project or linked_project}")
+          print(f"LINKED_VERCEL_ORG_ID={linked_org}")
+          print(f"LINKED_VERCEL_PROJECT_ID={linked_project}")
+          PY
+
+      - name: Pull Vercel production environment
+        run: npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN"
+
+      - name: Build with Vercel CLI
+        run: npx --yes vercel@latest build --token "$VERCEL_TOKEN"
+
+      - name: Deploy prebuilt production output
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_log="$(mktemp)"
+          npx --yes vercel@latest deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tee "$deploy_log"
+          deployment_url="$(grep -Eo 'https://[^ ]+\.vercel\.app' "$deploy_log" | tail -n 1)"
+          rm -f "$deploy_log"
+
+          if [[ -z "${deployment_url}" ]]; then
+            echo "Could not determine Vercel deployment URL from CLI output" >&2
+            exit 1
+          fi
+
+          echo "deployment_url=${deployment_url}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Vercel Production Deploy"
+            echo
+            echo "- Ref: `${GITHUB_REF}`"
+            echo "- Linked org: `${LINKED_VERCEL_ORG_ID}`"
+            echo "- Linked project: `${LINKED_VERCEL_PROJECT_ID}`"
+            echo "- Deployment URL: ${deployment_url}"
+          } >> "$GITHUB_STEP_SUMMARY"
