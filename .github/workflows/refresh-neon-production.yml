@@ -151,7 +151,14 @@ jobs:
                 python3 etl/parse_msmt_xlsx.py --year "${year}" --top 0
                 python3 etl/fetch_eu_grants.py --year "${year}"
                 python3 etl/fetch_founder_budgets.py --year "${year}"
-                python3 etl/fetch_state_budget.py --year "${year}"
+                if ! python3 etl/fetch_state_budget.py --year "${year}"; then
+                  if [[ -f "etl/data/raw/${year}/state_budget.csv" ]]; then
+                    echo "Falling back to tracked school state budget for ${year}" >&2
+                  else
+                    echo "Missing fallback school state budget: etl/data/raw/${year}/state_budget.csv" >&2
+                    exit 1
+                  fi
+                fi
                 python3 etl/fetch_msmt_registry.py --year "${year}" --update-csv
               fi
 
