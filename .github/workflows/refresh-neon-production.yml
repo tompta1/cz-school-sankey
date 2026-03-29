@@ -179,9 +179,6 @@ jobs:
                   social_has_budget=true
                   social_recipient_year_args+=(--year "${year}")
                   ;;
-                2025)
-                  social_recipient_year_args+=(--year "${year}")
-                  ;;
               esac
             done
 
