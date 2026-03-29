@@ -21,7 +21,7 @@ ALIAS_MAP = {
 SUPPORTED_YEARS = {
     "school": {2024, 2025},
     "health": {2024, 2025},
-    "social": {2024, 2025},
+    "social": {2024},
     "justice": {2024, 2025},
     "agriculture": {2024, 2025},
     "environment": {2024, 2025},
