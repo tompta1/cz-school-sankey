@@ -1,4 +1,4 @@
-name: Refresh Neon production ETL
+name: Refresh Neon ETL domains
 
 on:
   workflow_dispatch:
@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: refresh-neon-production-etl
+  group: refresh-neon-domains
   cancel-in-progress: false
 
 jobs:
@@ -276,7 +276,14 @@ jobs:
                 fi
                 if [[ "${agriculture_has_2024}" == "true" ]]; then
                   python3 etl/agriculture/fetch_szif_payments.py --year 2024
-                  python3 etl/agriculture/fetch_lpis_user_area.py --year 2024
+                  if ! timeout 20m python3 etl/agriculture/fetch_lpis_user_area.py --year 2024; then
+                    if find etl/data/raw/agriculture/agriculture_lpis_user_area -maxdepth 1 -name '*__lpis-user-area-yearly.csv' | grep -q .; then
+                      echo "Falling back to tracked agriculture LPIS user-area snapshot for 2024" >&2
+                    else
+                      echo "Missing fallback agriculture LPIS user-area snapshot under etl/data/raw/agriculture/agriculture_lpis_user_area" >&2
+                      exit 1
+                    fi
+                  fi
                 fi
               fi
 
@@ -387,7 +394,7 @@ jobs:
                 fi
                 if [[ "${mk_has_2024}" == "true" ]]; then
                   python3 etl/mk/fetch_budget_aggregates.py --year 2024
-                  python3 etl/mk/fetch_support_results_ci.py --year 2024
+                  python3 etl/mk/fetch_support_results.py --year 2024
                 fi
               fi
 
