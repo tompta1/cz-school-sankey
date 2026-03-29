@@ -1,0 +1,5 @@
+reporting_year,metric_code,metric_name,denominator_kind,recipient_count,source_url
+2024,pensions_recipients_year_end,Příjemci důchodů k 31. 12.,persons_year_end,2847699,https://data.cssz.cz/dump/duchodci-v-cr-krajich-okresech.csv
+2024,unemployment_support_year_end_recipients,Uchazeči s nárokem na podporu v nezaměstnanosti k 31. 12.,persons_year_end,93400,https://data.mpsv.cz/documents/20142/7393973/Informace%2Bo%2Bvyplacen%C3%BDch%2Bd%C3%A1vk%C3%A1ch%2Bv%2Bprosinci%2B2024.pdf/a8e89cce-b4a6-d562-2e2c-d4ee4e043a9f?t=1738832892949
+2024,care_allowance_december_recipients,Příjemci příspěvku na péči v prosinci,persons_month_end,375400,https://data.mpsv.cz/documents/20142/7393973/Informace%2Bo%2Bvyplacen%C3%BDch%2Bd%C3%A1vk%C3%A1ch%2Bv%2Bprosinci%2B2024.pdf/a8e89cce-b4a6-d562-2e2c-d4ee4e043a9f?t=1738832892949
+2024,substitute_alimony_december_recipients,Příjemci náhradního výživného v prosinci,persons_month_end,12500,https://data.mpsv.cz/documents/20142/7393973/Informace%2Bo%2Bvyplacen%C3%BDch%2Bd%C3%A1vk%C3%A1ch%2Bv%2Bprosinci%2B2024.pdf/a8e89cce-b4a6-d562-2e2c-d4ee4e043a9f?t=1738832892949
