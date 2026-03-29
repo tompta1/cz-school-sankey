@@ -1,0 +1,14 @@
+{
+  "dataset_code": "social_recipient_metrics",
+  "downloaded_at": "2026-03-22T18:34:35.935458+00:00",
+  "years": [
+    2024
+  ],
+  "row_count": 4,
+  "generator": "etl/social/fetch_recipient_metrics.py",
+  "user_agent": "cz-school-sankey-social-etl/0.1",
+  "sources": [
+    "https://data.cssz.cz/dump/duchodci-v-cr-krajich-okresech.csv",
+    "https://data.mpsv.cz/mesicni-statistiky-uchazecu-o-zamestnani-a-volnych-pracovnich-mist-od-roku-2014"
+  ]
+}
