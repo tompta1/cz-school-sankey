@@ -1,0 +1,10 @@
+{
+  "dataset_code": "social_mpsv_aggregates",
+  "source_url": "https://mf.gov.cz/assets/attachments/2025-04-28_H-Vysledky-rozpoctoveho-hospodareni-kapitol.pdf",
+  "downloaded_at": "2026-03-22T17:45:12.811464+00:00",
+  "reporting_year": 2024,
+  "row_count": 17,
+  "generator": "etl/social/fetch_mpsv_budget_aggregates.py",
+  "user_agent": "cz-school-sankey-social-etl/0.1",
+  "pdf_size_bytes": 1875186
+}
