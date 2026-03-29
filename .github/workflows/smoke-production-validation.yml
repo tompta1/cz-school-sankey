@@ -1,0 +1,32 @@
+name: Smoke production atlas API validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Optional production API base URL override
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-production-atlas-validation
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ATLAS_API_BASE_URL: ${{ github.event.inputs.base_url || vars.PRODUCTION_API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run production smoke checks
+        run: node ./scripts/smoke-atlas-api-production.mjs
