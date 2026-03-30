@@ -53,24 +53,29 @@ jobs:
           import sys
 
           project_path = pathlib.Path(".vercel/project.json")
-          if not project_path.exists():
-              sys.exit("Missing .vercel/project.json")
-
-          project = json.loads(project_path.read_text(encoding="utf-8"))
-          linked_org = (project.get("orgId") or "").strip()
-          linked_project = (project.get("projectId") or "").strip()
           repo_org = (os.environ.get("REPO_VERCEL_ORG_ID") or "").strip()
           repo_project = (os.environ.get("REPO_VERCEL_PROJECT_ID") or "").strip()
+          linked_org = ""
+          linked_project = ""
 
-          if not linked_org or not linked_project:
-              sys.exit("Linked Vercel project file is missing orgId or projectId")
-          if repo_org and repo_org != linked_org:
+          if project_path.exists():
+              project = json.loads(project_path.read_text(encoding="utf-8"))
+              linked_org = (project.get("orgId") or "").strip()
+              linked_project = (project.get("projectId") or "").strip()
+
+              if not linked_org or not linked_project:
+                  sys.exit("Linked Vercel project file is missing orgId or projectId")
+              if repo_org and repo_org != linked_org:
+                  sys.exit(
+                      f"Repository VERCEL_ORG_ID ({repo_org}) does not match linked .vercel orgId ({linked_org})"
+                  )
+              if repo_project and repo_project != linked_project:
+                  sys.exit(
+                      f"Repository VERCEL_PROJECT_ID ({repo_project}) does not match linked .vercel projectId ({linked_project})"
+                  )
+          elif not repo_org or not repo_project:
               sys.exit(
-                  f"Repository VERCEL_ORG_ID ({repo_org}) does not match linked .vercel orgId ({linked_org})"
-              )
-          if repo_project and repo_project != linked_project:
-              sys.exit(
-                  f"Repository VERCEL_PROJECT_ID ({repo_project}) does not match linked .vercel projectId ({linked_project})"
+                  "Missing .vercel/project.json and repository VERCEL_ORG_ID / VERCEL_PROJECT_ID variables"
               )
 
           print(f"VERCEL_ORG_ID={repo_org or linked_org}")
