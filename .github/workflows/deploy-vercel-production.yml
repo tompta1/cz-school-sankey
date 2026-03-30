@@ -88,7 +88,7 @@ jobs:
         run: npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN"
 
       - name: Build with Vercel CLI
-        run: npx --yes vercel@latest build --token "$VERCEL_TOKEN"
+        run: npx --yes vercel@latest build --prod --token "$VERCEL_TOKEN"
 
       - name: Deploy prebuilt production output
         id: deploy
