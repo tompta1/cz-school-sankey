@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+import shutil
 import subprocess
 import tempfile
 from datetime import UTC, datetime
@@ -82,8 +83,15 @@ def antiword_text(doc_bytes: bytes) -> str:
         handle.write(doc_bytes)
         temp_path = Path(handle.name)
     try:
+        antiword_binary = shutil.which("antiword")
+        if antiword_binary:
+            command = [antiword_binary, "-m", "UTF-8", str(temp_path)]
+        elif shutil.which("flatpak-spawn"):
+            command = ["flatpak-spawn", "--host", "antiword", "-m", "UTF-8", str(temp_path)]
+        else:
+            raise RuntimeError("Missing antiword executable; install antiword or provide flatpak-spawn access")
         result = subprocess.run(
-            ["flatpak-spawn", "--host", "antiword", "-m", "UTF-8", str(temp_path)],
+            command,
             check=True,
             capture_output=True,
             text=True,
