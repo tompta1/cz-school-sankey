@@ -12,7 +12,8 @@ ALIAS_MAP = {
     "business": "mpo",
     "culture": "mk",
     "foreign": "mzv",
-    "internal": "mv",
+    "internal": "security",
+    "mv": "security",
     "finance": "mf",
     "defense": "mo",
 }
@@ -29,7 +30,7 @@ SUPPORTED_YEARS = {
     "mk": {2024, 2025},
     "mzv": {2024, 2025},
     "transport": {2024, 2025},
-    "mv": {2024, 2025},
+    "security": {2024, 2025},
     "mf": {2023, 2024, 2025},
     "mo": {2024, 2025},
 }
