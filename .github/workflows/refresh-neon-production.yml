@@ -485,7 +485,14 @@ jobs:
             if (( ${#transport_year_args[@]} > 0 )); then
               if [[ "${refresh_sources}" == "true" ]]; then
                 python3 etl/transport/fetch_budget_entities.py "${transport_year_args[@]}"
-                python3 etl/transport/fetch_sfdi_projects.py "${transport_year_args[@]}"
+                if ! timeout 15m python3 etl/transport/fetch_sfdi_projects.py "${transport_year_args[@]}"; then
+                  if ls etl/data/raw/transport/transport_sfdi_projects/*.csv >/dev/null 2>&1; then
+                    echo "Falling back to tracked transport SFDI projects snapshot" >&2
+                  else
+                    echo "Missing fallback transport SFDI snapshot under etl/data/raw/transport/transport_sfdi_projects" >&2
+                    exit 1
+                  fi
+                fi
                 python3 etl/transport/fetch_activity_metrics.py "${transport_year_args[@]}"
               fi
 
