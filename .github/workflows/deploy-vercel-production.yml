@@ -109,8 +109,8 @@ jobs:
           {
             echo "## Vercel Production Deploy"
             echo
-            echo "- Ref: `${GITHUB_REF}`"
-            echo "- Linked org: `${LINKED_VERCEL_ORG_ID}`"
-            echo "- Linked project: `${LINKED_VERCEL_PROJECT_ID}`"
-            echo "- Deployment URL: ${deployment_url}"
+            printf -- '- Ref: `%s`\n' "$GITHUB_REF"
+            printf -- '- Linked org: `%s`\n' "${LINKED_VERCEL_ORG_ID:-$VERCEL_ORG_ID}"
+            printf -- '- Linked project: `%s`\n' "${LINKED_VERCEL_PROJECT_ID:-$VERCEL_PROJECT_ID}"
+            printf -- '- Deployment URL: %s\n' "$deployment_url"
           } >> "$GITHUB_STEP_SUMMARY"
