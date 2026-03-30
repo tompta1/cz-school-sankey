@@ -26,6 +26,15 @@ on:
         required: false
         type: boolean
         default: true
+      prune_old_releases:
+        description: Prune superseded Neon dataset releases before loading
+        required: false
+        type: boolean
+        default: true
+      retention_years:
+        description: Space-separated reporting years to retain in Neon when pruning
+        required: false
+        default: "2024 2025"
 
 permissions:
   contents: read
@@ -45,6 +54,8 @@ jobs:
       INPUT_REFRESH_SOURCES: ${{ github.event.inputs.refresh_sources }}
       INPUT_RUN_SCHOOL_TRANSFORMS: ${{ github.event.inputs.run_school_transforms }}
       INPUT_VERIFY_NEON: ${{ github.event.inputs.verify_neon }}
+      INPUT_PRUNE_OLD_RELEASES: ${{ github.event.inputs.prune_old_releases }}
+      INPUT_RETENTION_YEARS: ${{ github.event.inputs.retention_years }}
     steps:
       - uses: actions/checkout@v4
 
@@ -86,6 +97,8 @@ jobs:
           refresh_sources="${INPUT_REFRESH_SOURCES:-true}"
           run_school_transforms="${INPUT_RUN_SCHOOL_TRANSFORMS:-true}"
           verify_neon="${INPUT_VERIFY_NEON:-true}"
+          prune_old_releases="${INPUT_PRUNE_OLD_RELEASES:-true}"
+          retention_years_raw="$(echo "${INPUT_RETENTION_YEARS:-2024 2025}" | xargs)"
           current_year="$(TZ=Europe/Prague date +%Y)"
           previous_year="$((current_year - 1))"
 
@@ -126,6 +139,20 @@ jobs:
 
           requested_years="$(printf '%s\n' "${normalized_years[@]}" | awk '!seen[$0]++' | sort -n | xargs)"
 
+          retention_years=()
+          for year_token in ${retention_years_raw}; do
+            case "${year_token}" in
+              current) retention_years+=("${current_year}") ;;
+              previous) retention_years+=("${previous_year}") ;;
+              [0-9][0-9][0-9][0-9]) retention_years+=("${year_token}") ;;
+              *)
+                echo "Unknown retention year token: ${year_token}" >&2
+                exit 1
+                ;;
+            esac
+          done
+          retention_years="$(printf '%s\n' "${retention_years[@]}" | awk '!seen[$0]++' | sort -n | xargs)"
+
           contains_domain() {
             [[ " ${requested_domains} " == *" $1 "* ]]
           }
@@ -137,6 +164,19 @@ jobs:
           echo "Refresh sources: ${refresh_sources}"
           echo "Run school transforms: ${run_school_transforms}"
           echo "Verify Neon: ${verify_neon}"
+          echo "Prune old releases: ${prune_old_releases}"
+          echo "Retention years: ${retention_years}"
+
+          if [[ "${prune_old_releases}" == "true" ]]; then
+            prune_args=()
+            for year in ${retention_years}; do
+              prune_args+=(--keep-year "${year}")
+            done
+            python3 ./scripts/prune-neon-dataset-releases.py \
+              --database-url "$DATABASE_URL" \
+              "${prune_args[@]}" \
+              --execute | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
           python3 db/apply_schema.py --database-url "$DATABASE_URL"
 
