@@ -1,0 +1,26 @@
+{
+  "dataset_code": "transport_sfdi_projects",
+  "downloaded_at": "2026-03-22T22:31:40.826329+00:00",
+  "years": [
+    2024,
+    2025
+  ],
+  "row_count": 1819,
+  "sources": [
+    {
+      "year": 2024,
+      "source_url": "https://kz.sfdi.cz/opendata/export_evid_m330_2024.csv",
+      "sha256": "9a5f67dfded2fa8e92bcd0066eb24d2670c073981b7e135d7ebcc18c5d688c44",
+      "size_bytes": 280510,
+      "user_agent": "cz-school-sankey-transport-etl/0.1"
+    },
+    {
+      "year": 2025,
+      "source_url": "https://kz.sfdi.cz/opendata/export_evid_m330_2025.csv",
+      "sha256": "ecbade11b028a443a55a86ecf47f80c8f4296ecbf923d23cf7a7e265086ce773",
+      "size_bytes": 310426,
+      "user_agent": "cz-school-sankey-transport-etl/0.1"
+    }
+  ],
+  "generator": "etl/transport/fetch_sfdi_projects.py"
+}
