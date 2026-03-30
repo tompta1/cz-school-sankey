@@ -531,9 +531,59 @@ with psycopg.connect(sys.argv[1]) as c:
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `ci.yml` | Push / PR | TypeScript check, Vite build, vitest unit tests |
+| `deploy-vercel-production.yml` | Manual | Builds the current ref with Vercel CLI and deploys it to the Vercel production environment |
 | `smoke-production.yml` | Push + nightly | Smoke-tests the live production API endpoints |
+| `refresh-neon-domains.yml` | Manual + scheduled | Refreshes selected ETL domains and reloads Neon via a shared workflow. Accepts aliases like `regions`, `business`, `culture`, `foreign`, `internal`, `finance`, and `defense`, and year tokens like `current` and `previous`. Scheduled runs are split into smaller domain batches and guarded by Neon storage checks. |
 | `refresh-neon-school-data.yml` | Manual / quarterly | Re-runs the school ETL and reloads Neon |
 | `deploy-pages.yml` | Push to master | Builds and deploys the static frontend to GitHub Pages |
+
+### Current automation status
+
+The production path is now:
+
+`GitHub Actions ETL -> Neon -> GitHub Actions Vercel deploy -> production smoke test`
+
+Current platform status:
+
+- `GitHub Actions -> Neon` is working.
+- `GitHub Actions -> Vercel production` is working.
+- Production smoke validation is working against `https://cz-school-sankey.vercel.app`.
+- Neon retention is active for the free-tier instance, keeping the project focused on reporting years `2024` and `2025`.
+
+Scheduled ETL batches:
+
+- Tuesday `02:20 UTC`: `environment regions business transport`
+- Thursday `02:20 UTC`: `social justice culture foreign internal finance defense`
+- Saturday `02:20 UTC`: `health agriculture`
+
+Manual-only ETL:
+
+- `school` stays manual for now because it still depends on tracked MŠMT source workbooks and related bundled fallback files.
+
+Free-tier Neon guardrails:
+
+- The shared ETL workflow prunes superseded dataset releases before loading.
+- The workflow checks current database size before loading and fails early if Neon is already above the configured threshold.
+- The default storage guard threshold is `450 MB`.
+
+Domain readiness summary:
+
+| Domain | Automation status | Current years | Main remaining gap |
+|---|---|---|---|
+| `school` | Manual only | `2024`, `2025` | depends on tracked source workbooks and bundled fallbacks |
+| `health` | Scheduled | `2024`, `2025` | ordered multi-step pipeline; Monitor fetch depends on prior loaded data |
+| `social` | Scheduled | mainly `2024` | source methodology and effective year coverage are still `2024`-heavy |
+| `justice` | Scheduled | `2024`, `2025` budget; activity mainly `2024` | activity parser and source coverage are still limited |
+| `agriculture` | Scheduled | `2024`, `2025` | LPIS denominator is a proxy and depends on fallback-friendly source discovery |
+| `environment` | Scheduled | `2024`, `2025` | relatively clean; no major automation blocker |
+| `regions` / `mmr` | Scheduled | `2024`, `2025` | DotaceEU workbook discovery still scrapes listing pages |
+| `business` / `mpo` | Scheduled | `2024`, `2025` | same DotaceEU listing fragility as MMR |
+| `culture` / `mk` | Scheduled | substantively mainly `2024` | code path is automated, but real source coverage is still `2024`-heavy |
+| `foreign` / `mzv` | Scheduled | substantively mainly `2024` | code path is automated, but real source coverage is still `2024`-heavy |
+| `transport` | Scheduled | `2024`, `2025` | denominator metrics remain curated/static in code |
+| `internal` / `mv` | Scheduled | `2024`, `2025` | some PDF parsing remains layout-fragile |
+| `finance` / `mf` | Scheduled | `2023`, `2024`, `2025` in code; retention keeps `2024`, `2025` | activity denominator is still curated/static in code |
+| `defense` / `mo` | Scheduled | `2024`, `2025` | parser depends on a fixed publication and extracted PDF text |
 
 ---
 
