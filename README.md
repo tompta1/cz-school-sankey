@@ -18,17 +18,17 @@ The root view shows the flow `Stát → všechny resortní kapitoly → dílčí
 |---|---|---|---|
 | **MŠMT** | Ministerstvo školství, mládeže a tělovýchovy | State → MŠMT → Region → Founder → School → Cost bucket | 2024, 2025 |
 | **MPSV** | Ministerstvo práce a sociálních věcí | State → MPSV → Benefit group | 2024 |
-| **MV** | Ministerstvo vnitra | State → MV → Police / HZS → Region → Crime class | 2024, 2025 |
-| **MSp** | Ministerstvo spravedlnosti | State → MSp → Courts / Prison / Prosecutors | 2024 |
+| **MV** | Ministerstvo vnitra | State → MV → Police / HZS → Region → Crime class | 2024 fully; 2025 budget only |
+| **MSp** | Ministerstvo spravedlnosti | State → MSp → Courts / Prison / Prosecutors | 2024 fully; 2025 budget only |
 | **MD** | Ministerstvo dopravy + SFDI | State → MD → Rail / Road vignette / Road toll / SFDI investor → Project | 2024, 2025 |
-| **MZe** | Ministerstvo zemědělství + SZIF | State → MZe → Subsidy family / Admin → Subsidy recipient | 2024 |
+| **MZe** | Ministerstvo zemědělství + SZIF | State → MZe → Subsidy family / Admin → Subsidy recipient | 2024 fully; 2025 budget only |
 | **MŽP** | Ministerstvo životního prostředí + SFŽP | State → MŽP → SFŽP support / Admin → Support recipient | 2024, 2025 |
 | **MMR** | Ministerstvo pro místní rozvoj | State → MMR → IROP regional / Housing → Region → Recipient | 2024, 2025 |
 | **MPO** | Ministerstvo průmyslu a obchodu | State → MPO → OP TAK support → Region → Recipient | 2024, 2025 |
-| **MK** | Ministerstvo kultury | State → MK → Heritage (PZAD) / Culture → Programme → Region / Recipient | 2024, 2025 |
-| **MZV** | Ministerstvo zahraničních věcí | State → MZV → Foreign service / Development aid / Humanitarian aid → Country → Project | 2024 |
+| **MK** | Ministerstvo kultury | State → MK → Heritage (PZAD) / Culture → Programme → Region / Recipient | 2024 fully; 2025 budget only |
+| **MZV** | Ministerstvo zahraničních věcí | State → MZV → Foreign service / Development aid / Humanitarian aid → Country → Project | 2024 fully; 2025 budget only |
 | **MO** | Ministerstvo obrany | State → MO → Program financing / Personnel / Other operating | 2024, 2025 |
-| **MF** | Ministerstvo financí | State → MF → Tax admin (GFŘ) / Customs (GŘC) / Ministry core | 2024 |
+| **MF** | Ministerstvo financí | State → MF → Tax admin (GFŘ) / Customs (GŘC) / Ministry core | 2024, 2025 |
 | **MZ** | Ministerstvo zdravotnictví | State → MZ → Hospitals by owner / ZZS / Public health / Outpatient | 2024, 2025 |
 
 ---
@@ -102,7 +102,7 @@ Ministries sourced directly from Monitor MF:
 
 **HZS statistická ročenka zásahů** — annual HZS intervention statistics by region. Used as the denominator for the fire-rescue branch.
 
-**Years:** 2024, 2025.
+**Years:** 2024, 2025 budget data; police and HZS activity denominators are currently 2024-only.
 
 **Per-unit metrics (by node):**
 - Policie ČR → **Kč/registrovaný skutek** (region- and crime-class-level)
@@ -117,7 +117,7 @@ Ministries sourced directly from Monitor MF:
 
 **Soudní a vězeňské výkonové statistiky** — annual statistics on resolved court cases and average daily inmate population, published in Ministry of Justice annual reports.
 
-**Years:** 2024.
+**Years:** 2024 fully; 2025 currently covers budget aggregates only.
 
 **Per-unit metrics (by node):**
 - Soudy → **Kč/vyřízenou věc**
@@ -155,7 +155,7 @@ Ministries sourced directly from Monitor MF:
 
 **MZe pLPIS výměra uživatelů** — aggregated LPIS land-block area per user from a dated public LPIS export, cross-referenced with the WFS layer to resolve user identities. Used exclusively as the denominator for the area-family subsidy branch. This is the best available public hectare proxy but is not an official closed annual statement of supported hectares.
 
-**Years:** 2024.
+**Years:** 2024 fully; 2025 currently covers budget entities only.
 
 **Per-unit metrics (by node):**
 - Plošné dotace (area-family) → **Kč/ha** (LPIS-matched hectares)
@@ -213,7 +213,7 @@ Published as result lists after each grant round.
 
 **MK PZAD souhrnné tabulky** — official summary tables of the Programme for the Rescue of Architectural Heritage (Program záchrany architektonického dědictví) with allocation and recipient counts by region. Published as a summary PDF after the grant round. Enables the regional drilldown inside the PZAD heritage branch without requiring a recipient-level breakdown that MK does not openly publish.
 
-**Years:** 2024, 2025.
+**Years:** 2024 fully; 2025 currently covers budget entities only.
 
 **Per-unit metric:** **Kč/příjemce podpory** — applied to programme branches where recipient-level data are published (culture-museums, PZAD regional). Film incentive and church restitution nodes do not carry a per-unit metric.
 
@@ -227,7 +227,7 @@ Published as result lists after each grant round.
 
 **MZV a ČRA výroční přehledy rozvojových a humanitárních projektů** — official annual workbooks of Czech development cooperation (ODA) and humanitarian aid projects, published by MZV and the Czech Development Agency (ČRA). Each row contains country, sector, recipient organisation, project name, planned amount, and actual drawn amount. The atlas separates the development and humanitarian branches and enables the country → project drilldown for both.
 
-**Years:** 2024.
+**Years:** 2024 fully; 2025 currently covers budget entities only.
 
 **Per-unit metrics (by node):**
 - Zahraniční služba → **Kč/zastupitelský úřad** (total foreign post count from Česká diplomacie 2024)
@@ -261,7 +261,7 @@ All three are queried individually from Monitor MF, giving directly observed bra
 
 **Finanční správa ČR výroční zpráva — počet daňových subjektů** — annual count of registered tax entities (`registrované daňové subjekty`) from the Financial Administration annual report, published at `financnisprava.cz`. Approximately 3.617 million in 2024.
 
-**Years:** 2024.
+**Years:** 2024, 2025.
 
 **Per-unit metric:** **Kč/daňový subjekt** — applied to the MF ministry node and all three sub-branches. The registered tax entity count is the most legible and consistently published public denominator for tax administration; it is available annually in the Financial Administration annual report.
 
@@ -295,7 +295,7 @@ All three are queried individually from Monitor MF, giving directly observed bra
 Browser (React + ECharts)
         │
         ▼
-GitHub Pages  ──── static bundle ────▶  Vercel Edge Functions (/api/atlas/*)
+GitHub Pages  ───── static bundle ─────▶  Vercel Edge Functions (/api/atlas/*)
                                                 │
                                                 ▼
                                        Neon Postgres (PostgreSQL 17)
