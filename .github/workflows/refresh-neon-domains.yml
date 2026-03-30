@@ -1,0 +1,737 @@
+name: Refresh Neon ETL domains
+
+on:
+  workflow_dispatch:
+    inputs:
+      domains:
+        description: Space-separated domains to refresh (school health social justice agriculture environment regions business culture foreign transport internal finance defense)
+        required: false
+        default: "school health social justice agriculture environment regions business culture foreign transport internal finance defense"
+      years:
+        description: Space-separated reporting years to refresh (supports explicit years plus `current` and `previous`)
+        required: false
+        default: "2024 2025"
+      refresh_sources:
+        description: Refresh raw source files before loading Neon
+        required: false
+        type: boolean
+        default: true
+      run_school_transforms:
+        description: Run school mart transforms after loading school raw tables
+        required: false
+        type: boolean
+        default: true
+      verify_neon:
+        description: Verify loaded Neon dataset releases and school core outputs
+        required: false
+        type: boolean
+        default: true
+      prune_old_releases:
+        description: Prune superseded Neon dataset releases before loading
+        required: false
+        type: boolean
+        default: true
+      retention_years:
+        description: Space-separated reporting years to retain in Neon when pruning
+        required: false
+        default: "2024 2025"
+      max_db_size_mb:
+        description: Fail before loading if Neon is already above this size in MB (0 disables the guard)
+        required: false
+        default: "450"
+  schedule:
+    - cron: "20 2 * * 2"
+    - cron: "20 2 * * 4"
+    - cron: "20 2 * * 6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-neon-domains
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      INPUT_DOMAINS: ${{ github.event.inputs.domains }}
+      INPUT_YEARS: ${{ github.event.inputs.years }}
+      INPUT_REFRESH_SOURCES: ${{ github.event.inputs.refresh_sources }}
+      INPUT_RUN_SCHOOL_TRANSFORMS: ${{ github.event.inputs.run_school_transforms }}
+      INPUT_VERIFY_NEON: ${{ github.event.inputs.verify_neon }}
+      INPUT_PRUNE_OLD_RELEASES: ${{ github.event.inputs.prune_old_releases }}
+      INPUT_RETENTION_YEARS: ${{ github.event.inputs.retention_years }}
+      INPUT_MAX_DB_SIZE_MB: ${{ github.event.inputs.max_db_size_mb }}
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
+      GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y antiword
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install openpyxl pypdf requests "psycopg[binary]"
+
+      - name: Validate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL"
+
+      - name: Refresh selected domains
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          requested_domains_raw="$(echo "${INPUT_DOMAINS:-school health social justice agriculture environment regions business culture foreign transport internal finance defense}" | xargs)"
+          requested_years_raw="$(echo "${INPUT_YEARS:-2024 2025}" | xargs)"
+          refresh_sources="${INPUT_REFRESH_SOURCES:-true}"
+          run_school_transforms="${INPUT_RUN_SCHOOL_TRANSFORMS:-true}"
+          verify_neon="${INPUT_VERIFY_NEON:-true}"
+          prune_old_releases="${INPUT_PRUNE_OLD_RELEASES:-true}"
+          retention_years_raw="$(echo "${INPUT_RETENTION_YEARS:-2024 2025}" | xargs)"
+          max_db_size_mb="${INPUT_MAX_DB_SIZE_MB:-450}"
+          event_name="${GITHUB_EVENT_NAME:-workflow_dispatch}"
+          event_schedule="${GITHUB_EVENT_SCHEDULE:-}"
+          schedule_profile="manual"
+          current_year="$(TZ=Europe/Prague date +%Y)"
+          previous_year="$((current_year - 1))"
+
+          if [[ "${event_name}" == "schedule" ]]; then
+            case "${event_schedule}" in
+              "20 2 * * 2")
+                schedule_profile="regional-and-transport"
+                requested_domains_raw="environment regions business transport"
+                ;;
+              "20 2 * * 4")
+                schedule_profile="institutional-batch"
+                requested_domains_raw="social justice culture foreign internal finance defense"
+                ;;
+              "20 2 * * 6")
+                schedule_profile="health-and-agriculture"
+                requested_domains_raw="health agriculture"
+                ;;
+              *)
+                echo "Unknown schedule profile: ${event_schedule}" >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          normalized_domains=()
+          for domain in ${requested_domains_raw}; do
+            case "${domain}" in
+              regions) normalized_domains+=(mmr) ;;
+              business) normalized_domains+=(mpo) ;;
+              culture) normalized_domains+=(mk) ;;
+              foreign) normalized_domains+=(mzv) ;;
+              internal) normalized_domains+=(mv) ;;
+              finance) normalized_domains+=(mf) ;;
+              defense) normalized_domains+=(mo) ;;
+              school|health|social|justice|agriculture|environment|mmr|mpo|mk|mzv|transport|mv|mf|mo)
+                normalized_domains+=("${domain}")
+                ;;
+              *)
+                echo "Unknown domain alias: ${domain}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          requested_domains="$(printf '%s\n' "${normalized_domains[@]}" | awk '!seen[$0]++' | xargs)"
+
+          normalized_years=()
+          for year_token in ${requested_years_raw}; do
+            case "${year_token}" in
+              current) normalized_years+=("${current_year}") ;;
+              previous) normalized_years+=("${previous_year}") ;;
+              [0-9][0-9][0-9][0-9]) normalized_years+=("${year_token}") ;;
+              *)
+                echo "Unknown year token: ${year_token}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          requested_years="$(printf '%s\n' "${normalized_years[@]}" | awk '!seen[$0]++' | sort -n | xargs)"
+
+          retention_years=()
+          for year_token in ${retention_years_raw}; do
+            case "${year_token}" in
+              current) retention_years+=("${current_year}") ;;
+              previous) retention_years+=("${previous_year}") ;;
+              [0-9][0-9][0-9][0-9]) retention_years+=("${year_token}") ;;
+              *)
+                echo "Unknown retention year token: ${year_token}" >&2
+                exit 1
+                ;;
+            esac
+          done
+          retention_years="$(printf '%s\n' "${retention_years[@]}" | awk '!seen[$0]++' | sort -n | xargs)"
+
+          contains_domain() {
+            [[ " ${requested_domains} " == *" $1 "* ]]
+          }
+
+          echo "Domain aliases: ${requested_domains_raw}"
+          echo "Normalized domains: ${requested_domains}"
+          echo "Year tokens: ${requested_years_raw}"
+          echo "Normalized years: ${requested_years}"
+          echo "Refresh sources: ${refresh_sources}"
+          echo "Run school transforms: ${run_school_transforms}"
+          echo "Verify Neon: ${verify_neon}"
+          echo "Prune old releases: ${prune_old_releases}"
+          echo "Retention years: ${retention_years}"
+          echo "Event name: ${event_name}"
+          echo "Schedule profile: ${schedule_profile}"
+          echo "Max DB size guard: ${max_db_size_mb} MB"
+
+          if [[ "${prune_old_releases}" == "true" ]]; then
+            prune_args=()
+            for year in ${retention_years}; do
+              prune_args+=(--keep-year "${year}")
+            done
+            python3 ./scripts/prune-neon-dataset-releases.py \
+              --database-url "$DATABASE_URL" \
+              "${prune_args[@]}" \
+              --execute | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          python3 ./scripts/check-neon-db-size.py \
+            --database-url "$DATABASE_URL" \
+            --max-size-mb "${max_db_size_mb}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          python3 db/apply_schema.py --database-url "$DATABASE_URL"
+
+          if contains_domain school; then
+            for year in ${requested_years}; do
+              if [[ "${refresh_sources}" == "true" ]]; then
+                if [[ ! -f "etl/data/raw/${year}/msmt_${year}_raw.xlsx" ]]; then
+                  echo "Missing tracked MŠMT workbook: etl/data/raw/${year}/msmt_${year}_raw.xlsx" >&2
+                  exit 1
+                fi
+
+                if [[ -f "etl/data/raw/${year}/msmt_allocations.csv" \
+                   && -f "etl/data/raw/${year}/eu_projects.csv" \
+                   && -f "etl/data/raw/${year}/founder_support.csv" \
+                   && -f "etl/data/raw/${year}/state_budget.csv" \
+                   && -f "etl/data/raw/${year}/school_entities.csv" ]]; then
+                  echo "Using tracked school source bundle for ${year}" >&2
+                else
+                  python3 etl/parse_msmt_xlsx.py --year "${year}" --top 0
+                  if ! timeout 15m python3 etl/fetch_eu_grants.py --year "${year}"; then
+                    if [[ -f "etl/data/raw/${year}/eu_projects.csv" ]]; then
+                      echo "Falling back to tracked school EU projects for ${year}" >&2
+                    else
+                      echo "Missing fallback school EU projects: etl/data/raw/${year}/eu_projects.csv" >&2
+                      exit 1
+                    fi
+                  fi
+                  if ! timeout 15m python3 etl/fetch_founder_budgets.py --year "${year}"; then
+                    if [[ -f "etl/data/raw/${year}/founder_support.csv" ]]; then
+                      echo "Falling back to tracked school founder support for ${year}" >&2
+                    else
+                      echo "Missing fallback school founder support: etl/data/raw/${year}/founder_support.csv" >&2
+                      exit 1
+                    fi
+                  fi
+                  if ! timeout 15m python3 etl/fetch_state_budget.py --year "${year}"; then
+                    if [[ -f "etl/data/raw/${year}/state_budget.csv" ]]; then
+                      echo "Falling back to tracked school state budget for ${year}" >&2
+                    else
+                      echo "Missing fallback school state budget: etl/data/raw/${year}/state_budget.csv" >&2
+                      exit 1
+                    fi
+                  fi
+                  if ! timeout 15m python3 etl/fetch_msmt_registry.py --year "${year}" --update-csv; then
+                    if [[ -f "etl/data/raw/${year}/school_entities.csv" ]]; then
+                      echo "Falling back to tracked school registry entities for ${year}" >&2
+                    else
+                      echo "Missing fallback school registry entities: etl/data/raw/${year}/school_entities.csv" >&2
+                      exit 1
+                    fi
+                  fi
+                fi
+              fi
+
+              python3 etl/load_school_raw.py --year "${year}" --database-url "$DATABASE_URL"
+
+              if [[ "${run_school_transforms}" == "true" ]]; then
+                python3 etl/transform_school_core.py --year "${year}" --database-url "$DATABASE_URL"
+              fi
+            done
+          fi
+
+          if contains_domain social; then
+            social_recipient_year_args=()
+            social_has_budget=false
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024)
+                  social_has_budget=true
+                  social_recipient_year_args+=(--year "${year}")
+                  ;;
+              esac
+            done
+
+            social_load_args=()
+            if [[ "${social_has_budget}" == "true" ]]; then
+              social_load_args+=(--dataset social_mpsv_aggregates)
+            fi
+            if (( ${#social_recipient_year_args[@]} > 0 )); then
+              social_load_args+=(--dataset social_recipient_metrics)
+            fi
+
+            if (( ${#social_load_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                if [[ "${social_has_budget}" == "true" ]]; then
+                  python3 etl/social/fetch_mpsv_budget_aggregates.py --year 2024
+                fi
+                if (( ${#social_recipient_year_args[@]} > 0 )); then
+                  python3 etl/social/fetch_recipient_metrics.py "${social_recipient_year_args[@]}"
+                fi
+              fi
+
+              python3 etl/load_social_raw.py "${social_load_args[@]}" --database-url "$DATABASE_URL"
+            else
+              echo "Skipping social: no supported years selected"
+            fi
+          fi
+
+          if contains_domain justice; then
+            justice_budget_year_args=()
+            justice_has_activity=false
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024)
+                  justice_budget_year_args+=(--year "${year}")
+                  justice_has_activity=true
+                  ;;
+                2025)
+                  justice_budget_year_args+=(--year "${year}")
+                  ;;
+              esac
+            done
+
+            justice_load_args=()
+            if (( ${#justice_budget_year_args[@]} > 0 )); then
+              justice_load_args+=(--dataset justice_budget_aggregates)
+            fi
+            if [[ "${justice_has_activity}" == "true" ]]; then
+              justice_load_args+=(--dataset justice_activity_aggregates)
+            fi
+
+            if (( ${#justice_load_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                if (( ${#justice_budget_year_args[@]} > 0 )); then
+                  python3 etl/justice/fetch_budget_aggregates.py "${justice_budget_year_args[@]}"
+                fi
+                if [[ "${justice_has_activity}" == "true" ]]; then
+                  python3 etl/justice/fetch_activity_aggregates.py --year 2024
+                fi
+              fi
+
+              python3 etl/load_justice_raw.py "${justice_load_args[@]}" --database-url "$DATABASE_URL"
+            else
+              echo "Skipping justice: no supported years selected"
+            fi
+          fi
+
+          if contains_domain agriculture; then
+            agriculture_budget_year_args=()
+            agriculture_has_2024=false
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024)
+                  agriculture_budget_year_args+=(--year "${year}")
+                  agriculture_has_2024=true
+                  ;;
+                2025)
+                  agriculture_budget_year_args+=(--year "${year}")
+                  ;;
+              esac
+            done
+
+            agriculture_load_args=()
+            if (( ${#agriculture_budget_year_args[@]} > 0 )); then
+              agriculture_load_args+=(--dataset agriculture_budget_entities)
+            fi
+            if [[ "${agriculture_has_2024}" == "true" ]]; then
+              agriculture_load_args+=(--dataset agriculture_szif_payments)
+              agriculture_load_args+=(--dataset agriculture_lpis_user_area)
+            fi
+
+            if (( ${#agriculture_load_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                if (( ${#agriculture_budget_year_args[@]} > 0 )); then
+                  python3 etl/agriculture/fetch_budget_entities.py "${agriculture_budget_year_args[@]}"
+                fi
+                if [[ "${agriculture_has_2024}" == "true" ]]; then
+                  python3 etl/agriculture/fetch_szif_payments.py --year 2024
+                  if ! timeout 20m python3 etl/agriculture/fetch_lpis_user_area.py --year 2024; then
+                    if find etl/data/raw/agriculture/agriculture_lpis_user_area -maxdepth 1 -name '*__lpis-user-area-yearly.csv' | grep -q .; then
+                      echo "Falling back to tracked agriculture LPIS user-area snapshot for 2024" >&2
+                    else
+                      echo "Missing fallback agriculture LPIS user-area snapshot under etl/data/raw/agriculture/agriculture_lpis_user_area" >&2
+                      exit 1
+                    fi
+                  fi
+                fi
+              fi
+
+              python3 etl/load_agriculture_raw.py "${agriculture_load_args[@]}" --database-url "$DATABASE_URL"
+            else
+              echo "Skipping agriculture: no supported years selected"
+            fi
+          fi
+
+          if contains_domain environment; then
+            env_year_args=()
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024|2025) env_year_args+=(--year "${year}") ;;
+              esac
+            done
+
+            if (( ${#env_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/environment/fetch_budget_entities.py "${env_year_args[@]}"
+                python3 etl/environment/fetch_sfzp_supports.py "${env_year_args[@]}"
+              fi
+
+              python3 etl/load_environment_raw.py \
+                --dataset environment_budget_entities \
+                --dataset environment_sfzp_supports \
+                --database-url "$DATABASE_URL"
+            else
+              echo "Skipping environment: no supported years selected"
+            fi
+          fi
+
+          if contains_domain mmr; then
+            mmr_year_args=()
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024|2025) mmr_year_args+=(--year "${year}") ;;
+              esac
+            done
+
+            if (( ${#mmr_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/mmr/fetch_budget_aggregates.py "${mmr_year_args[@]}"
+                python3 etl/mmr/fetch_irop_operations.py "${mmr_year_args[@]}"
+              fi
+
+              python3 etl/load_mmr_raw.py \
+                --dataset mmr_budget_aggregates \
+                --dataset mmr_irop_operations \
+                --database-url "$DATABASE_URL"
+            else
+              echo "Skipping MMR: no supported years selected"
+            fi
+          fi
+
+          if contains_domain mpo; then
+            mpo_year_args=()
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024|2025) mpo_year_args+=(--year "${year}") ;;
+              esac
+            done
+
+            if (( ${#mpo_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/mpo/fetch_budget_entities.py "${mpo_year_args[@]}"
+                python3 etl/mpo/fetch_optak_operations.py "${mpo_year_args[@]}"
+              fi
+
+              python3 etl/load_mpo_raw.py \
+                --dataset mpo_budget_entities \
+                --dataset mpo_optak_operations \
+                --database-url "$DATABASE_URL"
+            else
+              echo "Skipping MPO: no supported years selected"
+            fi
+          fi
+
+          if contains_domain mk; then
+            mk_year_args=()
+            mk_has_2024=false
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024)
+                  mk_year_args+=(--year "${year}")
+                  mk_has_2024=true
+                  ;;
+                2025)
+                  mk_year_args+=(--year "${year}")
+                  ;;
+              esac
+            done
+
+            mk_load_args=()
+            if (( ${#mk_year_args[@]} > 0 )); then
+              mk_load_args+=(--dataset mk_budget_entities)
+            fi
+            if [[ "${mk_has_2024}" == "true" ]]; then
+              mk_load_args+=(--dataset mk_budget_aggregates)
+              mk_load_args+=(--dataset mk_support_awards)
+              mk_load_args+=(--dataset mk_region_metrics)
+            fi
+
+            if (( ${#mk_load_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                if (( ${#mk_year_args[@]} > 0 )); then
+                  python3 etl/mk/fetch_budget_entities.py "${mk_year_args[@]}"
+                fi
+                if [[ "${mk_has_2024}" == "true" ]]; then
+                  python3 etl/mk/fetch_budget_aggregates.py --year 2024
+                  python3 etl/mk/fetch_support_results.py --year 2024
+                fi
+              fi
+
+              python3 etl/load_mk_raw.py "${mk_load_args[@]}" --database-url "$DATABASE_URL"
+            else
+              echo "Skipping MK: no supported years selected"
+            fi
+          fi
+
+          if contains_domain mzv; then
+            mzv_year_args=()
+            mzv_has_2024=false
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024)
+                  mzv_year_args+=(--year "${year}")
+                  mzv_has_2024=true
+                  ;;
+                2025)
+                  mzv_year_args+=(--year "${year}")
+                  ;;
+              esac
+            done
+
+            mzv_load_args=()
+            if (( ${#mzv_year_args[@]} > 0 )); then
+              mzv_load_args+=(--dataset mzv_budget_entities)
+            fi
+            if [[ "${mzv_has_2024}" == "true" ]]; then
+              mzv_load_args+=(--dataset mzv_diplomatic_metrics)
+              mzv_load_args+=(--dataset mzv_aid_operations)
+            fi
+
+            if (( ${#mzv_load_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                if (( ${#mzv_year_args[@]} > 0 )); then
+                  python3 etl/mzv/fetch_budget_entities.py "${mzv_year_args[@]}"
+                fi
+                if [[ "${mzv_has_2024}" == "true" ]]; then
+                  python3 etl/mzv/fetch_diplomatic_metrics.py --year 2024
+                  python3 etl/mzv/fetch_aid_operations.py --year 2024
+                fi
+              fi
+
+              python3 etl/load_mzv_raw.py "${mzv_load_args[@]}" --database-url "$DATABASE_URL"
+            else
+              echo "Skipping MZV: no supported years selected"
+            fi
+          fi
+
+          if contains_domain transport; then
+            transport_year_args=()
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024|2025) transport_year_args+=(--year "${year}") ;;
+              esac
+            done
+
+            if (( ${#transport_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/transport/fetch_budget_entities.py "${transport_year_args[@]}"
+                if ! timeout 15m python3 etl/transport/fetch_sfdi_projects.py "${transport_year_args[@]}"; then
+                  if ls etl/data/raw/transport/transport_sfdi_projects/*.csv >/dev/null 2>&1; then
+                    echo "Falling back to tracked transport SFDI projects snapshot" >&2
+                  else
+                    echo "Missing fallback transport SFDI snapshot under etl/data/raw/transport/transport_sfdi_projects" >&2
+                    exit 1
+                  fi
+                fi
+                python3 etl/transport/fetch_activity_metrics.py "${transport_year_args[@]}"
+              fi
+
+              python3 etl/load_transport_raw.py \
+                --dataset transport_budget_entities \
+                --dataset transport_sfdi_projects \
+                --dataset transport_activity_metrics \
+                --database-url "$DATABASE_URL"
+            else
+              echo "Skipping transport: no supported years selected"
+            fi
+          fi
+
+          if contains_domain health; then
+            health_year_args=()
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024|2025) health_year_args+=(--year "${year}") ;;
+              esac
+            done
+
+            if (( ${#health_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/health/fetch_provider_sites.py
+                python3 etl/health/fetch_claims_by_provider_specialty.py
+                python3 etl/health/fetch_claims_by_provider_ico.py
+                python3 etl/health/fetch_claims_by_payer.py
+                python3 etl/health/fetch_insurer_codebook.py
+                python3 etl/health/fetch_mz_budget_entities.py "${health_year_args[@]}"
+                python3 etl/health/fetch_czso_health_financing.py
+                python3 etl/health/fetch_zzs_activity_aggregates.py
+              fi
+
+              python3 etl/load_health_raw.py \
+                --dataset nrpzs_provider_sites \
+                --dataset nrhzs_claims_provider_specialty \
+                --dataset nrhzs_claims_payer \
+                --dataset health_insurer_codebook \
+                --dataset health_mz_budget_entities \
+                --dataset health_financing_aggregates \
+                --dataset health_zzs_activity_aggregates \
+                --database-url "$DATABASE_URL"
+
+              node ./scripts/load-health-claims-monthly.mjs nrhzs_claims_provider_ico
+
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/health/fetch_monitor_indicators.py "${health_year_args[@]}" --database-url "$DATABASE_URL"
+              fi
+
+              python3 etl/load_health_raw.py \
+                --dataset health_monitor_indicators \
+                --database-url "$DATABASE_URL"
+            else
+              echo "Skipping health: no supported years selected"
+            fi
+          fi
+
+          if contains_domain mv; then
+            mv_year_args=()
+            mv_has_2024=false
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024)
+                  mv_year_args+=(--year "${year}")
+                  mv_has_2024=true
+                  ;;
+                2025)
+                  mv_year_args+=(--year "${year}")
+                  ;;
+              esac
+            done
+
+            if (( ${#mv_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/mv/fetch_budget_aggregates.py "${mv_year_args[@]}"
+                python3 etl/mv/fetch_police_crime_aggregates.py "${mv_year_args[@]}"
+                if [[ "${mv_has_2024}" == "true" ]]; then
+                  python3 etl/mv/fetch_fire_rescue_activity_aggregates.py --year 2024
+                fi
+              fi
+
+              mv_load_args=(
+                --dataset mv_budget_aggregates
+                --dataset mv_police_crime_aggregates
+              )
+              if [[ "${mv_has_2024}" == "true" ]]; then
+                mv_load_args+=(--dataset mv_fire_rescue_activity_aggregates)
+              fi
+
+              python3 etl/load_mv_raw.py "${mv_load_args[@]}" --database-url "$DATABASE_URL"
+            else
+              echo "Skipping MV: no supported years selected"
+            fi
+          fi
+
+          if contains_domain mf; then
+            mf_year_args=()
+            for year in ${requested_years}; do
+              case "${year}" in
+                2023|2024|2025) mf_year_args+=(--year "${year}") ;;
+              esac
+            done
+
+            if (( ${#mf_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/mf/fetch_budget_entities.py "${mf_year_args[@]}"
+                python3 etl/mf/fetch_activity_metrics.py "${mf_year_args[@]}"
+              fi
+
+              python3 etl/load_mf_raw.py \
+                --dataset mf_budget_entities \
+                --dataset mf_activity_metrics \
+                --database-url "$DATABASE_URL"
+            else
+              echo "Skipping MF: no supported years selected"
+            fi
+          fi
+
+          if contains_domain mo; then
+            mo_year_args=()
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024|2025) mo_year_args+=(--year "${year}") ;;
+              esac
+            done
+
+            if (( ${#mo_year_args[@]} > 0 )); then
+              if [[ "${refresh_sources}" == "true" ]]; then
+                python3 etl/mo/fetch_budget_entities.py "${mo_year_args[@]}"
+                python3 etl/mo/fetch_budget_aggregates.py "${mo_year_args[@]}"
+                python3 etl/mo/fetch_personnel_metrics.py "${mo_year_args[@]}"
+              fi
+
+              python3 etl/load_mo_raw.py \
+                --dataset mo_budget_entities \
+                --dataset mo_budget_aggregates \
+                --dataset mo_personnel_metrics \
+                --database-url "$DATABASE_URL"
+            else
+              echo "Skipping MO: no supported years selected"
+            fi
+          fi
+
+          if [[ "${verify_neon}" == "true" ]]; then
+            verify_args=()
+            for domain in ${requested_domains}; do
+              verify_args+=(--domain "${domain}")
+            done
+            for year in ${requested_years}; do
+              verify_args+=(--year "${year}")
+            done
+            if contains_domain school && [[ "${run_school_transforms}" == "true" ]]; then
+              verify_args+=(--verify-school-transforms)
+            fi
+
+            python3 ./scripts/verify-neon-etl.py \
+              --database-url "$DATABASE_URL" \
+              "${verify_args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
