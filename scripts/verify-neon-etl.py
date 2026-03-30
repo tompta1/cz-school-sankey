@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from collections import defaultdict
 
 import psycopg
@@ -83,14 +82,16 @@ def main() -> None:
             """
             select
               domain_code,
+              dataset_code,
               reporting_year,
+              metadata,
               count(*) as release_count,
               coalesce(sum(coalesce(row_count, 0)), 0) as total_rows,
               string_agg(distinct dataset_code, ', ' order by dataset_code) as dataset_codes
             from meta.dataset_release
             where domain_code = any(%s)
-            group by domain_code, reporting_year
-            order by domain_code, reporting_year
+            group by domain_code, dataset_code, reporting_year, metadata
+            order by domain_code, dataset_code, reporting_year
             """,
             (selected_domains,),
         ).fetchall()
@@ -119,12 +120,31 @@ def main() -> None:
             ).fetchall()
 
     summary: dict[str, dict[int | None, dict[str, object]]] = defaultdict(dict)
+    covered_years_by_domain: dict[str, set[int]] = defaultdict(set)
     for row in release_rows:
-        summary[str(row[0])][row[1]] = {
-            "release_count": int(row[2]),
-            "total_rows": int(row[3]),
-            "dataset_codes": row[4] or "",
+        domain = str(row[0])
+        dataset_code = str(row[1])
+        reporting_year = row[2]
+        metadata = row[3] or {}
+        release_count = int(row[4])
+        total_rows = int(row[5])
+        dataset_codes = row[6] or ""
+
+        summary[domain][reporting_year] = {
+            "release_count": release_count,
+            "total_rows": total_rows,
+            "dataset_codes": dataset_codes,
         }
+
+        years = metadata.get("years") if isinstance(metadata, dict) else None
+        if isinstance(years, list):
+            for value in years:
+                if isinstance(value, int):
+                    covered_years_by_domain[domain].add(value)
+                elif isinstance(value, str) and value.isdigit():
+                    covered_years_by_domain[domain].add(int(value))
+        if isinstance(reporting_year, int):
+            covered_years_by_domain[domain].add(reporting_year)
 
     print("## Neon ETL Verification")
     print()
@@ -159,7 +179,7 @@ def main() -> None:
 
         expected_years = [year for year in selected_years if year in SUPPORTED_YEARS.get(domain, set())]
         for year in expected_years:
-            if year not in domain_rows:
+            if year not in covered_years_by_domain.get(domain, set()):
                 errors.append(f"{domain}: missing dataset release for reporting year {year}")
 
     if args.verify_school_transforms and "school" in selected_domains:
