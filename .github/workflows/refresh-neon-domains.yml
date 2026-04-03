@@ -38,11 +38,11 @@ on:
       max_db_size_mb:
         description: Fail before loading if Neon is already above this size in MB (0 disables the guard)
         required: false
-        default: "450"
+        default: "490"
   schedule:
-    - cron: "20 2 * * 2"
-    - cron: "20 2 * * 4"
-    - cron: "20 2 * * 6"
+    - cron: "0 3 2 1,4,7,10 *"
+    - cron: "0 3 4 1,4,7,10 *"
+    - cron: "0 3 6 1,4,7,10 *"
 
 permissions:
   contents: read
@@ -110,7 +110,7 @@ jobs:
           verify_neon="${INPUT_VERIFY_NEON:-true}"
           prune_old_releases="${INPUT_PRUNE_OLD_RELEASES:-true}"
           retention_years_raw="$(echo "${INPUT_RETENTION_YEARS:-2024 2025}" | xargs)"
-          max_db_size_mb="${INPUT_MAX_DB_SIZE_MB:-450}"
+          max_db_size_mb="${INPUT_MAX_DB_SIZE_MB:-490}"
           event_name="${GITHUB_EVENT_NAME:-workflow_dispatch}"
           event_schedule="${GITHUB_EVENT_SCHEDULE:-}"
           schedule_profile="manual"
@@ -119,15 +119,15 @@ jobs:
 
           if [[ "${event_name}" == "schedule" ]]; then
             case "${event_schedule}" in
-              "20 2 * * 2")
+              "0 3 2 1,4,7,10 *")
                 schedule_profile="regional-and-transport"
                 requested_domains_raw="environment regions business transport"
                 ;;
-              "20 2 * * 4")
+              "0 3 4 1,4,7,10 *")
                 schedule_profile="institutional-batch"
                 requested_domains_raw="social justice culture foreign internal finance defense"
                 ;;
-              "20 2 * * 6")
+              "0 3 6 1,4,7,10 *")
                 schedule_profile="health-and-agriculture"
                 requested_domains_raw="health agriculture"
                 ;;
