@@ -6,8 +6,11 @@ import csv
 import io
 import json
 import re
+import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from pypdf import PdfReader
@@ -22,6 +25,8 @@ MPSV_BENEFITS_PDF_URLS = {
     2024: "https://data.mpsv.cz/documents/20142/7393973/Informace%2Bo%2Bvyplacen%C3%BDch%2Bd%C3%A1vk%C3%A1ch%2Bv%2Bprosinci%2B2024.pdf/a8e89cce-b4a6-d562-2e2c-d4ee4e043a9f?t=1738832892949",
 }
 NUMBER_TIS_RE = re.compile(r"(\d+,\d)\s+(\d+,\d)\s+\d+,\d")
+FETCH_RETRY_ATTEMPTS = 3
+FETCH_RETRY_DELAY_SECONDS = 5
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,8 +44,20 @@ def parse_args() -> argparse.Namespace:
 
 def fetch_bytes(url: str) -> bytes:
     request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
-    with urlopen(request, timeout=120) as response:
-        return response.read()
+    for attempt in range(1, FETCH_RETRY_ATTEMPTS + 1):
+        try:
+            with urlopen(request, timeout=120) as response:
+                return response.read()
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            if attempt == FETCH_RETRY_ATTEMPTS:
+                raise
+            print(
+                f"fetch attempt {attempt} failed for {url} ({exc}); retrying in {FETCH_RETRY_DELAY_SECONDS}s",
+                file=sys.stderr,
+            )
+            time.sleep(FETCH_RETRY_DELAY_SECONDS)
+
+    raise RuntimeError(f"Unreachable retry loop for {url}")
 
 
 def load_pension_rows() -> list[dict[str, str]]:

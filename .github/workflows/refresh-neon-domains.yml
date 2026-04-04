@@ -305,10 +305,24 @@ jobs:
             if (( ${#social_load_args[@]} > 0 )); then
               if [[ "${refresh_sources}" == "true" ]]; then
                 if [[ "${social_has_budget}" == "true" ]]; then
-                  python3 etl/social/fetch_mpsv_budget_aggregates.py --year 2024
+                  if ! python3 etl/social/fetch_mpsv_budget_aggregates.py --year 2024; then
+                    if find etl/data/raw/social/social_mpsv_aggregates -maxdepth 1 -name '*__mpsv-budget-aggregates.csv' | grep -q .; then
+                      echo "Falling back to tracked social MPSV aggregate snapshot for 2024" >&2
+                    else
+                      echo "Missing fallback social MPSV aggregate snapshot under etl/data/raw/social/social_mpsv_aggregates" >&2
+                      exit 1
+                    fi
+                  fi
                 fi
                 if (( ${#social_recipient_year_args[@]} > 0 )); then
-                  python3 etl/social/fetch_recipient_metrics.py "${social_recipient_year_args[@]}"
+                  if ! python3 etl/social/fetch_recipient_metrics.py "${social_recipient_year_args[@]}"; then
+                    if find etl/data/raw/social/social_recipient_metrics -maxdepth 1 -name '*__social-recipient-metrics.csv' | grep -q .; then
+                      echo "Falling back to tracked social recipient metrics snapshot for 2024" >&2
+                    else
+                      echo "Missing fallback social recipient metrics snapshot under etl/data/raw/social/social_recipient_metrics" >&2
+                      exit 1
+                    fi
+                  fi
                 fi
               fi
 
