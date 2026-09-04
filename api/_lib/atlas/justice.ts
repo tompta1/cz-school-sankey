@@ -1,4 +1,5 @@
 import { query } from '../db.js';
+import { getOfficialStateChapterTotal, reconcileOfficialChapterTotal } from './state-budget.js';
 
 interface AtlasNode {
   id: string;
@@ -46,6 +47,7 @@ interface JusticeBranchRow {
   amount: number;
   capacity: number | null;
   note: string;
+  sourceDataset?: string;
 }
 
 const STATE_ID = 'state:cr';
@@ -139,8 +141,9 @@ function buildJusticeBranchRows(
   const courtsCapacity = justiceActivityByCode(activityRows, 'courts_disposed_total');
   const prisonCapacity = justiceActivityByCode(activityRows, 'prison_average_daily_inmates_total');
 
+  let rows: JusticeBranchRow[];
   if (courtsAmount > 0) {
-    return [
+    rows = [
       {
         id: 'justice:courts',
         name: 'Soudy',
@@ -184,51 +187,71 @@ function buildJusticeBranchRows(
         note: 'Správa, výzkum, ostatní právní ochrana a reziduální výdaje kapitoly MSp',
       },
     ];
+  } else {
+    rows = [
+      {
+        id: 'justice:justice-block',
+        name: 'Justiční část',
+        amount: justiceBlock,
+        capacity: null,
+        note: 'Rozpočtový blok justiční části kapitoly MSp',
+      },
+      {
+        id: 'justice:prison-service',
+        name: 'Vězeňská služba',
+        amount: prisonServiceAmount,
+        capacity: null,
+        note: 'Ostatní výdaje vězeňské části',
+      },
+      {
+        id: 'justice:social',
+        name: 'Sociální dávky a prevence',
+        amount: socialAmount,
+        capacity: null,
+        note: 'Dávky důchodového pojištění, ostatní sociální dávky a prevenční programy kapitoly MSp',
+      },
+    ];
   }
 
-  return [
-    {
-      id: 'justice:justice-block',
-      name: 'Justiční část',
-      amount: justiceBlock,
+  const classifiedAmount = rows.reduce((sum, row) => sum + row.amount, 0);
+  const reconciliationAmount = Math.max(
+    justiceAmountByCode(budgetRows, 'total_expenditure') - classifiedAmount,
+    0,
+  );
+  if (reconciliationAmount > 0) {
+    rows.push({
+      id: 'justice:reconciliation',
+      name: 'Rozdil skutecnost vs. rozpocet',
+      amount: reconciliationAmount,
       capacity: null,
-      note: 'Rozpočtový blok justiční části kapitoly MSp',
-    },
-    {
-      id: 'justice:prison-service',
-      name: 'Vězeňská služba',
-      amount: prisonServiceAmount,
-      capacity: null,
-      note: 'Ostatní výdaje vězeňské části',
-    },
-    {
-      id: 'justice:social',
-      name: 'Sociální dávky a prevence',
-      amount: socialAmount,
-      capacity: null,
-      note: 'Dávky důchodového pojištění, ostatní sociální dávky a prevenční programy kapitoly MSp',
-    },
-  ];
+      note: 'Rozdíl mezi realizovaným celkem kapitoly 336 a dostupným rozpočtovým členěním.',
+      sourceDataset: 'school_state_budget',
+    });
+  }
+  return rows;
 }
 
 export async function getJusticeBudgetAggregates(year: number): Promise<JusticeBudgetAggregate[]> {
-  const result = await query(
-    `
-      select
-        reporting_year,
-        basis,
-        metric_group,
-        metric_code,
-        metric_name,
-        amount_czk
-      from mart.justice_budget_aggregate_latest
-      where reporting_year = $1
-      order by metric_group, metric_code
-    `,
-    [year],
-  );
+  const [result, officialTotal] = await Promise.all([
+    query(
+      `
+        select
+          reporting_year,
+          basis,
+          metric_group,
+          metric_code,
+          metric_name,
+          amount_czk
+        from mart.justice_budget_aggregate_latest
+        where reporting_year = $1
+        order by metric_group, metric_code
+      `,
+      [year],
+    ),
+    getOfficialStateChapterTotal(year, '336'),
+  ]);
 
-  return result.rows.map((row) => ({
+  const rows = result.rows.map((row) => ({
     year: Number(row.reporting_year),
     basis: String(row.basis),
     metricGroup: String(row.metric_group),
@@ -237,6 +260,7 @@ export async function getJusticeBudgetAggregates(year: number): Promise<JusticeB
     amount: toNumber(row.amount_czk),
     sourceDataset: 'justice_budget_aggregates',
   }));
+  return reconcileOfficialChapterTotal(rows, 'total_expenditure', officialTotal);
 }
 
 export async function getJusticeActivityAggregates(year: number): Promise<JusticeActivityAggregate[]> {
@@ -287,8 +311,8 @@ export function appendJusticeBranch(
       justiceTotal,
       year,
       'state_to_justice_ministry',
-      'MSp: rozpočtové ukazatele / závěrečný účet kapitoly 336',
-      'justice_budget_aggregates',
+      'Realizovaný celek kapitoly 336 podle závěrečného účtu MF; členění zůstává podle rozpočtových ukazatelů MSp.',
+      justiceBudgetRows.find((row) => row.metricCode === 'total_expenditure')?.sourceDataset ?? 'justice_budget_aggregates',
     ),
   );
 
@@ -303,7 +327,7 @@ export function appendJusticeBranch(
         year,
         'justice_branch_cost',
         branch.note,
-        'justice_budget_aggregates',
+        branch.sourceDataset ?? 'justice_budget_aggregates',
       ),
     );
   }
@@ -331,7 +355,7 @@ export function buildJusticeRootGraph(
         year,
         'justice_branch_cost',
         branch.note,
-        'justice_budget_aggregates',
+        branch.sourceDataset ?? 'justice_budget_aggregates',
       ),
     );
   }

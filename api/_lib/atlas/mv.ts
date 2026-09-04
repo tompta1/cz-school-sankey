@@ -1,4 +1,5 @@
 import { query } from '../db.js';
+import { getOfficialStateChapterTotal, reconcileOfficialChapterTotal } from './state-budget.js';
 
 interface AtlasNode {
   id: string;
@@ -59,6 +60,7 @@ const MV_POLICE_ID = 'security:police';
 const MV_FIRE_RESCUE_ID = 'security:fire-rescue';
 const MV_ADMIN_ID = 'security:mv-admin';
 const MV_SOCIAL_ID = 'security:mv-social';
+const MV_RECONCILIATION_ID = 'security:mv-reconciliation';
 
 function toNumber(value: unknown): number {
   const number = Number(value);
@@ -245,23 +247,26 @@ function allocateAmount(totalAmount: number, partWeight: number, totalWeight: nu
 }
 
 export async function getMvBudgetAggregates(year: number): Promise<MvBudgetAggregate[]> {
-  const result = await query(
-    `
-      select
-        reporting_year,
-        basis,
-        metric_group,
-        metric_code,
-        metric_name,
-        amount_czk
-      from mart.mv_budget_aggregate_latest
-      where reporting_year = $1
-      order by metric_group, metric_code
-    `,
-    [year],
-  );
+  const [result, officialTotal] = await Promise.all([
+    query(
+      `
+        select
+          reporting_year,
+          basis,
+          metric_group,
+          metric_code,
+          metric_name,
+          amount_czk
+        from mart.mv_budget_aggregate_latest
+        where reporting_year = $1
+        order by metric_group, metric_code
+      `,
+      [year],
+    ),
+    getOfficialStateChapterTotal(year, '314'),
+  ]);
 
-  return result.rows.map((row) => ({
+  const rows = result.rows.map((row) => ({
     year: Number(row.reporting_year),
     basis: String(row.basis),
     metricGroup: String(row.metric_group),
@@ -270,6 +275,7 @@ export async function getMvBudgetAggregates(year: number): Promise<MvBudgetAggre
     amount: toNumber(row.amount_czk),
     sourceDataset: 'mv_budget_aggregates',
   }));
+  return reconcileOfficialChapterTotal(rows, 'total_expenditure', officialTotal);
 }
 
 export async function getMvPoliceCrimeAggregates(year: number): Promise<MvPoliceCrimeAggregate[]> {
@@ -351,6 +357,8 @@ export function appendMvBranch(
   const fireRescueAmount = mvAmountByCode(mvBudgetRows, 'fire_rescue');
   const adminAmountMv = mvAmountByCode(mvBudgetRows, 'ministry_admin') + mvAmountByCode(mvBudgetRows, 'sport');
   const socialAmountMv = mvAmountByCode(mvBudgetRows, 'pensions') + mvAmountByCode(mvBudgetRows, 'other_social');
+  const classifiedAmount = policeAmount + fireRescueAmount + adminAmountMv + socialAmountMv;
+  const reconciliationAmount = Math.max(mvTotal - classifiedAmount, 0);
   const policeCapacity = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
   const policeDrilldownAvailable = buildMvPoliceRegionRows(mvPoliceCrimeRows).length > 0;
   const fireRescueCapacity = mvNationalFireRescueCount(mvFireRescueRows, 'hzs_interventions');
@@ -364,8 +372,8 @@ export function appendMvBranch(
       mvTotal,
       year,
       'state_to_mv_ministry',
-      'MV rozpočet: kapitola 314 podle oficiálních rozpočtových dokumentů MV',
-      'mv_budget_aggregates',
+      'Realizovaný celek kapitoly 314 podle závěrečného účtu MF; členění zůstává podle rozpočtových ukazatelů MV.',
+      mvBudgetRows.find((row) => row.metricCode === 'total_expenditure')?.sourceDataset ?? 'mv_budget_aggregates',
     ),
   );
 
@@ -402,6 +410,14 @@ export function appendMvBranch(
       drilldownAvailable: false,
       note: 'Důchody a ostatní sociální dávky vyplácené v kapitole MV',
     },
+    {
+      id: MV_RECONCILIATION_ID,
+      name: 'Rozdil skutecnost vs. rozpocet',
+      amount: reconciliationAmount,
+      capacity: null,
+      drilldownAvailable: false,
+      note: 'Rozdíl mezi realizovaným celkem kapitoly 314 a dostupným členěním rozpočtových ukazatelů.',
+    },
   ];
 
   for (const bucket of buckets.filter((entry) => entry.amount > 0)) {
@@ -414,7 +430,7 @@ export function appendMvBranch(
         year,
         'mv_budget_group',
         bucket.note,
-        'mv_budget_aggregates',
+        bucket.id === MV_RECONCILIATION_ID ? 'school_state_budget' : 'mv_budget_aggregates',
       ),
     );
   }

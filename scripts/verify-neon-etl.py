@@ -9,6 +9,8 @@ from datetime import datetime
 import psycopg
 
 ALIAS_MAP = {
+    "state-budget": "state",
+    "budget": "state",
     "regions": "mmr",
     "business": "mpo",
     "culture": "mk",
@@ -20,6 +22,7 @@ ALIAS_MAP = {
 }
 
 SUPPORTED_YEARS = {
+    "state": {2024, 2025},
     "school": {2024, 2025},
     "health": {2024, 2025},
     "social": {2024, 2025},
@@ -37,6 +40,7 @@ SUPPORTED_YEARS = {
 }
 
 TOP_LEVEL_DATASETS = {
+    "state": "school_state_budget",
     "school": "school_state_budget",
     "health": "health_mz_budget_entities",
     "social": "social_mpsv_aggregates",
@@ -58,6 +62,8 @@ def expected_datasets(domain: str, years: set[int]) -> set[str]:
     supported = years & SUPPORTED_YEARS[domain]
     if not supported:
         return set()
+    if domain == "state":
+        return {"school_state_budget"}
     if domain == "school":
         return {
             "school_entities",
@@ -138,6 +144,10 @@ def normalize_domains(values: list[str]) -> list[str]:
     return normalized
 
 
+def release_domain(domain: str) -> str:
+    return "school" if domain == "state" else domain
+
+
 def release_years(reporting_year: int | None, metadata: object) -> set[int]:
     years: set[int] = set()
     if reporting_year is not None:
@@ -161,6 +171,7 @@ def main() -> None:
     requested_years = set(selected_years)
 
     with psycopg.connect(args.database_url) as conn:
+        release_domains = sorted({release_domain(domain) for domain in selected_domains})
         releases = conn.execute(
             """
             select domain_code, dataset_code, reporting_year, metadata, row_count,
@@ -169,7 +180,7 @@ def main() -> None:
             where domain_code = any(%s)
             order by domain_code, dataset_code, coalesce(published_at, fetched_at) desc
             """,
-            (selected_domains,),
+            (release_domains,),
         ).fetchall()
 
         school_rows = []
@@ -184,6 +195,46 @@ def main() -> None:
                 from core.reporting_period rp
                 where rp.domain_code = 'school' and rp.calendar_year = any(%s)
                 order by rp.calendar_year
+                """,
+                (selected_years,),
+            ).fetchall()
+
+        state_rows = []
+        if {"state", "school"} & set(selected_domains):
+            state_rows = conn.execute(
+                """
+                select
+                  requested_year,
+                  coalesce((
+                    select max(amount_czk)
+                    from raw.school_state_budget
+                    where reporting_year = requested_year
+                      and flow_type = 'state_budget_total'
+                  ), 0) as official_total,
+                  coalesce((
+                    select count(*)
+                    from raw.school_state_budget
+                    where reporting_year = requested_year
+                      and flow_type = 'state_chapter_total'
+                  ), 0) as chapter_count,
+                  coalesce((
+                    select sum(ff.amount_czk)
+                    from core.financial_flow ff
+                    join core.reporting_period rp on rp.reporting_period_id = ff.reporting_period_id
+                    where rp.domain_code = 'school'
+                      and rp.calendar_year = requested_year
+                      and ff.flow_type in ('state_to_ministry', 'state_to_other')
+                  ), 0) as core_outflow,
+                  coalesce((
+                    select sum(ff.amount_czk)
+                    from core.financial_flow ff
+                    join core.reporting_period rp on rp.reporting_period_id = ff.reporting_period_id
+                    where rp.domain_code = 'school'
+                      and rp.calendar_year = requested_year
+                      and ff.flow_type = 'state_revenue'
+                  ), 0) as core_inflow
+                from unnest(%s::integer[]) as requested_year
+                order by requested_year
                 """,
                 (selected_years,),
             ).fetchall()
@@ -206,7 +257,7 @@ def main() -> None:
     for domain in selected_domains:
         datasets = expected_datasets(domain, requested_years)
         for dataset in sorted(datasets):
-            candidates = by_domain_dataset.get((domain, dataset), [])
+            candidates = by_domain_dataset.get((release_domain(domain), dataset), [])
             current_candidates = [
                 row for row in candidates if args.started_after is None or row[6] >= args.started_after
             ]
@@ -234,7 +285,7 @@ def main() -> None:
         top_level_dataset = TOP_LEVEL_DATASETS[domain]
         top_level_releases = [
             row
-            for row in by_domain_dataset.get((domain, top_level_dataset), [])
+            for row in by_domain_dataset.get((release_domain(domain), top_level_dataset), [])
             if args.started_after is None or row[6] >= args.started_after
         ]
         top_level_years = set().union(*(release_years(row[2], row[3]) for row in top_level_releases))
@@ -255,6 +306,22 @@ def main() -> None:
             print(f"| {year} | {counts[0]} | {counts[1]} | {counts[2]} |")
             if not all(count > 0 for count in counts):
                 errors.append(f"school: incomplete transformed data for {year}")
+
+    if {"state", "school"} & set(selected_domains):
+        print()
+        print("### State-Budget Reconciliation")
+        print()
+        print("| Year | Official expenditure CZK | Chapters | Core outflow CZK | Core inflow CZK | Status |")
+        print("|---:|---:|---:|---:|---:|---|")
+        for year, official_total, chapter_count, core_outflow, core_inflow in state_rows:
+            values = tuple(int(value or 0) for value in (official_total, chapter_count, core_outflow, core_inflow))
+            status = "pass" if values[0] > 0 and values[1] == 14 and values[0] == values[2] == values[3] else "FAIL"
+            print(f"| {year} | {values[0]} | {values[1]} | {values[2]} | {values[3]} | {status} |")
+            if status == "FAIL":
+                errors.append(
+                    f"state/{year}: official total {values[0]} with {values[1]} chapters does not match "
+                    f"core outflow {values[2]} and inflow {values[3]}"
+                )
 
     if errors:
         print()

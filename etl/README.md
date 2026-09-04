@@ -124,6 +124,31 @@ Downloaded ZIPs are cached under `etl/data/monitor_cache/`. Re-run with
 If column detection fails, run with `--list-columns` to print the actual
 headers and update the `*_COLS_*` lists at the top of the script.
 
+### State-budget envelope
+
+`fetch_state_budget.py` downloads workbook G of the official MF state final
+account and parses realized totals from tables 1 and 2a plus 14 ministry
+chapter totals from table 7. It writes exact revenue classes, deficit financing,
+total expenditure and chapter reconciliation metadata, and the residual after
+the MŠMT direct-school allocation rollup.
+
+```bash
+python3 etl/fetch_state_budget.py --year 2025
+
+# Refresh only the tiny state summary in Neon without rebuilding school detail.
+python3 etl/load_school_raw.py --year 2025 \
+    --dataset school_state_budget --database-url "$DATABASE_URL"
+python3 etl/transform_school_core.py --year 2025 \
+    --state-budget-only --database-url "$DATABASE_URL"
+```
+
+The `state_budget_total` CSV row is metadata used by DQ checks, not a graph
+edge. The `state_to_other` row is inferred so that it plus the observed MŠMT
+school rollup equals official expenditure. The API then reduces that residual
+by other visible Atlas roots. Since some roots include state funds or regional
+spending, the final residual must not be interpreted as an observed sum of all
+unshown chapters.
+
 ```bash
 
 # Fetch EU grants from DotaceEU and produce eu_projects.csv

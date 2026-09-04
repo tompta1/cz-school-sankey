@@ -15,6 +15,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Transform raw school tables into core warehouse tables")
     parser.add_argument("--year", type=int, required=True, help="Budget year already loaded into raw tables")
     parser.add_argument(
+        "--state-budget-only",
+        action="store_true",
+        help="Replace only state revenue and residual flows, leaving school detail untouched.",
+    )
+    parser.add_argument(
         "--database-url",
         default=os.environ.get("DATABASE_URL"),
         help="Postgres connection string. Defaults to DATABASE_URL.",
@@ -293,6 +298,81 @@ def insert_school_capacity(
         )
 
 
+def build_state_budget_flow_rows(
+    *,
+    reporting_period_id: int,
+    year: int,
+    state_org_id: int,
+    other_org_by_node_id: dict[str, int],
+    state_budget_rows: list[dict],
+) -> list[tuple]:
+    rows: list[tuple] = []
+    for row in state_budget_rows:
+        flow_type = row["flow_type"]
+        if flow_type not in {"state_revenue", "state_to_other"}:
+            continue
+
+        other_org_id = other_org_by_node_id[row["node_id"]]
+        if flow_type == "state_revenue":
+            source_org_id = other_org_id
+            target_org_id = state_org_id
+        else:
+            source_org_id = state_org_id
+            target_org_id = other_org_id
+
+        rows.append(
+            (
+                "school",
+                reporting_period_id,
+                int(row["dataset_release_id"]),
+                source_org_id,
+                target_org_id,
+                None,
+                flow_type,
+                row.get("basis") or "realized",
+                row.get("certainty") or "observed",
+                None,
+                int(row["amount_czk"]),
+                None,
+                None,
+                None,
+                row.get("source_url"),
+                Jsonb({"year": year, "node_id": row["node_id"]}),
+            )
+        )
+    return rows
+
+
+def insert_state_budget_flows(conn: psycopg.Connection, rows: list[tuple]) -> None:
+    if not rows:
+        raise RuntimeError("No state-budget graph flows were available to transform")
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            insert into core.financial_flow (
+              budget_domain,
+              reporting_period_id,
+              dataset_release_id,
+              source_organization_id,
+              target_organization_id,
+              intermediary_organization_id,
+              flow_type,
+              basis,
+              certainty,
+              cost_bucket_code,
+              amount_czk,
+              quantity,
+              unit,
+              note,
+              source_url,
+              lineage
+            )
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            rows,
+        )
+
+
 def insert_financial_flows(
     conn: psycopg.Connection,
     *,
@@ -313,7 +393,6 @@ def insert_financial_flows(
     spend_rows: list[tuple] = []
     founder_rows: list[tuple] = []
     eu_rows: list[tuple] = []
-    state_rows: list[tuple] = []
 
     direct_total = 0
     for row in allocations:
@@ -432,35 +511,13 @@ def insert_financial_flows(
             )
         )
 
-    for row in state_budget_rows:
-        other_org_id = other_org_by_node_id[row["node_id"]]
-        if row["flow_type"] == "state_revenue":
-            source_org_id = other_org_id
-            target_org_id = state_org_id
-        else:
-            source_org_id = state_org_id
-            target_org_id = other_org_id
-
-        state_rows.append(
-            (
-                "school",
-                reporting_period_id,
-                int(row["dataset_release_id"]),
-                source_org_id,
-                target_org_id,
-                None,
-                row["flow_type"],
-                row.get("basis") or "allocated",
-                row.get("certainty") or "observed",
-                None,
-                int(row["amount_czk"]),
-                None,
-                None,
-                None,
-                row.get("source_url"),
-                Jsonb({"year": year, "node_id": row["node_id"]}),
-            )
-        )
+    state_rows = build_state_budget_flow_rows(
+        reporting_period_id=reporting_period_id,
+        year=year,
+        state_org_id=state_org_id,
+        other_org_by_node_id=other_org_by_node_id,
+        state_budget_rows=state_budget_rows,
+    )
 
     state_rows.append(
         (
@@ -509,7 +566,60 @@ def insert_financial_flows(
         cur.executemany(insert_sql, spend_rows)
         cur.executemany(insert_sql, founder_rows)
         cur.executemany(insert_sql, eu_rows)
-        cur.executemany(insert_sql, state_rows)
+    insert_state_budget_flows(conn, state_rows)
+
+
+def sync_state_budget_core(conn: psycopg.Connection, year: int) -> None:
+    reporting_period_id = ensure_reporting_period(conn, year)
+    state_budget_rows = fetch_state_budget(conn, year)
+    graph_rows = [
+        row
+        for row in state_budget_rows
+        if row["flow_type"] in {"state_revenue", "state_to_other"}
+    ]
+    if not graph_rows:
+        raise RuntimeError(f"No state-budget graph rows loaded for {year}")
+
+    orgs = OrganizationStore(conn)
+    orgs.register(
+        organization_type="state",
+        name="State budget",
+        key="state:cr",
+        attributes={"node_id": "state:cr", "budget_domain": "school"},
+    )
+    for row in graph_rows:
+        orgs.register(
+            organization_type="other",
+            name=row["node_name"],
+            key=row["node_id"],
+            attributes={"budget_domain": "school", "node_id": row["node_id"]},
+        )
+    orgs.persist()
+
+    state_org_id = orgs.get_id(organization_type="state", key="state:cr")
+    other_org_by_node_id = {
+        row["node_id"]: orgs.get_id(organization_type="other", key=row["node_id"])
+        for row in graph_rows
+    }
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            delete from core.financial_flow
+            where budget_domain = 'school'
+              and reporting_period_id = %s
+              and flow_type in ('state_revenue', 'state_to_other')
+            """,
+            (reporting_period_id,),
+        )
+
+    rows = build_state_budget_flow_rows(
+        reporting_period_id=reporting_period_id,
+        year=year,
+        state_org_id=state_org_id,
+        other_org_by_node_id=other_org_by_node_id,
+        state_budget_rows=graph_rows,
+    )
+    insert_state_budget_flows(conn, rows)
 
 
 def main() -> None:
@@ -518,6 +628,12 @@ def main() -> None:
         raise SystemExit("Missing --database-url or DATABASE_URL")
 
     with psycopg.connect(args.database_url, autocommit=False) as conn:
+        if args.state_budget_only:
+            sync_state_budget_core(conn, args.year)
+            conn.commit()
+            print(f"Transformed state-budget core flows for {args.year}")
+            return
+
         reporting_period_id = ensure_reporting_period(conn, args.year)
         clear_existing_period(conn, reporting_period_id=reporting_period_id)
 
@@ -595,6 +711,8 @@ def main() -> None:
             )
 
         for row in state_budget_rows:
+            if row["flow_type"] not in {"state_revenue", "state_to_other"}:
+                continue
             orgs.register(
                 organization_type="other",
                 name=row["node_name"],
@@ -630,6 +748,8 @@ def main() -> None:
             )
 
         for row in state_budget_rows:
+            if row["flow_type"] not in {"state_revenue", "state_to_other"}:
+                continue
             other_org_by_node_id[row["node_id"]] = orgs.get_id(
                 organization_type="other",
                 key=row["node_id"],

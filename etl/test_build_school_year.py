@@ -250,6 +250,36 @@ class TestBuildFromCsv:
         for link in dataset["links"]:
             assert link["year"] == 2025
 
+    def test_state_budget_total_metadata_is_not_a_graph_node(self, tmp_path):
+        raw_dir = _minimal_raw_dir(tmp_path)
+        _write_csv(raw_dir, "state_budget.csv", [
+            {
+                "node_id": "state:total",
+                "node_name": "Výdaje státního rozpočtu celkem",
+                "node_category": "state",
+                "flow_type": "state_budget_total",
+                "amount_czk": "10000000",
+                "basis": "realized",
+                "certainty": "observed",
+                "source_url": "https://example.test/final-account.pdf",
+            },
+            {
+                "node_id": "state:other",
+                "node_name": "Ostatní výdaje",
+                "node_category": "other",
+                "flow_type": "state_to_other",
+                "amount_czk": "3300000",
+                "basis": "realized",
+                "certainty": "inferred",
+                "source_url": "https://example.test/final-account.pdf",
+            },
+        ])
+        with patch.object(etl, "RAW_ROOT", tmp_path / "raw"):
+            dataset = etl.build_from_csv(2025)
+
+        assert "state:total" not in {node["id"] for node in dataset["nodes"]}
+        assert not any(link["flowType"] == "state_budget_total" for link in dataset["links"])
+
     def test_bucket_node_ids_are_consistent(self, tmp_path):
         dataset = self._build(tmp_path)
         bucket_node_ids = {n["id"] for n in dataset["nodes"] if n["category"] == "cost_bucket"}

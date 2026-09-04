@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       domains:
-        description: Space-separated domains to refresh (school health social justice agriculture environment regions business culture foreign transport internal finance defense)
+        description: Space-separated domains to refresh (state school health social justice agriculture environment regions business culture foreign transport internal finance defense)
         required: false
-        default: "school health social justice agriculture environment regions business culture foreign transport internal finance defense"
+        default: "state school health social justice agriculture environment regions business culture foreign transport internal finance defense"
       years:
         description: Space-separated reporting years to refresh (supports explicit years plus `current` and `previous`)
         required: false
@@ -103,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          requested_domains_raw="$(echo "${INPUT_DOMAINS:-school health social justice agriculture environment regions business culture foreign transport internal finance defense}" | xargs)"
+          requested_domains_raw="$(echo "${INPUT_DOMAINS:-state school health social justice agriculture environment regions business culture foreign transport internal finance defense}" | xargs)"
           requested_years_raw="$(echo "${INPUT_YEARS:-2024 2025}" | xargs)"
           refresh_sources="${INPUT_REFRESH_SOURCES:-true}"
           run_school_transforms="${INPUT_RUN_SCHOOL_TRANSFORMS:-true}"
@@ -122,7 +122,7 @@ jobs:
             case "${event_schedule}" in
               "0 3 2 1,4,7,10 *")
                 schedule_profile="regional-and-transport"
-                requested_domains_raw="environment regions business transport"
+                requested_domains_raw="state environment regions business transport"
                 ;;
               "0 3 4 1,4,7,10 *")
                 schedule_profile="institutional-batch"
@@ -149,7 +149,7 @@ jobs:
               internal) normalized_domains+=(mv) ;;
               finance) normalized_domains+=(mf) ;;
               defense) normalized_domains+=(mo) ;;
-              school|health|social|justice|agriculture|environment|mmr|mpo|mk|mzv|transport|mv|mf|mo)
+              state|school|health|social|justice|agriculture|environment|mmr|mpo|mk|mzv|transport|mv|mf|mo)
                 normalized_domains+=("${domain}")
                 ;;
               *)
@@ -254,14 +254,6 @@ jobs:
                       exit 1
                     fi
                   fi
-                  if ! timeout 15m python3 etl/fetch_state_budget.py --year "${year}"; then
-                    if [[ -f "etl/data/raw/${year}/state_budget.csv" ]]; then
-                      echo "Falling back to tracked school state budget for ${year}" >&2
-                    else
-                      echo "Missing fallback school state budget: etl/data/raw/${year}/state_budget.csv" >&2
-                      exit 1
-                    fi
-                  fi
                   if ! timeout 15m python3 etl/fetch_msmt_registry.py --year "${year}" --update-csv; then
                     if [[ -f "etl/data/raw/${year}/school_entities.csv" ]]; then
                       echo "Falling back to tracked school registry entities for ${year}" >&2
@@ -271,6 +263,15 @@ jobs:
                     fi
                   fi
                 fi
+
+                if ! timeout 15m python3 etl/fetch_state_budget.py --year "${year}"; then
+                  if [[ -f "etl/data/raw/${year}/state_budget.csv" ]]; then
+                    echo "Falling back to tracked official state-budget summary for ${year}" >&2
+                  else
+                    echo "Missing fallback state budget: etl/data/raw/${year}/state_budget.csv" >&2
+                    exit 1
+                  fi
+                fi
               fi
 
               python3 etl/load_school_raw.py --year "${year}" --database-url "$DATABASE_URL"
@@ -278,6 +279,40 @@ jobs:
               if [[ "${run_school_transforms}" == "true" ]]; then
                 python3 etl/transform_school_core.py --year "${year}" --database-url "$DATABASE_URL"
               fi
+            done
+          fi
+
+          # This narrow path refreshes only 20 state-summary rows and five graph
+          # flows per year, avoiding a costly rebuild of school detail on small Neon plans.
+          if contains_domain state && ! contains_domain school; then
+            for year in ${requested_years}; do
+              case "${year}" in
+                2024|2025) ;;
+                *)
+                  echo "Skipping state budget ${year}: no final-account source configured"
+                  continue
+                  ;;
+              esac
+
+              if [[ "${refresh_sources}" == "true" ]]; then
+                if ! timeout 15m python3 etl/fetch_state_budget.py --year "${year}"; then
+                  if [[ -f "etl/data/raw/${year}/state_budget.csv" ]]; then
+                    echo "Falling back to tracked official state-budget summary for ${year}" >&2
+                  else
+                    echo "Missing fallback state budget: etl/data/raw/${year}/state_budget.csv" >&2
+                    exit 1
+                  fi
+                fi
+              fi
+
+              python3 etl/load_school_raw.py \
+                --year "${year}" \
+                --dataset school_state_budget \
+                --database-url "$DATABASE_URL"
+              python3 etl/transform_school_core.py \
+                --year "${year}" \
+                --state-budget-only \
+                --database-url "$DATABASE_URL"
             done
           fi
 

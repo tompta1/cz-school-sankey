@@ -1,4 +1,5 @@
 import { query } from '../db.js';
+import { getOfficialStateChapterTotal, reconcileOfficialChapterTotal } from './state-budget.js';
 
 interface AtlasNode {
   id: string;
@@ -73,6 +74,7 @@ const MMR_BRANCH_REGION_ID = 'mmr:branch:regional';
 const MMR_BRANCH_HOUSING_ID = 'mmr:branch:housing';
 const MMR_BRANCH_PLANNING_ID = 'mmr:branch:planning';
 const MMR_BRANCH_OTHER_ID = 'mmr:branch:other';
+const MMR_BRANCH_RECONCILIATION_ID = 'mmr:branch:reconciliation';
 const MMR_REGION_PREFIX = 'mmr:region:';
 const MMR_RECIPIENT_PREFIX = 'mmr:recipient:';
 const PREV_WINDOW_ID = 'synthetic:prev-window';
@@ -227,22 +229,25 @@ function recipientMetric(
 }
 
 export async function getMmrBudgetAggregates(year: number): Promise<MmrBudgetAggregate[]> {
-  const result = await query(
-    `
-      select
-        reporting_year,
-        metric_code,
-        metric_name,
-        metric_group,
-        amount_czk
-      from mart.mmr_budget_aggregate_latest
-      where reporting_year = $1
-      order by metric_code
-    `,
-    [year],
-  );
+  const [result, officialTotal] = await Promise.all([
+    query(
+      `
+        select
+          reporting_year,
+          metric_code,
+          metric_name,
+          metric_group,
+          amount_czk
+        from mart.mmr_budget_aggregate_latest
+        where reporting_year = $1
+        order by metric_code
+      `,
+      [year],
+    ),
+    getOfficialStateChapterTotal(year, '317'),
+  ]);
 
-  return result.rows.map((row) => ({
+  const rows = result.rows.map((row) => ({
     year: Number(row.reporting_year),
     metricCode: String(row.metric_code),
     metricName: String(row.metric_name),
@@ -250,6 +255,7 @@ export async function getMmrBudgetAggregates(year: number): Promise<MmrBudgetAgg
     amount: toNumber(row.amount_czk),
     sourceDataset: 'mmr_budget_aggregates',
   }));
+  return reconcileOfficialChapterTotal(rows, 'EXP_TOTAL', officialTotal);
 }
 
 export async function getMmrRecipientMetrics(year: number): Promise<MmrRecipientMetric[]> {
@@ -373,6 +379,8 @@ export function appendMmrBranch(
   const housingAmount = budgetAmount(budgetRows, 'HOUSING_SUPPORT');
   const planningAmount = budgetAmount(budgetRows, 'PLANNING');
   const otherAmount = budgetAmount(budgetRows, 'OTHER');
+  const classifiedAmount = regionalAmount + housingAmount + planningAmount + otherAmount;
+  const reconciliationAmount = Math.max(totalBudget - classifiedAmount, 0);
   const regionalMetric = recipientMetric(recipientMetrics, 'REGIONAL');
   const housingMetric = recipientMetric(recipientMetrics, 'HOUSING');
 
@@ -384,8 +392,8 @@ export function appendMmrBranch(
       totalBudget,
       year,
       'state_to_mmr_resort',
-      'První iterace MMR používá otevřené rozpočtové ukazatele MMR. Recipient-level drilldown je navázán jen na IROP operace zveřejněné přes DotaceEU.',
-      'mmr_budget_aggregates',
+      'Realizovaný celek kapitoly 317 podle závěrečného účtu MF; členění používá otevřené rozpočtové ukazatele MMR a IROP operace.',
+      budgetRows.find((row) => row.metricCode === 'EXP_TOTAL')?.sourceDataset ?? 'mmr_budget_aggregates',
     ),
   );
 
@@ -445,6 +453,21 @@ export function appendMmrBranch(
         'mmr_budget_group',
         'Rozpočtová reziduální větev bez project/recipient drilldownu v první iteraci.',
         'mmr_budget_aggregates',
+      ),
+    );
+  }
+
+  if (reconciliationAmount > 0) {
+    addNode(nodes, createBranchNode(MMR_BRANCH_RECONCILIATION_ID, 'Rozdil skutecnost vs. rozpocet', 2, null, false));
+    links.push(
+      makeLink(
+        MMR_MINISTRY_ID,
+        MMR_BRANCH_RECONCILIATION_ID,
+        reconciliationAmount,
+        year,
+        'mmr_budget_reconciliation',
+        'Rozdíl mezi realizovaným celkem kapitoly 317 a dostupným členěním rozpočtových ukazatelů MMR.',
+        'school_state_budget',
       ),
     );
   }

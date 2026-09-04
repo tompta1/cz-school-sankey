@@ -356,7 +356,7 @@ def build_from_csv(year: int) -> dict[str, Any]:
         basis = row.get("basis") or "realized"
         certainty = row.get("certainty") or "observed"
         source_url = row.get("source_url") or None
-        if not node_id or amount <= 0:
+        if not node_id or amount <= 0 or flow_type not in {"state_revenue", "state_to_other"}:
             continue
         ensure_node(node(node_id, node_name, node_category, 0))
         if flow_type == "state_revenue":
@@ -417,8 +417,8 @@ def build_from_csv(year: int) -> dict[str, Any]:
             },
             *([{
                 "id": "local-state-budget",
-                "label": "MONITOR PBSR – state budget revenues",
-                "coverage": "SR revenue categories and residual non-MŠMT expenditure",
+                "label": "MF final account – state budget summary",
+                "coverage": "Realized revenue classes, deficit, and residual non-MŠMT expenditure",
                 "confidence": "high",
             }] if state_budget_rows else []),
         ],

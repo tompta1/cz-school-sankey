@@ -1190,7 +1190,7 @@ function buildCombinedRootGraph(
   if (stateOtherLink) {
     stateOtherLink.amountCzk = Math.max(0, stateOtherLink.amountCzk - explicitAtlasTopLevelAmount);
     stateOtherLink.value = stateOtherLink.amountCzk;
-    stateOtherLink.note = 'Zbytkova statni vydajova vetev po odecteni explicitne zobrazenych skolskych, socialnich, bezpecnostnich, justicnich, dopravnich, rozvojovych, prumyslovych, kulturnich, zahranicnich, obrannych, financnich, zemedelskych, environmentalnich a zdravotnich vetvi atlasu';
+    stateOtherLink.note = 'Balancni zbytek proti celkovym vydajum statniho rozpoctu podle zaverecneho uctu MF. Nektere zobrazene vetve zahrnuji i statni fondy nebo regionalni financovani, proto zbytek neni samostatne pozorovanym souctem ostatnich kapitol.';
   }
 
   appendSocialBranch(nodes, links, year, socialRows, socialRecipientMetrics);

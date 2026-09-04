@@ -1,38 +1,15 @@
 #!/usr/bin/env python3
-"""Fetch Czech state budget (Státní rozpočet) revenue summary from MONITOR.
+"""Fetch the official Czech state-budget final-account summary.
 
-Source dataset: PBSR – Podrobný rozpis SR (detailed state budget breakdown).
-URL pattern:
-    https://monitor.statnipokladna.gov.cz/data/extrakty/csv/PBSR/{year}_12_Data_CSUIS_PBSR.zip
+The source is the Ministry of Finance final-account workbook G. Table 1
+contains realized revenue, expenditure, and deficit totals; table 2a contains
+the four top-level revenue classes. Amounts in the PDF are reported in
+thousands of CZK and are converted to whole CZK here.
 
-SAP BW header format: same as FINM / VYKZZ (semicolon-delimited, first row
-is '"Label"TECHNAME:TECHNAME').
-
-Confirmed / expected column names (may vary by year):
-    KAPITOLA   – ministry chapter code (e.g. 0333 = MŠMT)
-    POLOZKA    – budget item code
-    ZU_ROZKZ   – realized amount from beginning of year (in CZK)
-
-Budget item (POLOZKA) classification:
-    1xxx        Daňové příjmy (tax revenues)
-    2xxx        Nedaňové příjmy (non-tax revenues)
-    3xxx        Kapitálové příjmy
-    4111–4219   Přijaté transfery z EU (EU structural funds received by SR)
-    4xxx other  Ostatní přijaté transfery
-    5xxx–6xxx   Výdaje (expenditures)
-    8xxx        Financování (net borrowing / debt)
-
-Outputs  etl/data/raw/{year}/state_budget.csv:
-    node_id,node_name,node_category,flow_type,amount_czk,basis,certainty,source_url
-
-Flow types:
-    state_revenue  – income flowing into state:cr
-    state_to_other – residual expenditure (state:cr → state:other), derived
-
-Usage:
-    python3 etl/fetch_state_budget.py --year 2025
-    python3 etl/fetch_state_budget.py --year 2025 --list-columns
-    python3 etl/fetch_state_budget.py --year 2024 --pbsr path/to/pbsr.csv
+Outputs ``etl/data/raw/{year}/state_budget.csv``. The ``state_budget_total``
+row is reconciliation metadata and is intentionally not transformed into a
+graph flow. ``state_to_other`` is the balancing residual after the tracked
+MŠMT direct-school allocation rollup.
 """
 
 from __future__ import annotations
@@ -40,323 +17,310 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import logging
+import re
 import sys
 import time
 import urllib.request
-import zipfile
+from decimal import Decimal
 from pathlib import Path
+
+from pypdf import PdfReader
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_ROOT = ROOT / "etl" / "data" / "raw"
 CACHE_DIR = ROOT / "etl" / "data" / "monitor_cache"
 
-MONITOR_BASE = "https://monitor.statnipokladna.gov.cz/data/extrakty/csv"
-PBSR_URL_TEMPLATES = [
-    f"{MONITOR_BASE}/PBSR/{{year}}_{{month}}_Data_CSUIS_PBSR.zip",
-    f"{MONITOR_BASE}/Rozpocet/{{year}}_{{month}}_Data_CSUIS_PBSR.zip",
-]
-
-DEFAULT_PERIOD: dict[int, str] = {
-    2024: "2024_12",
-    2025: "2025_12",
-    2026: "2026_12",
+SOURCE_URLS = {
+    2024: "https://mf.gov.cz/assets/attachments/2025-04-28_G-Tabulkova-cast.pdf",
+    2025: "https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf",
 }
 
-# Ministry of Education chapter code (MŠMT = Ministerstvo školství).
-MSMT_CHAPTER = {"0333", "333"}
-
-# POLOZKA prefix → revenue group (strip trailing zeros for matching)
-REVENUE_GROUPS: list[tuple[set[str], str, str, str]] = [
-    # (polozka_prefixes, node_id, node_name, category)
-    ({"11", "12", "13", "15"}, "income:taxes",  "Daňové příjmy",          "other"),
-    ({"4111", "4112", "4113", "4114", "4115", "4116",
-      "4211", "4212", "4213", "4214", "4215", "4216"},
-                               "income:eu",     "Přijaté transfery EU",    "other"),
-    ({"21", "22", "23", "24", "31", "32", "33", "41", "42", "43", "44"},
-                               "income:nontax", "Ostatní příjmy SR",       "other"),
-    ({"81", "82", "83", "84", "85", "86"},
-                               "income:debt",   "Financování dluhem",      "other"),
+FIELDNAMES = [
+    "node_id",
+    "node_name",
+    "node_category",
+    "flow_type",
+    "amount_czk",
+    "basis",
+    "certainty",
+    "source_url",
 ]
 
-# POLOZKA prefix for expenditure items (5xxx, 6xxx)
-EXPENDITURE_PREFIXES = {"5", "6"}
+NUMBER_RE = re.compile(r"-?\d[\d ]*\d,\d{2}")
+REVENUE_LABELS = {
+    "taxes": "1 Daňové příjmy",
+    "nontax": "2 Nedaňové příjmy",
+    "capital": "3 Kapitálové příjmy",
+    "transfers": "4 Přijaté transfery",
+}
+CHAPTER_SPECS = {
+    "306": "Ministerstvo zahraničních věcí",
+    "307": "Ministerstvo obrany",
+    "312": "Ministerstvo financí",
+    "313": "Ministerstvo práce a sociálních věcí",
+    "314": "Ministerstvo vnitra",
+    "315": "Ministerstvo životního prostředí",
+    "317": "Ministerstvo pro místní rozvoj",
+    "322": "Ministerstvo průmyslu a obchodu",
+    "327": "Ministerstvo dopravy",
+    "329": "Ministerstvo zemědělství",
+    "333": "Ministerstvo školství, mládeže a tělovýchovy",
+    "334": "Ministerstvo kultury",
+    "335": "Ministerstvo zdravotnictví",
+    "336": "Ministerstvo spravedlnosti",
+}
 
-CHAPTER_COLS = ["KAPITOLA", "kapitola", "KAP"]
-ITEM_COLS = ["POLOZKA", "ZCMMT_ITM", "polozka"]
-AMOUNT_COLS = ["ZU_ROZKZ", "skutecnost", "ZU_ROZP_KR"]
-
-
-# ---------------------------------------------------------------------------
-# Helpers (shared with fetch_founder_budgets pattern)
-# ---------------------------------------------------------------------------
-
-def normalize_header(raw: str) -> str:
-    return raw.strip().split(":")[-1].strip().strip('"')
-
-
-def parse_csv_bytes(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
-    text = data.decode("utf-8-sig", errors="replace")
-    reader = csv.reader(io.StringIO(text), delimiter=";")
-    raw_headers = next(reader, [])
-    headers = [normalize_header(h) for h in raw_headers]
-    rows = [dict(zip(headers, row)) for row in reader]
-    return headers, rows
-
-
-def find_col(row: dict[str, str], candidates: list[str]) -> str | None:
-    for c in candidates:
-        if c in row:
-            return c
-    return None
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 
-def to_int(val: str) -> int:
-    cleaned = (val or "0").replace("\xa0", "").replace(" ", "").replace(",", ".")
-    try:
-        return int(round(float(cleaned)))
-    except ValueError:
-        return 0
+def parse_czk_thousands(token: str) -> int:
+    value = Decimal(token.replace(" ", "").replace(",", "."))
+    return int(value * 1000)
 
 
-def download_with_retry(url: str, dest: Path, no_cache: bool) -> bytes:
-    if not no_cache and dest.exists():
-        print(f"  cache hit: {dest.name}", file=sys.stderr)
-        return dest.read_bytes()
-    print(f"  GET {url}", file=sys.stderr)
+def parse_actual_value(page_text: str, label: str) -> int:
+    line = next((line for line in page_text.splitlines() if line.strip().startswith(label)), None)
+    if line is None:
+        raise RuntimeError(f"Could not find final-account row {label!r}")
+
+    values = NUMBER_RE.findall(line)
+    if len(values) < 4:
+        raise RuntimeError(f"Unexpected numeric layout for {label!r}: {line}")
+    # Final-account tables place the requested year's realized amount fourth.
+    return parse_czk_thousands(values[3])
+
+
+def parse_chapter_totals(page_text: str) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for line in page_text.splitlines():
+        normalized = line.strip()
+        code = normalized[:3]
+        if code not in CHAPTER_SPECS or not normalized[3:].startswith(" "):
+            continue
+        columns = re.split(r"\s{2,}", normalized)
+        if len(columns) < 3 or not NUMBER_RE.fullmatch(columns[-2]):
+            raise RuntimeError(f"Could not parse final-account chapter {code}: {normalized}")
+        totals[code] = parse_czk_thousands(columns[-2])
+
+    missing = sorted(set(CHAPTER_SPECS) - set(totals))
+    if missing:
+        raise RuntimeError(f"Missing MF final-account chapter totals: {', '.join(missing)}")
+    return totals
+
+
+def parse_final_account(pdf_bytes: bytes, year: int) -> dict[str, object]:
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    # Both source tables are at the front; avoiding the remaining pages keeps
+    # this lightweight and sidesteps malformed objects in some MF appendices.
+    page_texts = [reader.pages[index].extract_text() or "" for index in range(min(6, len(reader.pages)))]
+    table_one = next(
+        (text for text in page_texts if "Tabulka č. 1:" in text and "Výdaje státního rozpočtu celkem" in text),
+        None,
+    )
+    table_two = next(
+        (text for text in page_texts if "Tabulka č. 2a:" in text and "1 Daňové příjmy" in text),
+        None,
+    )
+    table_seven = None
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        if (
+            "Tabulka č. 7:" in text
+            and "Celkové výdaje státního rozpočtu podle kapitol" in text
+            and "313 Ministerstvo práce a sociálních věcí" in text
+        ):
+            table_seven = page.extract_text(extraction_mode="layout") or ""
+            break
+    if table_one is None or table_two is None or table_seven is None:
+        raise RuntimeError("Could not find final-account tables 1, 2a, and 7 in the MF PDF")
+    if f"{year}" not in table_one:
+        raise RuntimeError(f"MF final-account PDF does not appear to cover {year}")
+
+    total_revenue = parse_actual_value(table_one, "Příjmy státního rozpočtu celkem")
+    total_expenditure = parse_actual_value(table_one, "Výdaje státního rozpočtu celkem")
+    revenues = {
+        code: parse_actual_value(table_two, label)
+        for code, label in REVENUE_LABELS.items()
+    }
+    revenue_class_total = sum(revenues.values())
+    if revenue_class_total != total_revenue:
+        raise RuntimeError(
+            "MF revenue classes do not reconcile to total revenue: "
+            f"{revenue_class_total} vs {total_revenue} CZK"
+        )
+    if total_expenditure < total_revenue:
+        raise RuntimeError("A state-budget surplus needs an explicit outgoing surplus flow")
+
+    return {
+        "revenues": revenues,
+        "total_revenue": total_revenue,
+        "total_expenditure": total_expenditure,
+        "deficit": total_expenditure - total_revenue,
+        "chapters": parse_chapter_totals(table_seven),
+    }
+
+
+def school_allocation_total(path: Path) -> int:
+    if not path.exists():
+        raise FileNotFoundError(f"Missing MŠMT allocation CSV: {path}")
+
+    columns = ("pedagogical_amount", "nonpedagogical_amount", "oniv_amount", "other_amount")
+    total = 0
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        for row in csv.DictReader(handle):
+            total += sum(int(row.get(column) or 0) for column in columns)
+    if total <= 0:
+        raise RuntimeError(f"MŠMT allocation total is not positive in {path}")
+    return total
+
+
+def download_with_retry(url: str, destination: Path, no_cache: bool) -> bytes:
+    if not no_cache and destination.exists():
+        print(f"  cache hit: {destination.name}", file=sys.stderr)
+        return destination.read_bytes()
+
+    request = urllib.request.Request(url, headers={"User-Agent": "cz-school-sankey-etl/1.0"})
     for attempt in range(1, 4):
         try:
-            with urllib.request.urlopen(url, timeout=120) as resp:
-                data = resp.read()
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(data)
+            print(f"  GET {url} (attempt {attempt}/3)", file=sys.stderr)
+            with urllib.request.urlopen(request, timeout=120) as response:
+                data = response.read()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
             return data
         except Exception as exc:
             if attempt == 3:
                 raise
-            print(f"  attempt {attempt} failed ({exc}), retrying…", file=sys.stderr)
+            print(f"  download failed ({exc}); retrying", file=sys.stderr)
             time.sleep(5)
     raise RuntimeError("unreachable")
 
 
-def extract_csv_from_zip(data: bytes) -> bytes:
-    with zipfile.ZipFile(io.BytesIO(data)) as zf:
-        csv_names = [n for n in zf.namelist() if n.lower().endswith(".csv")]
-        if not csv_names:
-            raise ValueError(f"No CSV found in ZIP. Contents: {zf.namelist()}")
-        # Pick the largest CSV (usually the main data file)
-        csv_names.sort(key=lambda n: zf.getinfo(n).file_size, reverse=True)
-        return zf.read(csv_names[0])
-
-
-def load_pbsr(path: Path | None, year: int, period: str, no_cache: bool) -> bytes:
-    if path:
-        return extract_csv_from_zip(path.read_bytes()) if path.suffix.lower() == ".zip" else path.read_bytes()
-    yr, mo = period.split("_")
-    for template in PBSR_URL_TEMPLATES:
-        url = template.format(year=yr, month=mo)
-        cache_path = CACHE_DIR / f"PBSR_{period}.zip"
-        try:
-            data = download_with_retry(url, cache_path, no_cache)
-            return extract_csv_from_zip(data)
-        except Exception as exc:
-            print(f"  URL failed ({url}): {exc}", file=sys.stderr)
-    raise RuntimeError(
-        "Could not download PBSR data. Check the URL templates in fetch_state_budget.py\n"
-        "or supply a local file with --pbsr path/to/pbsr.csv"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Revenue matching
-# ---------------------------------------------------------------------------
-
-def polozka_group(polozka: str) -> tuple[str, str, str] | None:
-    """Return (node_id, node_name, node_category) for a given POLOZKA code, or None."""
-    code = polozka.strip().lstrip("0")
-    for prefixes, node_id, node_name, cat in REVENUE_GROUPS:
-        for prefix in prefixes:
-            if code.startswith(prefix):
-                return node_id, node_name, cat
-    return None
-
-
-def is_expenditure(polozka: str) -> bool:
-    code = polozka.strip().lstrip("0")
-    return any(code.startswith(p) for p in EXPENDITURE_PREFIXES)
-
-
-# ---------------------------------------------------------------------------
-# Core logic
-# ---------------------------------------------------------------------------
-
-def aggregate_pbsr(rows: list[dict[str, str]]) -> dict:
-    """
-    Returns:
-        revenues: dict[node_id → int]  – total CZK received by state:cr
-        msmt_expenditure: int          – total MŠMT (ch. 333) výdaje
-        total_expenditure: int         – total all-chapter výdaje
-    """
-    if not rows:
-        raise ValueError("PBSR CSV is empty")
-
-    sample = rows[0]
-    chapter_col = find_col(sample, CHAPTER_COLS)
-    item_col = find_col(sample, ITEM_COLS)
-    amount_col = find_col(sample, AMOUNT_COLS)
-
-    if not chapter_col or not item_col or not amount_col:
-        cols = sorted(sample.keys())
-        raise KeyError(
-            f"Required columns not found in PBSR.\n"
-            f"Looking for:\n"
-            f"  chapter: {CHAPTER_COLS}\n"
-            f"  item:    {ITEM_COLS}\n"
-            f"  amount:  {AMOUNT_COLS}\n"
-            f"Available columns (first {min(40, len(cols))}):\n"
-            f"  {cols[:40]}\n"
-            "Adjust the column-name lists in fetch_state_budget.py."
+def build_rows(
+    aggregated: dict[str, object],
+    *,
+    allocation_total: int,
+    source_url: str,
+) -> list[dict[str, object]]:
+    revenues = aggregated["revenues"]
+    assert isinstance(revenues, dict)
+    total_expenditure = int(aggregated["total_expenditure"])
+    other_expenditure = total_expenditure - allocation_total
+    if other_expenditure <= 0:
+        raise RuntimeError(
+            f"MŠMT allocation rollup {allocation_total} is not below state expenditure {total_expenditure}"
         )
 
-    revenues: dict[str, int] = {}
-    msmt_expenditure = 0
-    total_expenditure = 0
-
-    for row in rows:
-        polozka = row.get(item_col, "").strip()
-        kapitola = row.get(chapter_col, "").strip()
-        amount = to_int(row.get(amount_col, "0"))
-
-        if amount == 0:
-            continue
-
-        group = polozka_group(polozka)
-        if group:
-            node_id = group[0]
-            revenues[node_id] = revenues.get(node_id, 0) + amount
-
-        if is_expenditure(polozka):
-            total_expenditure += amount
-            if kapitola in MSMT_CHAPTER:
-                msmt_expenditure += amount
-
-    return {
-        "revenues": revenues,
-        "msmt_expenditure": msmt_expenditure,
-        "total_expenditure": total_expenditure,
-    }
-
-
-# ---------------------------------------------------------------------------
-# CSV writing
-# ---------------------------------------------------------------------------
-
-FIELDNAMES = ["node_id", "node_name", "node_category", "flow_type",
-              "amount_czk", "basis", "certainty", "source_url"]
-
-
-def write_state_budget_csv(year: int, aggregated: dict, source_url: str) -> Path:
-    revenues = aggregated["revenues"]
-    msmt_exp = aggregated["msmt_expenditure"]
-    total_exp = aggregated["total_expenditure"]
-    other_exp = max(0, total_exp - msmt_exp)
-
-    node_meta: dict[str, tuple[str, str]] = {
-        nid: (name, cat)
-        for _, nid, name, cat in REVENUE_GROUPS
-    }
-
-    out_path = RAW_ROOT / str(year) / "state_budget.csv"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    rows: list[dict] = []
-
-    for node_id, amount in revenues.items():
-        if amount <= 0:
-            continue
-        node_name, node_cat = node_meta.get(node_id, (node_id, "other"))
-        # EU transfers received by SR: treat as observed (directly reported)
-        certainty = "observed" if node_id != "income:debt" else "inferred"
-        rows.append({
+    revenue_rows = [
+        ("income:taxes", "Daňové a pojistné příjmy", int(revenues["taxes"]), "observed"),
+        (
+            "income:nontax",
+            "Nedaňové a kapitálové příjmy",
+            int(revenues["nontax"]) + int(revenues["capital"]),
+            "observed",
+        ),
+        # Keep the established node ID for API compatibility; this now covers all received transfers.
+        ("income:eu", "Přijaté transfery", int(revenues["transfers"]), "observed"),
+        ("income:debt", "Financování schodku", int(aggregated["deficit"]), "inferred"),
+    ]
+    rows = [
+        {
             "node_id": node_id,
             "node_name": node_name,
-            "node_category": node_cat,
+            "node_category": "other",
             "flow_type": "state_revenue",
             "amount_czk": amount,
             "basis": "realized",
             "certainty": certainty,
             "source_url": source_url,
-        })
-
-    if other_exp > 0:
-        rows.append({
-            "node_id": "state:other",
-            "node_name": "Ostatní výdaje SR",
-            "node_category": "other",
-            "flow_type": "state_to_other",
-            "amount_czk": other_exp,
+        }
+        for node_id, node_name, amount, certainty in revenue_rows
+        if amount > 0
+    ]
+    chapters = aggregated["chapters"]
+    assert isinstance(chapters, dict)
+    rows.extend(
+        {
+            "node_id": f"chapter:{code}",
+            "node_name": chapter_name,
+            "node_category": "ministry",
+            "flow_type": "state_chapter_total",
+            "amount_czk": int(chapters[code]),
             "basis": "realized",
-            "certainty": "inferred",
+            "certainty": "observed",
             "source_url": source_url,
-        })
+        }
+        for code, chapter_name in CHAPTER_SPECS.items()
+    )
+    rows.extend(
+        [
+            {
+                "node_id": "state:total",
+                "node_name": "Výdaje státního rozpočtu celkem",
+                "node_category": "state",
+                "flow_type": "state_budget_total",
+                "amount_czk": total_expenditure,
+                "basis": "realized",
+                "certainty": "observed",
+                "source_url": source_url,
+            },
+            {
+                "node_id": "state:other",
+                "node_name": "Ostatní výdaje státního rozpočtu (zbytek)",
+                "node_category": "other",
+                "flow_type": "state_to_other",
+                "amount_czk": other_expenditure,
+                "basis": "realized",
+                "certainty": "inferred",
+                "source_url": source_url,
+            },
+        ]
+    )
+    return rows
 
-    with out_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+
+def write_state_budget_csv(year: int, rows: list[dict[str, object]]) -> Path:
+    output_path = RAW_ROOT / str(year) / "state_budget.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDNAMES, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    return output_path
 
-    return out_path
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fetch SR state budget summary from MONITOR")
+    parser = argparse.ArgumentParser(description="Fetch the MF state-budget final-account summary")
     parser.add_argument("--year", type=int, required=True)
-    parser.add_argument("--period", help="MONITOR period string YYYY_MM (default: Dec of --year)")
-    parser.add_argument("--pbsr", type=Path, help="Local PBSR CSV or ZIP (skips download)")
+    parser.add_argument("--pdf", type=Path, help="Local final-account workbook G PDF")
+    parser.add_argument("--allocations", type=Path, help="MŠMT allocation CSV used by the graph")
     parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("--list-columns", action="store_true",
-                        help="Print column names from downloaded file and exit")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    period = args.period or DEFAULT_PERIOD.get(args.year, f"{args.year}_12")
-    yr, mo = period.split("_")
-    source_url = PBSR_URL_TEMPLATES[0].format(year=yr, month=mo)
+    source_url = SOURCE_URLS.get(args.year)
+    if source_url is None:
+        raise SystemExit(f"No official final-account source configured for {args.year}")
 
-    print(f"Fetching PBSR for period {period}…", file=sys.stderr)
-    csv_bytes = load_pbsr(args.pbsr, args.year, period, args.no_cache)
+    allocation_path = args.allocations or RAW_ROOT / str(args.year) / "msmt_allocations.csv"
+    if args.pdf:
+        pdf_bytes = args.pdf.read_bytes()
+    else:
+        cache_path = CACHE_DIR / f"state-final-account-{args.year}.pdf"
+        pdf_bytes = download_with_retry(source_url, cache_path, args.no_cache)
 
-    headers, rows = parse_csv_bytes(csv_bytes)
+    aggregated = parse_final_account(pdf_bytes, args.year)
+    allocation_total = school_allocation_total(allocation_path)
+    rows = build_rows(aggregated, allocation_total=allocation_total, source_url=source_url)
+    output_path = write_state_budget_csv(args.year, rows)
 
-    if args.list_columns:
-        print("\nColumns in PBSR CSV:")
-        for h in headers:
-            print(f"  {h}")
-        return
-
-    print(f"  {len(rows):,} rows loaded", file=sys.stderr)
-    aggregated = aggregate_pbsr(rows)
-
-    rev = aggregated["revenues"]
-    msmt = aggregated["msmt_expenditure"]
-    total = aggregated["total_expenditure"]
-
-    print(f"\nRevenues:", file=sys.stderr)
-    for nid, amt in rev.items():
-        print(f"  {nid}: {amt/1e9:.1f} bn CZK", file=sys.stderr)
-    print(f"MŠMT expenditure:   {msmt/1e9:.1f} bn CZK", file=sys.stderr)
-    print(f"Total expenditure:  {total/1e9:.1f} bn CZK", file=sys.stderr)
-    print(f"Other chapters:     {max(0, total-msmt)/1e9:.1f} bn CZK", file=sys.stderr)
-
-    out_path = write_state_budget_csv(args.year, aggregated, source_url)
-    print(f"\nWrote {out_path.relative_to(ROOT)}")
-    print(f"\nNext step:")
-    print(f"  python3 etl/build_school_year.py --year {args.year}")
+    print(f"State expenditure: {int(aggregated['total_expenditure']) / 1e9:.3f} bn CZK")
+    print(f"MŠMT school rollup: {allocation_total / 1e9:.3f} bn CZK")
+    print(f"Balancing residual: {(int(aggregated['total_expenditure']) - allocation_total) / 1e9:.3f} bn CZK")
+    print(f"Wrote {output_path.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

@@ -33,6 +33,14 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     freshness: 'Ruční roční ETL. Aktuálně jsou v atlasu nahrané roky 2024 a 2025.',
     rationale: 'Dává konzistentní resortní finanční obraz od státního rozpočtu po školy.',
   },
+  school_state_budget: {
+    datasetKey: 'school_state_budget',
+    title: 'MF: souhrnný státní závěrečný účet, sešit G',
+    description: 'Realizované příjmy a výdaje státního rozpočtu a srovnávací celky 14 ministerských kapitol z tabulek 1, 2a a 7.',
+    freshness: 'Roční uzavřený účet. V atlasu jsou nahrané roky 2024 a 2025.',
+    rationale: 'Poskytuje společný nezávislý obal státního rozpočtu a realizované kořeny kapitol pro kontrolu různorodých resortních zdrojů.',
+    url: 'https://mf.gov.cz/cs/rozpoctova-politika/statni-rozpocet/plneni-statniho-rozpoctu',
+  },
   health_mz_budget_entities: {
     datasetKey: 'health_mz_budget_entities',
     title: 'Monitor MF: MZ a rozpočtové entity hygieny',

@@ -68,4 +68,24 @@ describe('atlasReference', () => {
     ]);
     expect(summary.inferredFlowCount).toBe(2);
   });
+
+  it('exposes the official MF final-account methodology card', () => {
+    const stateGraph: ApiGraph = {
+      year: 2025,
+      nodes: graph.nodes,
+      links: [
+        {
+          ...graph.links[0],
+          year: 2025,
+          sourceDataset: 'school_state_budget',
+        },
+      ],
+    };
+
+    const summary = buildAtlasReferenceSummary(stateGraph, false, '', '');
+    expect(summary.datasets[0]).toMatchObject({
+      datasetKey: 'school_state_budget',
+      title: 'MF: souhrnný státní závěrečný účet, sešit G',
+    });
+  });
 });

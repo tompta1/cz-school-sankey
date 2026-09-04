@@ -39,7 +39,11 @@ Every node and link in the atlas is backed by one of the sources below. The in-a
 
 ### Státní rozpočet a Monitor MF
 
+**Souhrnný státní závěrečný účet MF, sešit G** provides the independently reported state-budget envelope. The ETL reads the realized total revenue and expenditure plus the four top-level revenue classes from tables 1 and 2a, and 14 ministry chapter totals from table 7. The 2024 envelope is CZK 2.23679077748 trillion and the 2025 envelope is CZK 2.37177456284 trillion. Revenue plus the reported deficit is reconciled to expenditure before publication.
+
 **Monitor státní pokladny** (`monitor.statnipokladna.gov.cz`) is the primary budget data source for the top layer of almost every ministry chapter. It provides annual realised expenditure (`vydaje`) and cost (`naklady`) at the level of individual state-budget chapters and their subordinate organisational units, identified by their IČO. The atlas queries the `/api/ukazatele` endpoint for each relevant IČO and uses the December period snapshot (`YY12`) as the final annual figure.
+
+The root chart is arithmetically balanced to the final-account envelope, but not every visible root is a clean state-budget chapter. MD includes SFDI, MZe includes SZIF, MŽP includes SFŽP, and the ZZS branch contains regional emergency-service costs. The reconciliation workflow reports those components separately because they may overlap chapter transfers; consequently, `state:other` is a balancing residual rather than an independently observed sum of omitted chapters.
 
 Ministries sourced directly from Monitor MF:
 
@@ -546,19 +550,20 @@ Current platform status:
 
 - The production sequence is intentionally three separate gates: ETL and Neon verification, Vercel production deploy, then production smoke.
 - The ETL fails unless every expected dataset was freshly loaded with positive rows and published metadata.
-- After deployment, top-level `state:cr` links are reconciled against Monitor-backed mart aggregates or the documented official chapter aggregate. Mixed and synthetic funding links are reported separately.
-- The broader all-state envelope is reported as a warning until the inferred `school_state_budget` envelope is replaced by a complete Monitor state-budget aggregate.
+- After deployment, top-level `state:cr` links are reconciled against Monitor-backed mart aggregates or documented official chapter aggregates.
+- Total state inflow and outflow must equal the official MF final-account envelope; mixed SFDI, SZIF, SFŽP, and regional ZZS scope is reported separately instead of being treated as a chapter-total match.
 - The smoke check validates both advertised years and deep 2024 domain endpoints against `https://cz-school-sankey.vercel.app` by default.
 
 Scheduled ETL batches:
 
-- Day 2 of January, April, July, and October at `03:00 UTC`: `environment regions business transport`
+- Day 2 of January, April, July, and October at `03:00 UTC`: `state environment regions business transport`
 - Day 4 of January, April, July, and October at `03:00 UTC`: `social justice culture foreign internal finance defense`
 - Day 6 of January, April, July, and October at `03:00 UTC`: `health agriculture`
 
 Manual-only ETL:
 
 - `school` stays manual for now because it still depends on tracked MŠMT source workbooks and related bundled fallback files.
+- `state` is the storage-safe state-envelope refresh. It replaces only the tiny final-account summary and its core root flows, without rebuilding school detail.
 
 Free-tier Neon guardrails:
 
@@ -572,18 +577,19 @@ Domain readiness summary:
 
 | Domain | Automation status | Current years | Main remaining gap |
 |---|---|---|---|
+| `state` | Scheduled | `2024`, `2025` | exact MF envelope is automated; mixed public-fund scope is disclosed separately |
 | `school` | Manual only | `2024`, `2025` | depends on tracked source workbooks and bundled fallbacks |
 | `health` | Scheduled | `2024`, `2025` | ordered multi-step pipeline; Monitor fetch depends on prior loaded data |
 | `social` | Scheduled | `2024`, `2025` budget; recipients `2024` | 2025 benefit recipient denominators are not yet integrated |
-| `justice` | Scheduled | `2024`, `2025` budget; activity mainly `2024` | activity parser and source coverage are still limited |
+| `justice` | Scheduled | `2024`, `2025`; activity mainly `2024` | realized MF root is reconciled to budget-based branches; activity coverage is still limited |
 | `agriculture` | Scheduled | `2024`, `2025` | LPIS denominator is a proxy and depends on fallback-friendly source discovery |
 | `environment` | Scheduled | `2024`, `2025` | relatively clean; no major automation blocker |
-| `regions` / `mmr` | Scheduled | `2024`, `2025` | DotaceEU workbook discovery still scrapes listing pages |
+| `regions` / `mmr` | Scheduled | `2024`, `2025` | realized MF root is reconciled to budget-based branches; DotaceEU discovery still scrapes listing pages |
 | `business` / `mpo` | Scheduled | `2024`, `2025` | same DotaceEU listing fragility as MMR |
 | `culture` / `mk` | Scheduled | substantively mainly `2024` | code path is automated, but real source coverage is still `2024`-heavy |
 | `foreign` / `mzv` | Scheduled | substantively mainly `2024` | code path is automated, but real source coverage is still `2024`-heavy |
 | `transport` | Scheduled | `2024`, `2025` | denominator metrics remain curated/static in code |
-| `internal` / `mv` | Scheduled | `2024`, `2025` | some PDF parsing remains layout-fragile |
+| `internal` / `mv` | Scheduled | `2024`, `2025` | realized MF root is reconciled to budget-based branches; some PDF parsing remains layout-fragile |
 | `finance` / `mf` | Scheduled | `2023`, `2024`, `2025` in code; retention keeps `2024`, `2025` | activity denominator is still curated/static in code |
 | `defense` / `mo` | Scheduled | `2024`, `2025` | parser depends on a fixed publication and extracted PDF text |
 

@@ -1,6 +1,21 @@
 node_id,node_name,node_category,flow_type,amount_czk,basis,certainty,source_url
-income:taxes,Daňové a pojistné příjmy,other,state_revenue,1698000000000,allocated,inferred,https://monitor.statnipokladna.gov.cz
-income:eu,Přijaté transfery EU,other,state_revenue,184000000000,allocated,inferred,https://monitor.statnipokladna.gov.cz
-income:nontax,Ostatní příjmy SR,other,state_revenue,39000000000,allocated,inferred,https://monitor.statnipokladna.gov.cz
-income:debt,Financování dluhem,other,state_revenue,257000000000,allocated,inferred,https://monitor.statnipokladna.gov.cz
-state:other,Ostatní výdaje SR,other,state_to_other,1891000000000,allocated,inferred,https://monitor.statnipokladna.gov.cz
+income:taxes,Daňové a pojistné příjmy,other,state_revenue,1864145305430,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+income:nontax,Nedaňové a kapitálové příjmy,other,state_revenue,63816698900,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+income:eu,Přijaté transfery,other,state_revenue,153127365320,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+income:debt,Financování schodku,other,state_revenue,290685193190,realized,inferred,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:306,Ministerstvo zahraničních věcí,ministry,state_chapter_total,10772067220,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:307,Ministerstvo obrany,ministry,state_chapter_total,155952215730,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:312,Ministerstvo financí,ministry,state_chapter_total,25763924390,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:313,Ministerstvo práce a sociálních věcí,ministry,state_chapter_total,976700807640,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:314,Ministerstvo vnitra,ministry,state_chapter_total,110179982520,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:315,Ministerstvo životního prostředí,ministry,state_chapter_total,31550353610,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:317,Ministerstvo pro místní rozvoj,ministry,state_chapter_total,28265201540,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:322,Ministerstvo průmyslu a obchodu,ministry,state_chapter_total,52939290350,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:327,Ministerstvo dopravy,ministry,state_chapter_total,136848916180,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:329,Ministerstvo zemědělství,ministry,state_chapter_total,62795203380,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:333,"Ministerstvo školství, mládeže a tělovýchovy",ministry,state_chapter_total,308430954290,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:334,Ministerstvo kultury,ministry,state_chapter_total,19953345910,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:335,Ministerstvo zdravotnictví,ministry,state_chapter_total,18225751670,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+chapter:336,Ministerstvo spravedlnosti,ministry,state_chapter_total,40917836430,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+state:total,Výdaje státního rozpočtu celkem,state,state_budget_total,2371774562840,realized,observed,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf
+state:other,Ostatní výdaje státního rozpočtu (zbytek),other,state_to_other,2210579769939,realized,inferred,https://mf.gov.cz/assets/attachments/2026-04-30_G-Tabulkova-cast.pdf

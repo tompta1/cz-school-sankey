@@ -16,6 +16,7 @@ SOURCES = {
     "msmt": ("MŠMT", "https://www.msmt.cz"),
     "dotaceeu": ("DotaceEU", "https://www.dotaceeu.cz"),
     "monitor": ("MONITOR", "https://monitor.statnipokladna.gov.cz"),
+    "mf": ("Ministerstvo financí ČR", "https://mf.gov.cz"),
 }
 
 DATASETS = [
@@ -162,7 +163,7 @@ DATASETS = [
     {
         "table": "raw.school_state_budget",
         "dataset_code": "school_state_budget",
-        "source_code": "monitor",
+        "source_code": "mf",
         "filename": "state_budget.csv",
         "columns": [
             "dataset_release_id",
@@ -200,6 +201,12 @@ DATASETS = [
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Load current school CSV outputs into raw Postgres tables")
     parser.add_argument("--year", type=int, required=True, help="Budget year under etl/data/raw/<year>")
+    parser.add_argument(
+        "--dataset",
+        action="append",
+        choices=[str(dataset["dataset_code"]) for dataset in DATASETS],
+        help="Load only the selected dataset; may be repeated. Defaults to all school datasets.",
+    )
     parser.add_argument(
         "--database-url",
         default=os.environ.get("DATABASE_URL"),
@@ -258,7 +265,8 @@ def upsert_dataset_release(
             )
             values (%s, 'school', %s, %s, %s, %s, %s, %s, %s, %s::jsonb, 'published', now())
             on conflict (domain_code, dataset_code, snapshot_label) do update
-              set row_count = excluded.row_count,
+              set source_system_id = excluded.source_system_id,
+                  row_count = excluded.row_count,
                   local_path = excluded.local_path,
                   source_url = excluded.source_url,
                   metadata = excluded.metadata,
@@ -319,7 +327,9 @@ def main() -> None:
 
     with psycopg.connect(args.database_url, autocommit=False) as conn:
         total_rows = 0
-        for dataset in DATASETS:
+        selected = set(args.dataset or [])
+        datasets = [dataset for dataset in DATASETS if not selected or dataset["dataset_code"] in selected]
+        for dataset in datasets:
             count = load_dataset(conn, year=args.year, config=dataset)
             total_rows += count
             print(f"{dataset['dataset_code']}: {count} rows")
