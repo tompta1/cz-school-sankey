@@ -163,17 +163,22 @@ def finalize_dataset_release(conn: psycopg.Connection, *, dataset_release_id: in
 def load_social_mpsv_aggregates(conn: psycopg.Connection, path: Path) -> tuple[int, int]:
     snapshot_label = snapshot_label_for(path)
     sidecar = sidecar_for(path)
+    reporting_years = sidecar.get("years") or []
+    if not reporting_years and sidecar.get("reporting_year") is not None:
+        reporting_years = [sidecar["reporting_year"]]
+    reporting_year = max(reporting_years) if reporting_years else None
+    source_urls = sidecar.get("sources") or [sidecar.get("source_url")]
     source_system_id = upsert_source_system(conn, "mf_chapter_results", *SOURCES["mf_chapter_results"])
     dataset_release_id = upsert_dataset_release(
         conn,
         source_system_id=source_system_id,
         dataset_code="social_mpsv_aggregates",
         snapshot_label=snapshot_label,
-        source_url=sidecar.get("source_url"),
+        source_url=source_urls[0],
         local_path=path,
         metadata=sidecar,
         content_sha256=sidecar.get("sha256"),
-        reporting_year=sidecar.get("reporting_year"),
+        reporting_year=reporting_year,
     )
 
     with conn.cursor() as cur:

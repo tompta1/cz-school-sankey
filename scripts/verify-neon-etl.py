@@ -22,7 +22,7 @@ ALIAS_MAP = {
 SUPPORTED_YEARS = {
     "school": {2024, 2025},
     "health": {2024, 2025},
-    "social": {2024},
+    "social": {2024, 2025},
     "justice": {2024, 2025},
     "agriculture": {2024, 2025},
     "environment": {2024, 2025},
@@ -79,7 +79,7 @@ def expected_datasets(domain: str, years: set[int]) -> set[str]:
             "health_zzs_activity_aggregates",
         }
     if domain == "social":
-        return {"social_mpsv_aggregates", "social_recipient_metrics"}
+        return {"social_mpsv_aggregates"} | ({"social_recipient_metrics"} if 2024 in supported else set())
     if domain == "justice":
         return {"justice_budget_aggregates"} | ({"justice_activity_aggregates"} if 2024 in supported else set())
     if domain == "agriculture":

@@ -1,0 +1,19 @@
+{
+  "dataset_code": "social_mpsv_aggregates",
+  "downloaded_at": "2026-09-04T10:39:43.001777+00:00",
+  "years": [
+    2024,
+    2025
+  ],
+  "row_count": 34,
+  "generator": "etl/social/fetch_mpsv_budget_aggregates.py",
+  "user_agent": "cz-school-sankey-social-etl/0.1",
+  "sources": [
+    "https://mf.gov.cz/assets/attachments/2025-04-28_H-Vysledky-rozpoctoveho-hospodareni-kapitol.pdf",
+    "https://mf.gov.cz/assets/attachments/2026-04-30_H-Ukazatele-kapitol-statniho-rozpoctu.pdf"
+  ],
+  "pdf_size_bytes": {
+    "2024": 1875186,
+    "2025": 1897298
+  }
+}

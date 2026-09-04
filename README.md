@@ -17,7 +17,7 @@ The root view shows the flow `Stát → všechny resortní kapitoly → dílčí
 | Chapter | Czech name | Drilldown depth | Years |
 |---|---|---|---|
 | **MŠMT** | Ministerstvo školství, mládeže a tělovýchovy | State → MŠMT → Region → Founder → School → Cost bucket | 2024, 2025 |
-| **MPSV** | Ministerstvo práce a sociálních věcí | State → MPSV → Benefit group | 2024 |
+| **MPSV** | Ministerstvo práce a sociálních věcí | State → MPSV → Benefit group | 2024 fully; 2025 budget only |
 | **MV** | Ministerstvo vnitra | State → MV → Police / HZS → Region → Crime class | 2024 fully; 2025 budget only |
 | **MSp** | Ministerstvo spravedlnosti | State → MSp → Courts / Prison / Prosecutors | 2024 fully; 2025 budget only |
 | **MD** | Ministerstvo dopravy + SFDI | State → MD → Rail / Road vignette / Road toll / SFDI investor → Project | 2024, 2025 |
@@ -79,11 +79,11 @@ Ministries sourced directly from Monitor MF:
 
 ### Sociální věci (MPSV)
 
-**MPSV kapitolní agregace** — manually curated annual breakdown of the MPSV chapter into four blocks: důchody (pensions), ostatní dávky (other benefits), péče (care services), and správa (administration). Sourced from the official MPSV budget and final account documents.
+**MPSV kapitolní agregace** — automatically parsed annual breakdown of the MPSV chapter into four blocks: důchody (pensions), ostatní dávky (other benefits), péče (care services), and správa (administration). Sourced from the official MF final-account chapter tables.
 
 **ČSSZ a MPSV: počty příjemců** — annual or December-state recipient counts for each benefit type, sourced from ČSSZ open data (`data.cssz.cz`) and MPSV publications.
 
-**Years:** 2024.
+**Years:** 2024, 2025 budget data; recipient denominators are currently 2024-only.
 
 **Per-unit metrics (by node):**
 - Důchody → **Kč/příjemce důchodu/rok**
@@ -574,7 +574,7 @@ Domain readiness summary:
 |---|---|---|---|
 | `school` | Manual only | `2024`, `2025` | depends on tracked source workbooks and bundled fallbacks |
 | `health` | Scheduled | `2024`, `2025` | ordered multi-step pipeline; Monitor fetch depends on prior loaded data |
-| `social` | Scheduled | mainly `2024` | source methodology and effective year coverage are still `2024`-heavy |
+| `social` | Scheduled | `2024`, `2025` budget; recipients `2024` | 2025 benefit recipient denominators are not yet integrated |
 | `justice` | Scheduled | `2024`, `2025` budget; activity mainly `2024` | activity parser and source coverage are still limited |
 | `agriculture` | Scheduled | `2024`, `2025` | LPIS denominator is a proxy and depends on fallback-friendly source discovery |
 | `environment` | Scheduled | `2024`, `2025` | relatively clean; no major automation blocker |

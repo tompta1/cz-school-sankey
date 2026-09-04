@@ -282,19 +282,22 @@ jobs:
           fi
 
           if contains_domain social; then
+            social_budget_year_args=()
             social_recipient_year_args=()
-            social_has_budget=false
             for year in ${requested_years}; do
               case "${year}" in
                 2024)
-                  social_has_budget=true
+                  social_budget_year_args+=(--year "${year}")
                   social_recipient_year_args+=(--year "${year}")
+                  ;;
+                2025)
+                  social_budget_year_args+=(--year "${year}")
                   ;;
               esac
             done
 
             social_load_args=()
-            if [[ "${social_has_budget}" == "true" ]]; then
+            if (( ${#social_budget_year_args[@]} > 0 )); then
               social_load_args+=(--dataset social_mpsv_aggregates)
             fi
             if (( ${#social_recipient_year_args[@]} > 0 )); then
@@ -303,10 +306,10 @@ jobs:
 
             if (( ${#social_load_args[@]} > 0 )); then
               if [[ "${refresh_sources}" == "true" ]]; then
-                if [[ "${social_has_budget}" == "true" ]]; then
-                  if ! python3 etl/social/fetch_mpsv_budget_aggregates.py --year 2024; then
+                if (( ${#social_budget_year_args[@]} > 0 )); then
+                  if ! python3 etl/social/fetch_mpsv_budget_aggregates.py "${social_budget_year_args[@]}"; then
                     if find etl/data/raw/social/social_mpsv_aggregates -maxdepth 1 -name '*__mpsv-budget-aggregates.csv' | grep -q .; then
-                      echo "Falling back to tracked social MPSV aggregate snapshot for 2024" >&2
+                      echo "Falling back to tracked social MPSV aggregate snapshot" >&2
                     else
                       echo "Missing fallback social MPSV aggregate snapshot under etl/data/raw/social/social_mpsv_aggregates" >&2
                       exit 1
