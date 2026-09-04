@@ -95,6 +95,7 @@ import {
 const STATE_ID = 'state:cr';
 const HEALTH_MINISTRY_ID = 'health:ministry:mzcr';
 const HEALTH_INSURANCE_ID = 'health:system:public-insurance';
+const HEALTH_ZZS_MIXED_SOURCE_ID = 'health:system:zzs-mixed-financing';
 const HEALTH_PUBLIC_HEALTH_ID = 'health:public-health';
 const HEALTH_ZZS_ID = 'health:zzs';
 const HEALTH_ADMIN_ID = 'health:admin:residual';
@@ -423,7 +424,17 @@ function createInsuranceNode(capacity: number | null = null): AtlasNode {
     id: HEALTH_INSURANCE_ID,
     name: 'Verejne zdravotni pojisteni',
     category: 'health_system',
-    level: 1,
+    level: 0,
+    ...(capacity ? { metadata: { capacity } } : {}),
+  };
+}
+
+function createZzsMixedSourceNode(capacity: number | null = null): AtlasNode {
+  return {
+    id: HEALTH_ZZS_MIXED_SOURCE_ID,
+    name: 'Pojisteni + statni a krajske rozpocty',
+    category: 'health_system',
+    level: 0,
     ...(capacity ? { metadata: { capacity } } : {}),
   };
 }
@@ -1184,7 +1195,6 @@ function buildCombinedRootGraph(
     mfTotal +
     agricultureTotal +
     environmentTotal +
-    zzsAmount +
     ministryTotal;
 
   if (stateOtherLink) {
@@ -1257,10 +1267,11 @@ function buildCombinedRootGraph(
   }
 
   if (zzsAmount > 0) {
+    addNode(nodes, createZzsMixedSourceNode(zzsActivity?.patientsTotal ?? null));
     addNode(nodes, createZzsNode(zzsRows, zzsActivity));
     links.push(
       makeLink(
-        STATE_ID,
+        HEALTH_ZZS_MIXED_SOURCE_ID,
         HEALTH_ZZS_ID,
         zzsAmount,
         year,
@@ -1364,18 +1375,6 @@ function buildHealthRootGraph(
 
   if (hospitalRows.length > 0) {
     addNode(nodes, createInsuranceNode(sumPeople(hospitalRows) || null));
-    links.push(
-      makeLink(
-        STATE_ID,
-        HEALTH_INSURANCE_ID,
-        hospitalAmount + outpatientAmount,
-        year,
-        'state_to_public_health_insurance',
-        outpatientAggregate && outpatientAggregate.sourceYear !== year
-          ? `Synteticka osa pro nemocnice a ambulantni peci pod verejnym zdravotnim pojistenim; ambulantni agregat pouziva rok ${outpatientAggregate.sourceYear}`
-          : 'Synteticka osa pro nemocnice a ambulantni peci pod verejnym zdravotnim pojistenim',
-      ),
-    );
 
     for (const group of buildOwnerGroups(hospitalRows)) {
       const node = ownerNode(group.ownerBranch);
@@ -1422,10 +1421,11 @@ function buildHealthRootGraph(
   }
 
   if (zzsAmount > 0) {
+    addNode(nodes, createZzsMixedSourceNode(zzsActivity?.patientsTotal ?? null));
     addNode(nodes, createZzsNode(zzsRows, zzsActivity));
     links.push(
       makeLink(
-        STATE_ID,
+        HEALTH_ZZS_MIXED_SOURCE_ID,
         HEALTH_ZZS_ID,
         zzsAmount,
         year,
@@ -1512,7 +1512,6 @@ function buildOwnerRegionGraph(year: number, ownerBranch: OwnerBranch, rows: Hea
   const owner = ownerNode(ownerBranch);
   const regions = buildRegionGroups(ownerRows);
 
-  addNode(nodes, createStateNode(sumPeople(ownerRows) || null));
   addNode(nodes, createInsuranceNode(sumPeople(ownerRows) || null));
   addNode(nodes, {
     id: owner.id,
@@ -1527,16 +1526,6 @@ function buildOwnerRegionGraph(year: number, ownerBranch: OwnerBranch, rows: Hea
     },
   });
 
-  links.push(
-    makeLink(
-      STATE_ID,
-      HEALTH_INSURANCE_ID,
-      sumAmount(ownerRows),
-      year,
-      'state_to_public_health_insurance',
-      'Synteticka osa pro nemocnice vedene pod verejnym zdravotnim pojistenim',
-    ),
-  );
   links.push(
     makeLink(
       HEALTH_INSURANCE_ID,
@@ -1626,11 +1615,11 @@ function buildZzsRegionGraph(year: number, rows: HealthFinanceRow[], activity: H
   const regions = buildRegionGroups(zzsRows);
   const totalAmount = sumAmount(zzsRows);
 
-  addNode(nodes, createStateNode(activity?.patientsTotal ?? null));
+  addNode(nodes, createZzsMixedSourceNode(activity?.patientsTotal ?? null));
   addNode(nodes, createZzsNode(zzsRows, activity));
   links.push(
     makeLink(
-      STATE_ID,
+      HEALTH_ZZS_MIXED_SOURCE_ID,
       HEALTH_ZZS_ID,
       totalAmount,
       year,
@@ -1678,23 +1667,9 @@ function buildOutpatientSubtypeRegionGraph(
   const totalSites = sumSiteCount(rows);
   const subtypeId = OUTPATIENT_SUBTYPE_NODES[aggregate.providerSubtypeCode].id;
 
-  addNode(nodes, createStateNode(null));
   addNode(nodes, createInsuranceNode(null));
   addNode(nodes, createOutpatientNode(aggregate));
 
-  links.push(
-    makeLink(
-      STATE_ID,
-      HEALTH_INSURANCE_ID,
-      aggregate.amount,
-      year,
-      'state_to_public_health_insurance',
-      aggregate.sourceYear !== year
-        ? `Synteticka osa pro ambulantni peci pod verejnym zdravotnim pojistenim; pouzit posledni dostupny rok ${aggregate.sourceYear}`
-        : 'Synteticka osa pro ambulantni peci pod verejnym zdravotnim pojistenim',
-      aggregate.sourceDataset,
-    ),
-  );
   links.push(
     makeLink(
       HEALTH_INSURANCE_ID,
@@ -1756,7 +1731,6 @@ function buildOutpatientRegionSpecialtyGraph(
   const subtypeId = OUTPATIENT_SUBTYPE_NODES[aggregate.providerSubtypeCode].id;
   const regionId = regionNodeId(aggregate.providerSubtypeCode.toLowerCase(), regionName);
 
-  addNode(nodes, createStateNode(null));
   addNode(nodes, createInsuranceNode(null));
   addNode(nodes, createOutpatientNode(aggregate));
   addNode(nodes, {
@@ -1772,7 +1746,6 @@ function buildOutpatientRegionSpecialtyGraph(
     },
   });
 
-  links.push(makeLink(STATE_ID, HEALTH_INSURANCE_ID, aggregate.amount, year, 'state_to_public_health_insurance', 'Synteticka osa pro ambulantni peci pod verejnym zdravotnim pojistenim', aggregate.sourceDataset));
   links.push(makeLink(HEALTH_INSURANCE_ID, subtypeId, aggregate.amount, year, 'health_outpatient_subtype_aggregate', 'CZSO ZDR02: ambulantni podsegment pod zdravotnimi pojistovnami', aggregate.sourceDataset));
   links.push(makeLink(subtypeId, regionId, regionAmount, year, 'health_outpatient_region_group', outpatientNote(aggregate.sourceYear, 'region')));
 
@@ -1818,7 +1791,6 @@ function buildOutpatientSpecialtyProviderGraph(
   const regionId = regionNodeId(aggregate.providerSubtypeCode.toLowerCase(), regionName);
   const specialtyId = specialtyNodeId(aggregate.providerSubtypeCode, regionName, specialtyName);
 
-  addNode(nodes, createStateNode(null));
   addNode(nodes, createInsuranceNode(null));
   addNode(nodes, createOutpatientNode(aggregate));
   addNode(nodes, {
@@ -1835,7 +1807,6 @@ function buildOutpatientSpecialtyProviderGraph(
   });
   addNode(nodes, createOutpatientSpecialtyNode(aggregate.providerSubtypeCode, regionName, specialtyName, specialtyRows));
 
-  links.push(makeLink(STATE_ID, HEALTH_INSURANCE_ID, aggregate.amount, year, 'state_to_public_health_insurance', 'Synteticka osa pro ambulantni peci pod verejnym zdravotnim pojistenim', aggregate.sourceDataset));
   links.push(makeLink(HEALTH_INSURANCE_ID, subtypeId, aggregate.amount, year, 'health_outpatient_subtype_aggregate', 'CZSO ZDR02: ambulantni podsegment pod zdravotnimi pojistovnami', aggregate.sourceDataset));
   links.push(makeLink(subtypeId, regionId, regionAmount, year, 'health_outpatient_region_group', outpatientNote(aggregate.sourceYear, 'region')));
   links.push(makeLink(regionId, specialtyId, specialtyAmount, year, 'health_outpatient_specialty_group', outpatientNote(aggregate.sourceYear, 'specialty')));
@@ -1911,10 +1882,10 @@ function buildRegionProviderGraph(year: number, branchKey: string, regionName: s
   const totalPeople = sumPeople(regionRows) || null;
   const regionId = regionNodeId(branchKey, regionName);
 
-  addNode(nodes, createStateNode(totalPeople));
   addNode(nodes, createCostsNode(totalPeople));
 
   if (branchKey === 'public_health') {
+    addNode(nodes, createStateNode(totalPeople));
     addNode(nodes, createMinistryNode(totalPeople));
     addNode(nodes, createPublicHealthNode(regionRows));
     addNode(nodes, createRegionNode(regionId, regionName, 3, regionRows, { branchKey }));
@@ -1922,9 +1893,10 @@ function buildRegionProviderGraph(year: number, branchKey: string, regionName: s
     links.push(makeLink(HEALTH_MINISTRY_ID, HEALTH_PUBLIC_HEALTH_ID, totalAmount, year, 'health_public_health_group', 'Agregovane verejne zdravi a hygiena'));
     links.push(makeLink(HEALTH_PUBLIC_HEALTH_ID, regionId, totalAmount, year, 'health_public_health_region_group', 'Regionální seskupeni hygieny a verejneho zdravi'));
   } else if (branchKey === 'zzs') {
+    addNode(nodes, createZzsMixedSourceNode(totalPeople));
     addNode(nodes, createZzsNode(regionRows, null));
     addNode(nodes, createRegionNode(regionId, regionName, 3, [], { branchKey, focus: 'zzs', providerCount: regionRows.length }));
-    links.push(makeLink(STATE_ID, HEALTH_ZZS_ID, totalAmount, year, 'health_zzs_mixed_financing', zzsNote(null, 'root'), 'health_monitor_indicators'));
+    links.push(makeLink(HEALTH_ZZS_MIXED_SOURCE_ID, HEALTH_ZZS_ID, totalAmount, year, 'health_zzs_mixed_financing', zzsNote(null, 'root'), 'health_monitor_indicators'));
     links.push(makeLink(HEALTH_ZZS_ID, regionId, totalAmount, year, 'health_zzs_region_group', zzsNote(null, 'region'), 'health_monitor_indicators'));
   } else {
     const owner = ownerNode(branchKey as OwnerBranch);
@@ -1942,7 +1914,6 @@ function buildRegionProviderGraph(year: number, branchKey: string, regionName: s
       },
     });
     addNode(nodes, createRegionNode(regionId, regionName, 3, regionRows, { branchKey }));
-    links.push(makeLink(STATE_ID, HEALTH_INSURANCE_ID, totalAmount, year, 'state_to_public_health_insurance', 'Synteticka osa pro nemocnice vedene pod verejnym zdravotnim pojistenim'));
     links.push(makeLink(HEALTH_INSURANCE_ID, owner.id, totalAmount, year, 'health_hospital_owner_group', 'Overene zrizovatelske seskupeni nemocnic pro drilldown, ne skutecny platebni mezistupen'));
     links.push(makeLink(owner.id, regionId, totalAmount, year, 'health_region_group', 'Regionální seskupeni nemocnic pod overenym zrizovatelem'));
   }
@@ -2005,7 +1976,6 @@ function buildOutpatientProviderDetailGraph(
   const nodes: AtlasNode[] = [];
   const links: AtlasLink[] = [];
 
-  addNode(nodes, createStateNode(null));
   addNode(nodes, createInsuranceNode(null));
   addNode(nodes, createOutpatientNode(aggregate));
   addNode(nodes, {
@@ -2024,7 +1994,6 @@ function buildOutpatientProviderDetailGraph(
   addNode(nodes, createOutpatientProviderNode(row, 5));
   addNode(nodes, createCostsNode(null));
 
-  links.push(makeLink(STATE_ID, HEALTH_INSURANCE_ID, aggregate.amount, year, 'state_to_public_health_insurance', 'Synteticka osa pro ambulantni peci pod verejnym zdravotnim pojistenim', aggregate.sourceDataset));
   links.push(makeLink(HEALTH_INSURANCE_ID, subtypeId, aggregate.amount, year, 'health_outpatient_subtype_aggregate', 'CZSO ZDR02: ambulantni podsegment pod zdravotnimi pojistovnami', aggregate.sourceDataset));
   links.push(makeLink(subtypeId, regionId, regionAmount, year, 'health_outpatient_region_group', outpatientNote(aggregate.sourceYear, 'region')));
   links.push(makeLink(regionId, specialtyId, specialtyAmount, year, 'health_outpatient_specialty_group', outpatientNote(aggregate.sourceYear, 'specialty')));
@@ -2046,11 +2015,11 @@ function buildProviderDetailGraph(year: number, providerIco: string, rows: Healt
   const regionId = regionNodeId(branchKey, regionName);
   const capacity = row.patientCount || null;
 
-  addNode(nodes, createStateNode(capacity));
   addNode(nodes, createCostsNode(capacity));
   addNode(nodes, createProviderNode(row, 4));
 
   if (row.focus === 'public_health') {
+    addNode(nodes, createStateNode(capacity));
     addNode(nodes, createMinistryNode(capacity));
     addNode(nodes, createPublicHealthNode([row]));
     addNode(nodes, createRegionNode(regionId, regionName, 3, [row], { branchKey }));
@@ -2058,9 +2027,10 @@ function buildProviderDetailGraph(year: number, providerIco: string, rows: Healt
     links.push(makeLink(HEALTH_MINISTRY_ID, HEALTH_PUBLIC_HEALTH_ID, row.costs, year, 'health_public_health_group', 'Agregovane verejne zdravi a hygiena'));
     links.push(makeLink(HEALTH_PUBLIC_HEALTH_ID, regionId, row.costs, year, 'health_public_health_region_group', 'Regionální seskupeni hygieny a verejneho zdravi'));
   } else if (row.focus === 'zzs') {
+    addNode(nodes, createZzsMixedSourceNode(capacity));
     addNode(nodes, createZzsNode([row], null));
     addNode(nodes, createRegionNode(regionId, regionName, 3, [], { branchKey, focus: 'zzs', providerCount: 1 }));
-    links.push(makeLink(STATE_ID, HEALTH_ZZS_ID, row.costs, year, 'health_zzs_mixed_financing', zzsNote(null, 'root'), row.sourceDataset));
+    links.push(makeLink(HEALTH_ZZS_MIXED_SOURCE_ID, HEALTH_ZZS_ID, row.costs, year, 'health_zzs_mixed_financing', zzsNote(null, 'root'), row.sourceDataset));
     links.push(makeLink(HEALTH_ZZS_ID, regionId, row.costs, year, 'health_zzs_region_group', zzsNote(null, 'region'), row.sourceDataset));
   } else {
     const owner = ownerNode((row.ownerBranch ?? OWNER_BRANCH.unverified) as OwnerBranch);
@@ -2078,7 +2048,6 @@ function buildProviderDetailGraph(year: number, providerIco: string, rows: Healt
       },
     });
     addNode(nodes, createRegionNode(regionId, regionName, 3, [row], { branchKey }));
-    links.push(makeLink(STATE_ID, HEALTH_INSURANCE_ID, row.costs, year, 'state_to_public_health_insurance', 'Synteticka osa pro nemocnice vedene pod verejnym zdravotnim pojistenim'));
     links.push(makeLink(HEALTH_INSURANCE_ID, owner.id, row.costs, year, 'health_hospital_owner_group', 'Overene zrizovatelske seskupeni nemocnic pro drilldown, ne skutecny platebni mezistupen'));
     links.push(makeLink(owner.id, regionId, row.costs, year, 'health_region_group', 'Regionální seskupeni nemocnic pod overenym zrizovatelem'));
   }

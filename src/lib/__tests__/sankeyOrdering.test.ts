@@ -86,6 +86,24 @@ describe('sankeyOrdering', () => {
     });
   });
 
+  it('normalizes observed school costs against the school capacity', () => {
+    const capacityMap = new Map<string, number>([['school:12345678', 200]]);
+    const costLink: SankeyLink = {
+      source: 'school:12345678',
+      target: 'actual-cost:energy',
+      value: 800000,
+      amountCzk: 800000,
+      year: 2025,
+      flowType: 'school_actual_cost',
+      basis: 'realized',
+      certainty: 'observed',
+      sourceDataset: 'school_cost_profiles',
+    };
+
+    expect(normalizationGroup(costLink)).toBe('school_pupil');
+    expect(normalizationCapacity(costLink, capacityMap, true)).toBe(200);
+  });
+
   it('aggregates comparable node metrics as sum Kč over sum denominator', () => {
     const capacityMap = new Map<string, number>([
       ['region:a', 100],

@@ -43,6 +43,21 @@ interface SchoolFounderSupportRow {
   note: string | null;
 }
 
+interface SchoolCostProfileRow {
+  institutionId: string;
+  totalCostsAmount: number;
+  materialsAmount: number;
+  energyAmount: number;
+  repairsAmount: number;
+  servicesAmount: number;
+  personnelAmount: number;
+  depreciationAmount: number;
+  otherCostsAmount: number;
+  basis: 'realized';
+  certainty: 'observed';
+  note: string | null;
+}
+
 type SchoolNode = {
   id: string;
   name: string;
@@ -62,6 +77,16 @@ const BUCKET_META = {
   other: { id: 'bucket:other', name: 'Other direct MŠMT' },
   operations: { id: 'bucket:operations', name: 'Operations and energy' },
   investment: { id: 'bucket:investment', name: 'Investment and equipment' },
+};
+
+const ACTUAL_COST_META = {
+  materials: { id: 'actual-cost:materials', name: 'Materials and consumables' },
+  energy: { id: 'actual-cost:energy', name: 'Energy and utilities' },
+  repairs: { id: 'actual-cost:repairs', name: 'Repairs and maintenance' },
+  services: { id: 'actual-cost:services', name: 'Services, travel and rent' },
+  personnel: { id: 'actual-cost:personnel', name: 'Personnel costs' },
+  depreciation: { id: 'actual-cost:depreciation', name: 'Depreciation' },
+  other: { id: 'actual-cost:other', name: 'Other reported costs' },
 };
 
 const FOUNDERS_KRAJ = 'founders:kraj';
@@ -297,6 +322,47 @@ async function getSchoolFounderSupport(year: number): Promise<SchoolFounderSuppo
   }));
 }
 
+async function getSchoolCostProfile(year: number, institutionId: string): Promise<SchoolCostProfileRow | null> {
+  const result = await query(
+    `
+      select
+        institution_id,
+        total_costs_amount,
+        materials_amount,
+        energy_amount,
+        repairs_amount,
+        services_amount,
+        personnel_amount,
+        depreciation_amount,
+        other_costs_amount,
+        basis,
+        certainty,
+        note
+      from raw.school_cost_profile
+      where reporting_year = $1 and institution_id = $2
+      order by raw_id desc
+      limit 1
+    `,
+    [year, institutionId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    institutionId: row.institution_id,
+    totalCostsAmount: Number(row.total_costs_amount),
+    materialsAmount: Number(row.materials_amount),
+    energyAmount: Number(row.energy_amount),
+    repairsAmount: Number(row.repairs_amount),
+    servicesAmount: Number(row.services_amount),
+    personnelAmount: Number(row.personnel_amount),
+    depreciationAmount: Number(row.depreciation_amount),
+    otherCostsAmount: Number(row.other_costs_amount),
+    basis: 'realized',
+    certainty: 'observed',
+    note: row.note,
+  };
+}
+
 async function loadSchoolYearRaw(year: number) {
   const [entities, allocations, euProjects, founderSupport] = await Promise.all([
     getSchoolEntities(year),
@@ -327,6 +393,12 @@ function makeLink(
   year: number,
   flowType: string,
   sourceDataset = 'api.aggregated',
+  details: {
+    basis?: 'allocated' | 'budgeted' | 'realized';
+    certainty?: 'observed' | 'inferred';
+    institutionId?: string;
+    note?: string;
+  } = {},
 ) {
   return {
     source,
@@ -335,9 +407,11 @@ function makeLink(
     amountCzk: amount,
     year,
     flowType,
-    basis: 'allocated',
-    certainty: 'observed',
+    basis: details.basis ?? 'allocated',
+    certainty: details.certainty ?? 'observed',
     sourceDataset,
+    ...(details.institutionId ? { institutionId: details.institutionId } : {}),
+    ...(details.note ? { note: details.note } : {}),
   };
 }
 
@@ -397,6 +471,28 @@ function createBucketNode(bucketCode: string, level = 3, capacity: number | null
     level,
     ...(capacity ? { metadata: { capacity } } : {}),
   };
+}
+
+function createActualCostNode(bucketCode: keyof typeof ACTUAL_COST_META): SchoolNode {
+  const bucket = ACTUAL_COST_META[bucketCode];
+  return {
+    id: bucket.id,
+    name: bucket.name,
+    category: 'cost_bucket',
+    level: 3,
+  };
+}
+
+function actualCostBuckets(profile: SchoolCostProfileRow): Array<[keyof typeof ACTUAL_COST_META, number]> {
+  return [
+    ['materials', profile.materialsAmount],
+    ['energy', profile.energyAmount],
+    ['repairs', profile.repairsAmount],
+    ['services', profile.servicesAmount],
+    ['personnel', profile.personnelAmount],
+    ['depreciation', profile.depreciationAmount],
+    ['other', profile.otherCostsAmount],
+  ];
 }
 
 function createSchoolDepartmentNode(capacity: number | null = null): SchoolNode {
@@ -832,7 +928,10 @@ export async function getSchoolOverviewGraph(year: number) {
       level: 2,
       metadata: capacity ? { capacity } : undefined,
     });
-    links.push(makeLink(founderId, regionId, Number(row.total_amount), year, 'founder_support'));
+    links.push(makeLink(founderId, regionId, Number(row.total_amount), year, 'founder_support', 'school_founder_support', {
+      basis: 'realized',
+      certainty: 'inferred',
+    }));
   }
 
   if (nodesById.has(FOUNDERS_KRAJ) && founderTypeCapacity.kraj > 0) {
@@ -994,7 +1093,10 @@ export async function getSchoolFounderTypeGraph(year: number, founderType: 'kraj
     const target = window.bucket(founderId);
     if (target === PREV_WINDOW_ID && !window.prevCount) continue;
     if (target === NEXT_WINDOW_ID && !window.nextCount) continue;
-    links.push(makeLink(aggNodeId, target, amount, year, 'founder_support'));
+    links.push(makeLink(aggNodeId, target, amount, year, 'founder_support', 'school_founder_support', {
+      basis: 'realized',
+      certainty: 'inferred',
+    }));
     if (target === founderId) {
       const entity = founderMeta.get(founderId);
       ensureNode(nodesById, createFounderNode(entity, founderCapacity.get(founderId) ?? 0));
@@ -1138,7 +1240,10 @@ export async function getSchoolRegionGraph(year: number, region: string, offset 
     if (target === founderId) {
       ensureNode(nodesById, createFounderNode(entity, founderCapacity.get(founderId) ?? 0));
     }
-    links.push(makeLink(sourceId, target, amount, year, 'founder_support'));
+    links.push(makeLink(sourceId, target, amount, year, 'founder_support', 'school_founder_support', {
+      basis: 'realized',
+      certainty: 'inferred',
+    }));
   }
 
   const prevCapacity = [...window.prevIds].reduce((sum, id) => sum + (founderCapacity.get(id) ?? 0), 0);
@@ -1218,7 +1323,12 @@ export async function getSchoolFounderGraph(year: number, founderId: string, off
     if (target === row.institutionId) {
       ensureNode(nodesById, createInstitutionNode(schoolById.get(row.institutionId)));
     }
-    links.push(makeLink(founderId, target, row.amountCzk, year, 'founder_support'));
+    links.push(makeLink(founderId, target, row.amountCzk, year, 'founder_support', 'school_founder_support', {
+      basis: 'realized',
+      certainty: row.certainty === 'observed' ? 'observed' : 'inferred',
+      institutionId: row.institutionId,
+      note: row.note ?? undefined,
+    }));
   }
 
   const prevCapacity = [...window.prevIds].reduce((sum, id) => sum + (schoolById.get(id)?.capacity ?? 0), 0);
@@ -1261,6 +1371,7 @@ export async function getSchoolNodeGraph(year: number, nodeId: string, offset = 
   if (nodeId.startsWith('school:')) {
     const entity = entities.find((row) => row.institutionId === nodeId);
     if (!entity) return null;
+    const costProfile = await getSchoolCostProfile(year, nodeId);
 
     const nodesById = new Map<string, SchoolNode>();
     const links: SchoolLink[] = [];
@@ -1275,6 +1386,7 @@ export async function getSchoolNodeGraph(year: number, nodeId: string, offset = 
 
     for (const row of allocations.filter((row) => row.institutionId === nodeId)) {
       links.push(makeLink(MSMT_ID, nodeId, allocationTotal(row), year, 'direct_school_finance'));
+      if (costProfile) continue;
       for (const [bucketCode, amount] of allocationBuckets(row)) {
         if (amount <= 0) continue;
         ensureNode(nodesById, createBucketNode(bucketCode));
@@ -1287,7 +1399,27 @@ export async function getSchoolNodeGraph(year: number, nodeId: string, offset = 
       links.push(makeLink(programmeNode.id, nodeId, row.amountCzk, year, 'eu_project_support'));
     }
     for (const row of founderSupport.filter((row) => row.institutionId === nodeId)) {
-      links.push(makeLink(entity.founderId, nodeId, row.amountCzk, year, 'founder_support'));
+      links.push(makeLink(entity.founderId, nodeId, row.amountCzk, year, 'founder_support', 'school_founder_support', {
+        basis: 'realized',
+        certainty: row.certainty === 'observed' ? 'observed' : 'inferred',
+        institutionId: row.institutionId,
+        note: row.note ?? undefined,
+      }));
+    }
+    if (costProfile) {
+      for (const [bucketCode, amount] of actualCostBuckets(costProfile)) {
+        if (amount <= 0) continue;
+        const costNode = createActualCostNode(bucketCode);
+        ensureNode(nodesById, costNode);
+        links.push(
+          makeLink(nodeId, costNode.id, amount, year, 'school_actual_cost', 'school_cost_profiles', {
+            basis: costProfile.basis,
+            certainty: costProfile.certainty,
+            institutionId: nodeId,
+            note: costProfile.note ?? undefined,
+          }),
+        );
+      }
     }
 
     return { year, nodeId, nodes: [...nodesById.values()], links };

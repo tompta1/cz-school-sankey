@@ -93,6 +93,7 @@ Load the current CSV outputs into:
 - `raw.school_allocations`
 - `raw.school_eu_projects`
 - `raw.school_founder_support`
+- `raw.school_cost_profile`
 - `raw.school_state_budget`
 
 Then transform into:

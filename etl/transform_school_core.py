@@ -14,10 +14,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Transform raw school tables into core warehouse tables")
     parser.add_argument("--year", type=int, required=True, help="Budget year already loaded into raw tables")
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--state-budget-only",
         action="store_true",
         help="Replace only state revenue and residual flows, leaving school detail untouched.",
+    )
+    modes.add_argument(
+        "--founder-support-only",
+        action="store_true",
+        help="Replace only founder-support core flows, avoiding a full school rebuild.",
     )
     parser.add_argument(
         "--database-url",
@@ -622,6 +628,98 @@ def sync_state_budget_core(conn: psycopg.Connection, year: int) -> None:
     insert_state_budget_flows(conn, rows)
 
 
+def sync_founder_support_core(conn: psycopg.Connection, year: int) -> int:
+    reporting_period_id = ensure_reporting_period(conn, year)
+    founder_support_rows = fetch_founder_support(conn, year)
+    if not founder_support_rows:
+        raise RuntimeError(f"No founder-support rows loaded for {year}")
+
+    with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+        cur.execute(
+            """
+            select
+              e.institution_id,
+              school.organization_id as school_organization_id,
+              founder.organization_id as founder_organization_id
+            from raw.school_entities e
+            join core.organization school
+              on school.organization_type = 'school_entity'
+             and school.attributes ->> 'stable_key' = e.institution_id
+            join core.organization founder
+              on founder.organization_type in ('region', 'municipality')
+             and founder.attributes ->> 'stable_key' = e.founder_id
+            where e.reporting_year = %s
+            """,
+            (year,),
+        )
+        organization_rows = list(cur.fetchall())
+
+    school_org_by_inst = {
+        row["institution_id"]: int(row["school_organization_id"])
+        for row in organization_rows
+    }
+    founder_org_by_inst = {
+        row["institution_id"]: int(row["founder_organization_id"])
+        for row in organization_rows
+    }
+    missing = {
+        str(row.get("institution_id") or "")
+        for row in founder_support_rows
+        if row.get("institution_id") not in school_org_by_inst
+    }
+    if missing:
+        raise RuntimeError(
+            f"Cannot incrementally refresh founder support for {len(missing)} schools without existing core organizations"
+        )
+
+    rows = [
+        (
+            "school",
+            reporting_period_id,
+            int(row["dataset_release_id"]),
+            founder_org_by_inst[row["institution_id"]],
+            school_org_by_inst[row["institution_id"]],
+            None,
+            "founder_support",
+            row.get("basis") or "realized",
+            row.get("certainty") or "inferred",
+            None,
+            int(row["amount_czk"]),
+            None,
+            None,
+            row.get("note"),
+            None,
+            Jsonb({"year": year, "institution_id": row.get("institution_id")}),
+        )
+        for row in founder_support_rows
+        if int(row["amount_czk"]) > 0
+    ]
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            delete from core.financial_flow
+            where budget_domain = 'school'
+              and reporting_period_id = %s
+              and flow_type = 'founder_support'
+            """,
+            (reporting_period_id,),
+        )
+        cur.executemany(
+            """
+            insert into core.financial_flow (
+              budget_domain, reporting_period_id, dataset_release_id,
+              source_organization_id, target_organization_id, intermediary_organization_id,
+              flow_type, basis, certainty, cost_bucket_code, amount_czk, quantity,
+              unit, note, source_url, lineage
+            )
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            rows,
+        )
+    return len(rows)
+
+
 def main() -> None:
     args = parse_args()
     if not args.database_url:
@@ -632,6 +730,11 @@ def main() -> None:
             sync_state_budget_core(conn, args.year)
             conn.commit()
             print(f"Transformed state-budget core flows for {args.year}")
+            return
+        if args.founder_support_only:
+            row_count = sync_founder_support_core(conn, args.year)
+            conn.commit()
+            print(f"Transformed {row_count} founder-support core flows for {args.year}")
             return
 
         reporting_period_id = ensure_reporting_period(conn, args.year)

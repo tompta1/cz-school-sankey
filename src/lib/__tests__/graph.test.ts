@@ -1102,9 +1102,9 @@ describe('per-pupil — drillFounderType: founder nodes carry per-founder capaci
   });
 });
 
-// ── aggregateGraph — state → founders connection ──────────────────────────────
+// ── aggregateGraph — local budgets remain outside the state budget ────────────
 
-describe('aggregateGraph — state → founders connection', () => {
+describe('aggregateGraph — local budget boundary', () => {
   // Local stateDataset with a modest state_to_other link (500k) and no founder_support
   const localStateNodes: SankeyNode[] = [
     ...nodes,
@@ -1124,18 +1124,16 @@ describe('aggregateGraph — state → founders connection', () => {
   // Dataset combining founderLinks with capInst so we get both founder_support and capacity
   const founderCapDataset: YearDataset = { ...founderDataset, institutions: capInst };
 
-  it('emits state:cr → founders:obec link with total obec support amount', () => {
+  it('does not emit a state:cr → founders:obec link', () => {
     const g = aggregateGraph(founderDataset);
     const l = g.links.find((l) => l.source === 'state:cr' && l.target === FOUNDERS_OBEC);
-    expect(l).toBeDefined();
-    expect(l!.amountCzk).toBe(140_000); // 80k + 60k
+    expect(l).toBeUndefined();
   });
 
-  it('emits state:cr → founders:kraj link with total kraj support amount', () => {
+  it('does not emit a state:cr → founders:kraj link', () => {
     const g = aggregateGraph(founderDataset);
     const l = g.links.find((l) => l.source === 'state:cr' && l.target === FOUNDERS_KRAJ);
-    expect(l).toBeDefined();
-    expect(l!.amountCzk).toBe(40_000);
+    expect(l).toBeUndefined();
   });
 
   it('does not reduce state:other when no founder flows are present', () => {
@@ -1145,7 +1143,7 @@ describe('aggregateGraph — state → founders connection', () => {
     expect(stateOther?.amountCzk).toBe(500_000);
   });
 
-  it('reduces state:other when founder flows are present', () => {
+  it('does not reduce state:other when founder flows are present', () => {
     const combined: YearDataset = {
       ...founderDataset,
       nodes: [...founderDataset.nodes, ...localStateNodes.filter((n) => !founderDataset.nodes.some((fn) => fn.id === n.id))],
@@ -1153,8 +1151,7 @@ describe('aggregateGraph — state → founders connection', () => {
     };
     const g = aggregateGraph(combined);
     const stateOther = g.links.find((l) => l.target === 'state:other');
-    // state:other was 500_000; founder transfer = 140k+40k = 180k → 320k
-    expect(stateOther?.amountCzk).toBe(320_000);
+    expect(stateOther?.amountCzk).toBe(500_000);
   });
 
   it('founders:obec node carries total obec school capacity', () => {

@@ -75,9 +75,23 @@ Ministries sourced directly from Monitor MF:
 
 **ARES** (Administrativní registr ekonomických subjektů) — REST API for resolving official legal names, municipality, and region for every IČO. Results are cached locally.
 
+**Monitor MF: FIN 2-12 M** — realized own-budget support from municipalities and regions, restricted to education paragraphs and items 5331/6351. Pass-through items 5336/6356 are excluded because they can contain MŠMT money already represented by the direct-school flow. Founder totals are allocated to individual schools by their share of the MŠMT allocation and are therefore labelled inferred.
+
+**Monitor MF: VYKZZ** — realized per-school costs from public-sector income statements. School detail separates materials, energy, repairs and maintenance, services (including rent), personnel, depreciation, and other net costs. Rent cannot be isolated from account 518 in the national extract. Rare negative accounting adjustments can make the displayed positive categories slightly exceed the reported net total.
+
 **Years:** 2024, 2025.
 
 **Per-unit metric:** **Kč/žák/rok** — annual expenditure per pupil. Pupil counts come from the MŠMT XLSX itself (capacity field) or from the school entity register.
+
+---
+
+### Public-finance boundary
+
+The atlas distinguishes collection from legal budget ownership. For the main shared taxes in 2025, municipalities received 24.16% and regions 9.45% under the tax-assignment system; these are local-budget revenues even though the Financial Administration collects them centrally. Local fees are therefore only a small part of local revenue, not the whole of it. See [MF's 2025 budget guide](https://mf.gov.cz/assets/attachments/2025-03-27_Statni-rozpocet-2025-v-kostce.pdf).
+
+Public health insurance is a separate public-finance system funded primarily by insurance contributions. The state budget contributes for state-insured people but does not finance the entire system; the realized 2025 state payment was CZK 153.7 billion. See the [MF 2025 final-account report](https://mf.gov.cz/assets/attachments/2026-04-30_C-Zprava-o-vysledcich-hospodareni-statniho-rozpoctu.pdf). ZZS is shown as mixed financing because its costs combine public insurance, state-budget, and regional-budget sources without a reliable open payer split.
+
+SFDI, SFPI, SFŽP, and SZIF also have budgets outside the state-budget chapter envelope, although they receive state transfers and other public revenues. Their gross spending must not be deducted wholesale from the state-budget residual. Separating those fund sources is the next top-level reconciliation task.
 
 ---
 
@@ -275,7 +289,7 @@ All three are queried individually from Monitor MF, giving directly observed bra
 
 **Monitor MF: MZ a rozpočtové entity hygieny** — annual expenditure of Ministerstvo zdravotnictví (IČO `00024341`) and subordinate entities including regional hygiene stations (KHS) and national public health institutes.
 
-**Monitor MF: zdravotní pojišťovny** — annual financial statements of public health insurers queried from Monitor MF by their IČOs. Used to derive the public-insurance aggregate for the hospital and outpatient branches.
+**Monitor MF: zdravotní pojišťovny** — annual financial statements of public health insurers queried from Monitor MF by their IČOs. Public insurance is displayed as a separate top-level source rather than as a child of the state budget.
 
 **NZIP A038: zdravotnická záchranná služba** — annual aggregated performance data for the Emergency Medical Service (ZZS) from the National Health Information Portal (`nzip.cz`), including total interventions, patients, and emergency calls. Used as the denominator for the ZZS branch.
 
@@ -578,7 +592,7 @@ Domain readiness summary:
 | Domain | Automation status | Current years | Main remaining gap |
 |---|---|---|---|
 | `state` | Scheduled | `2024`, `2025` | exact MF envelope is automated; mixed public-fund scope is disclosed separately |
-| `school` | Manual only | `2024`, `2025` | depends on tracked source workbooks and bundled fallbacks |
+| `school` | Manual only | `2024`, `2025` | founder own-budget support and observed operating-cost profiles are covered; refresh still depends on tracked workbooks and bundled fallbacks |
 | `health` | Scheduled | `2024`, `2025` | ordered multi-step pipeline; Monitor fetch depends on prior loaded data |
 | `social` | Scheduled | `2024`, `2025` budget; recipients `2024` | 2025 benefit recipient denominators are not yet integrated |
 | `justice` | Scheduled | `2024`, `2025`; activity mainly `2024` | realized MF root is reconciled to budget-based branches; activity coverage is still limited |

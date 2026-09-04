@@ -70,6 +70,7 @@ def expected_datasets(domain: str, years: set[int]) -> set[str]:
             "school_allocations",
             "school_eu_projects",
             "school_founder_support",
+            "school_cost_profiles",
             "school_state_budget",
         }
     if domain == "health":
@@ -130,6 +131,11 @@ def parse_args() -> argparse.Namespace:
         help="Require expected releases to have been fetched at or after this ISO-8601 timestamp.",
     )
     parser.add_argument("--verify-school-transforms", action="store_true")
+    parser.add_argument(
+        "--school-finance-only",
+        action="store_true",
+        help="Require only founder-support and school-cost datasets to be fresh.",
+    )
     return parser.parse_args()
 
 
@@ -191,7 +197,9 @@ def main() -> None:
                   rp.calendar_year,
                   (select count(*) from core.school_capacity sc where sc.reporting_period_id = rp.reporting_period_id),
                   (select count(*) from core.financial_flow ff where ff.reporting_period_id = rp.reporting_period_id and ff.budget_domain = 'school'),
-                  (select count(*) from core.financial_flow ff where ff.reporting_period_id = rp.reporting_period_id and ff.budget_domain = 'school' and ff.flow_type = 'direct_school_finance')
+                  (select count(*) from core.financial_flow ff where ff.reporting_period_id = rp.reporting_period_id and ff.budget_domain = 'school' and ff.flow_type = 'direct_school_finance'),
+                  (select count(*) from core.financial_flow ff where ff.reporting_period_id = rp.reporting_period_id and ff.budget_domain = 'school' and ff.flow_type = 'founder_support'),
+                  (select count(*) from raw.school_cost_profile scp where scp.reporting_year = rp.calendar_year)
                 from core.reporting_period rp
                 where rp.domain_code = 'school' and rp.calendar_year = any(%s)
                 order by rp.calendar_year
@@ -256,6 +264,8 @@ def main() -> None:
     errors: list[str] = []
     for domain in selected_domains:
         datasets = expected_datasets(domain, requested_years)
+        if domain == "school" and args.school_finance_only:
+            datasets = {"school_founder_support", "school_cost_profiles"}
         for dataset in sorted(datasets):
             candidates = by_domain_dataset.get((release_domain(domain), dataset), [])
             current_candidates = [
@@ -282,6 +292,9 @@ def main() -> None:
                 if status != "published" or current[7] is None:
                     errors.append(f"{domain}/{dataset}/{current[8]}: release is not published")
 
+        if domain == "school" and args.school_finance_only:
+            continue
+
         top_level_dataset = TOP_LEVEL_DATASETS[domain]
         top_level_releases = [
             row
@@ -298,12 +311,12 @@ def main() -> None:
         print()
         print("### School Core Verification")
         print()
-        print("| Year | School capacity rows | School flow rows | Direct school finance rows |")
-        print("|---:|---:|---:|---:|")
+        print("| Year | School capacity rows | School flow rows | Direct finance rows | Founder rows | Cost profiles |")
+        print("|---:|---:|---:|---:|---:|---:|")
         for year in sorted(requested_years & SUPPORTED_YEARS["school"]):
             row = school_summary.get(year)
-            counts = (0, 0, 0) if row is None else tuple(int(value) for value in row[1:4])
-            print(f"| {year} | {counts[0]} | {counts[1]} | {counts[2]} |")
+            counts = (0, 0, 0, 0, 0) if row is None else tuple(int(value) for value in row[1:6])
+            print(f"| {year} | {counts[0]} | {counts[1]} | {counts[2]} | {counts[3]} | {counts[4]} |")
             if not all(count > 0 for count in counts):
                 errors.append(f"school: incomplete transformed data for {year}")
 

@@ -33,6 +33,22 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     freshness: 'Ruční roční ETL. Aktuálně jsou v atlasu nahrané roky 2024 a 2025.',
     rationale: 'Dává konzistentní resortní finanční obraz od státního rozpočtu po školy.',
   },
+  school_cost_profiles: {
+    datasetKey: 'school_cost_profiles',
+    title: 'Monitor MF: výkazy zisku a ztráty škol',
+    description: 'Skutečné náklady hlavní činnosti veřejných škol podle účtů materiálu, energií, oprav, služeb, osobních nákladů a odpisů.',
+    freshness: 'Roční účetní závěrka. Nájemné je součástí širšího účtu 518 Ostatní služby a nelze je z národního výkazu oddělit.',
+    rationale: 'Doplňuje detail školy o provozní náklady bez vytvoření dalšího, duplicitního zdroje financování.',
+    url: 'https://monitor.statnipokladna.gov.cz',
+  },
+  school_founder_support: {
+    datasetKey: 'school_founder_support',
+    title: 'Monitor MF: rozpočty zřizovatelů škol',
+    description: 'Skutečné vlastní příspěvky obcí a krajů jejich školám z položek 5331 a 6351 v odvětví vzdělávání.',
+    freshness: 'Roční plnění FIN 2-12 M. Součet je pozorovaný za zřizovatele; rozdělení mezi jeho školy je odhadnuté podle podílu přímé alokace MŠMT.',
+    rationale: 'Vylučuje průtokové transfery na položkách 5336/6356, aby se přímé financování MŠMT nezapočítalo podruhé.',
+    url: 'https://monitor.statnipokladna.gov.cz',
+  },
   school_state_budget: {
     datasetKey: 'school_state_budget',
     title: 'MF: souhrnný státní závěrečný účet, sešit G',

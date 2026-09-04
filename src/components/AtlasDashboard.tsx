@@ -101,6 +101,7 @@ function pageSizeForSchoolNode(nodeId: string): number {
 
 function isClickableSchoolNode(node: SankeyNode): boolean {
   if (node.id.startsWith('synthetic:')) return false;
+  if (node.id.startsWith('actual-cost:')) return false;
   if (node.id === 'msmt' || node.id === SCHOOL_ROOT_ID) return true;
   if (node.id.startsWith('bucket:')) return true;
   if (node.id.startsWith('school:bucket-region:')) return true;

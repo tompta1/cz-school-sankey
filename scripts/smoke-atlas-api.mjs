@@ -65,6 +65,28 @@ async function main() {
     overview2024.links.some((link) => link.target === 'mf:ministry:mf'),
     'overview 2024 is missing MF root link',
   );
+  assert(
+    !overview2024.links.some((link) => link.source === 'state:cr' && link.target === 'health:system:public-insurance'),
+    'overview 2024 incorrectly presents public health insurance as state-budget spending',
+  );
+  assert(
+    overview2024.links.some((link) => link.source === 'health:system:zzs-mixed-financing' && link.target === 'health:zzs'),
+    'overview 2024 is missing the mixed-financing ZZS source',
+  );
+
+  const school2025 = await fetchJson('/api/graph/node?year=2025&nodeId=school%3A60552255');
+  assert(
+    school2025.nodes.some((node) => node.id === 'actual-cost:energy'),
+    'school 2025 detail is missing observed energy costs',
+  );
+  assert(
+    school2025.nodes.some((node) => node.id === 'actual-cost:repairs'),
+    'school 2025 detail is missing observed repair costs',
+  );
+  assert(
+    school2025.links.some((link) => link.flowType === 'founder_support' && link.certainty === 'inferred'),
+    'school 2025 founder support is not labelled inferred',
+  );
 
   const transport2024 = await fetchJson('/api/atlas/transport?year=2024');
   assert(

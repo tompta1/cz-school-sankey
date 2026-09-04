@@ -21,6 +21,14 @@ on:
         required: false
         type: boolean
         default: true
+      school_refresh_mode:
+        description: Full school rebuild or storage-safe founder/cost refresh
+        required: false
+        type: choice
+        options:
+          - full
+          - founder-costs
+        default: full
       verify_neon:
         description: Verify loaded Neon dataset releases and school core outputs
         required: false
@@ -61,6 +69,7 @@ jobs:
       INPUT_YEARS: ${{ github.event.inputs.years }}
       INPUT_REFRESH_SOURCES: ${{ github.event.inputs.refresh_sources }}
       INPUT_RUN_SCHOOL_TRANSFORMS: ${{ github.event.inputs.run_school_transforms }}
+      INPUT_SCHOOL_REFRESH_MODE: ${{ github.event.inputs.school_refresh_mode }}
       INPUT_VERIFY_NEON: ${{ github.event.inputs.verify_neon }}
       INPUT_PRUNE_OLD_RELEASES: ${{ github.event.inputs.prune_old_releases }}
       INPUT_RETENTION_YEARS: ${{ github.event.inputs.retention_years }}
@@ -107,6 +116,7 @@ jobs:
           requested_years_raw="$(echo "${INPUT_YEARS:-2024 2025}" | xargs)"
           refresh_sources="${INPUT_REFRESH_SOURCES:-true}"
           run_school_transforms="${INPUT_RUN_SCHOOL_TRANSFORMS:-true}"
+          school_refresh_mode="${INPUT_SCHOOL_REFRESH_MODE:-full}"
           verify_neon="${INPUT_VERIFY_NEON:-true}"
           prune_old_releases="${INPUT_PRUNE_OLD_RELEASES:-true}"
           retention_years_raw="$(echo "${INPUT_RETENTION_YEARS:-2024 2025}" | xargs)"
@@ -200,6 +210,7 @@ jobs:
           echo "Normalized years: ${requested_years}"
           echo "Refresh sources: ${refresh_sources}"
           echo "Run school transforms: ${run_school_transforms}"
+          echo "School refresh mode: ${school_refresh_mode}"
           echo "Verify Neon: ${verify_neon}"
           echo "Prune old releases: ${prune_old_releases}"
           echo "Retention years: ${retention_years}"
@@ -210,6 +221,10 @@ jobs:
 
           if [[ "${prune_old_releases}" == "true" && "${verify_neon}" != "true" ]]; then
             echo "Pruning requires verify_neon=true so a failed load cannot remove the last good release." >&2
+            exit 1
+          fi
+          if [[ "${school_refresh_mode}" != "full" && "${school_refresh_mode}" != "founder-costs" ]]; then
+            echo "Unknown school refresh mode: ${school_refresh_mode}" >&2
             exit 1
           fi
 
@@ -233,6 +248,7 @@ jobs:
                 if [[ -f "etl/data/raw/${year}/msmt_allocations.csv" \
                    && -f "etl/data/raw/${year}/eu_projects.csv" \
                    && -f "etl/data/raw/${year}/founder_support.csv" \
+                   && -f "etl/data/raw/${year}/school_costs.csv" \
                    && -f "etl/data/raw/${year}/state_budget.csv" \
                    && -f "etl/data/raw/${year}/school_entities.csv" ]]; then
                   echo "Using tracked school source bundle for ${year}" >&2
@@ -274,10 +290,25 @@ jobs:
                 fi
               fi
 
-              python3 etl/load_school_raw.py --year "${year}" --database-url "$DATABASE_URL"
+              if [[ "${school_refresh_mode}" == "founder-costs" ]]; then
+                python3 etl/load_school_raw.py \
+                  --year "${year}" \
+                  --dataset school_founder_support \
+                  --dataset school_cost_profiles \
+                  --database-url "$DATABASE_URL"
+              else
+                python3 etl/load_school_raw.py --year "${year}" --database-url "$DATABASE_URL"
+              fi
 
               if [[ "${run_school_transforms}" == "true" ]]; then
-                python3 etl/transform_school_core.py --year "${year}" --database-url "$DATABASE_URL"
+                if [[ "${school_refresh_mode}" == "founder-costs" ]]; then
+                  python3 etl/transform_school_core.py \
+                    --year "${year}" \
+                    --founder-support-only \
+                    --database-url "$DATABASE_URL"
+                else
+                  python3 etl/transform_school_core.py --year "${year}" --database-url "$DATABASE_URL"
+                fi
               fi
             done
           fi
@@ -780,6 +811,9 @@ jobs:
             done
             if contains_domain school && [[ "${run_school_transforms}" == "true" ]]; then
               verify_args+=(--verify-school-transforms)
+            fi
+            if contains_domain school && [[ "${school_refresh_mode}" == "founder-costs" ]]; then
+              verify_args+=(--school-finance-only)
             fi
 
             python3 ./scripts/verify-neon-etl.py \

@@ -190,6 +190,7 @@ export function SchoolDashboard() {
       return;
     }
     if (nodeId.startsWith('synthetic:')) return;
+    if (nodeId.startsWith('actual-cost:')) return;
     const node = graph?.nodes.find((entry) => entry.id === nodeId);
     if (!node || node.category === 'state' || node.category === 'ministry' || node.category === 'other') return;
     setDrilldownStack((prev) => [...prev, { nodeId, label: node.name }]);

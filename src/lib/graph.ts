@@ -187,28 +187,10 @@ export function aggregateGraph(dataset: YearDataset): FilteredGraph {
   if ([...obecToRegion.values()].some((v) => v > 0))
     extraNodes.push({ id: FOUNDERS_OBEC, name: 'Příspěvky obcí (provoz)',  category: 'municipality', level: 0, ...(obecCapacity ? { metadata: { capacity: obecCapacity } } : {}) });
 
-  // State → founders links: the operational school budgets of obec/kraj are largely funded
-  // through state fiscal transfers (shared taxes, RUD). Show this connection and reduce
-  // state:other by the same amount to keep state:cr balanced.
-  const totalObecSupport = [...obecToRegion.values()].reduce((a, b) => a + b, 0);
-  const totalKrajSupport = [...krajToRegion.values()].reduce((a, b) => a + b, 0);
-  const founderTransfer  = totalObecSupport + totalKrajSupport;
-
-  if (totalObecSupport > 0)
-    syntheticLinks.push(syntheticLink('state:cr', FOUNDERS_OBEC, totalObecSupport, 'state_to_founders', dataset.year));
-  if (totalKrajSupport > 0)
-    syntheticLinks.push(syntheticLink('state:cr', FOUNDERS_KRAJ, totalKrajSupport, 'state_to_founders', dataset.year));
-
-  // Passthrough state budget flows; adjust state_to_other so state:cr stays balanced.
+  // Shared taxes assigned through RUD belong to local budgets, so founder support
+  // remains an independent source rather than a synthetic state-budget outflow.
   const stateBudgetLinks = dataset.links
-    .filter((l) => l.flowType === 'state_revenue' || l.flowType === 'state_to_ministry' || l.flowType === 'state_to_other')
-    .map((l) => {
-      if (l.flowType === 'state_to_other' && founderTransfer > 0) {
-        const adjusted = Math.max(0, l.amountCzk - founderTransfer);
-        return { ...l, amountCzk: adjusted, value: adjusted };
-      }
-      return l;
-    });
+    .filter((l) => l.flowType === 'state_revenue' || l.flowType === 'state_to_ministry' || l.flowType === 'state_to_other');
 
   const allLinks = [...syntheticLinks, ...stateBudgetLinks];
   const allUsedIds = nodeIdsFromLinks(allLinks);

@@ -59,17 +59,21 @@ One row per project-to-school link.
 
 ### `founder_support.csv`
 
-One row per founder-to-school pass-through.
+One row per inferred founder-to-school share of the founder's observed own-budget education support.
 
 | column | required | note |
 | --- | --- | --- |
 | `institution_id` or `ico` | yes | join key |
 | `amount` | yes | CZK |
 | `basis` | no | defaults to `budgeted` |
-| `certainty` | no | `observed` (FIN 2-01 PO) or `inferred` (FIN 2-12 M pro-rated) |
+| `certainty` | no | `inferred`; FIN 2-12 M founder totals are pro-rated to schools |
 | `note` | no | explains source dataset and reconstruction method |
 
 This file is produced by `fetch_founder_budgets.py` (see below).
+
+### `school_costs.csv`
+
+One observed VYKZZ cost profile per public school, with the reported total and compact categories for materials, energy, repairs, services including rent, personnel, depreciation, and other net costs. It is a use-of-funds profile, not an additional funding source.
 
 ## Suggested manual process
 
@@ -83,7 +87,7 @@ This file is produced by `fetch_founder_budgets.py` (see below).
 # Parse MŠMT XLSX into school_entities.csv and msmt_allocations.csv
 python3 etl/parse_msmt_xlsx.py --year 2025
 
-# Fetch founder budget transfers from MONITOR and produce founder_support.csv
+# Fetch founder support and school cost profiles from MONITOR
 python3 etl/fetch_founder_budgets.py --year 2025
 
 # Inspect actual column headers (run this first if detection fails)
@@ -97,26 +101,29 @@ python3 etl/fetch_founder_budgets.py --year 2025 \
     --fin12m path/to/fin2-12m.csv \
     --finpo  path/to/fin2-01po.csv
 
-# Skip the per-school FIN 2-01 PO pass (produce only inferred aggregate rows)
-python3 etl/fetch_founder_budgets.py --year 2025 --no-po
+# Skip the per-school VYKZZ cost pass
+python3 etl/fetch_founder_budgets.py --year 2025 --no-costs
 ```
 
 ### Founder budget pipeline notes
 
 `fetch_founder_budgets.py` runs two passes against MONITOR national extracts:
 
-**Pass 1 — FIN 2-01 PO** (school-level, observed):
-Downloads the FIN 2-01 PO national extract, filters for school IČOs in
-`school_entities.csv`, and extracts accounts 672/673
-("přijaté příspěvky/transfery od zřizovatele"). Rows produced this way are
-marked `certainty=observed, basis=realized`.
-
-**Pass 2 — FIN 2-12 M** (founder aggregate, inferred):
+**Pass 1 — FIN 2-12 M** (founder aggregate, inferred at school level):
 Downloads the FIN 2-12 M national extract, filters for founder IČOs and
-education paragraphs §3100–§3299 with transfer items 5331/5336/6351
-(neinvestiční/investiční příspěvky zřízeným PO). The per-founder total is
+education paragraphs §3100–§3299 with own-budget items 5331/6351. Pass-through
+items 5336/6356 are deliberately excluded. The per-founder total is
 pro-rated across that founder's schools weighted by their MŠMT allocation
 share. These rows are marked `certainty=inferred, basis=realized`.
+
+**Pass 2 — VYKZZ** (school-level, observed):
+Downloads the national income-statement extract and reads realized main-activity
+cost accounts. Account 502 gives energy, 511 gives repairs and maintenance, and
+518 contains services including rent. The output is `school_costs.csv`.
+
+Account 672 is not a founder-support measure: it can contain transfers routed
+from MŠMT and other public budgets. Using it would double-count direct education
+funding already present in the atlas.
 
 Downloaded ZIPs are cached under `etl/data/monitor_cache/`. Re-run with
 `--no-cache` to force a fresh download.

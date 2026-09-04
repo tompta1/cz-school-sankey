@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
-"""Fetch founder-to-school budget transfers and produce founder_support.csv.
+"""Fetch founder support and school cost profiles from MONITOR.
 
 Two-pass strategy
 -----------------
-Pass 1  VYKZZ (Výkaz zisku a ztrát, MONITOR national extract)
-        Per-school příspěvkové organizace income statement.
-        Extracts account 672 (přijaté neinvestiční příspěvky od zřizovatele)
-        and account 673 (přijaté investiční transfery od zřizovatele).
-        Marked: basis=realized, certainty=observed.
+Pass 1  FIN 2-12 M (MONITOR national extract)
+        Per-founder local-government budget execution. Filters education
+        paragraphs and only own-budget items 5331 and 6351. Routed transfers
+        such as MŠMT direct education funding on item 5336 are excluded.
+        Founder totals are pro-rated across schools by their MŠMT allocation
+        weight and marked basis=realized, certainty=inferred.
 
-Pass 2  FIN 2-12 M (MONITOR national extract)
-        Per-founder ÚSC budget execution.
-        Filters education paragraphs §3100–§3299 and transfer items
-        5331 (neinvestiční příspěvky zřízeným PO) and 6351 (investiční
-        transfery zřízeným PO).
-        Applied to founders whose schools have no VYKZZ row.
-        Amounts are pro-rated across the founder's schools by MŠMT
-        allocation weight.
-        Marked: basis=realized, certainty=inferred.
+Pass 2  VYKZZ (Výkaz zisku a ztráty, MONITOR national extract)
+        Per-school realized cost accounts. Produces a compact cost profile for
+        materials, energy, repairs, services including rent, personnel,
+        depreciation, and a reconciled residual. These are costs, not another
+        funding source.
+
+Account 672 is deliberately not used for founder support. It includes transfer
+revenue routed from other public budgets, including MŠMT, and would double-count
+the direct-school allocation already present in the atlas.
 
 MONITOR extrakty base URL:
     https://monitor.statnipokladna.gov.cz/data/extrakty/csv/
@@ -25,7 +26,7 @@ MONITOR extrakty base URL:
 Usage:
     python3 etl/fetch_founder_budgets.py --year 2025
     python3 etl/fetch_founder_budgets.py --year 2025 --period 2025_12
-    python3 etl/fetch_founder_budgets.py --year 2025 --no-po
+    python3 etl/fetch_founder_budgets.py --year 2025 --no-costs
     python3 etl/fetch_founder_budgets.py --year 2025 --list-columns
     python3 etl/fetch_founder_budgets.py --year 2025 \\
         --fin12m path/to/fin2-12m.csv \\
@@ -62,8 +63,7 @@ FIN12M_URL_TEMPLATES = [
     f"{MONITOR_BASE}/FinM/{{year}}_{{month}}_Data_CSUIS_FINM.zip",
 ]
 
-# VYKZZ = Výkaz zisků a ztrát (income statement for all public entities incl. schools).
-# Contains account 672 (received non-investment grants) and 673 (investment transfers).
+# VYKZZ = income statement for all public entities, including public schools.
 FIN01PO_URL_TEMPLATES = [
     f"{MONITOR_BASE}/ZiskZtraty/{{year}}_{{month}}_Data_CSUIS_VYKZZ.zip",
 ]
@@ -83,11 +83,11 @@ DEFAULT_PERIOD: dict[int, str] = {
 EDUCATION_PARA_MIN = 3100
 EDUCATION_PARA_MAX = 3299
 
-# Budget items: founder→PO transfers
+# Own-budget founder-to-PO items. Items 5336 and 6356 are pass-through
+# transfers received from another public budget and must not be counted here.
 # 5331  Neinvestiční příspěvky zřízeným příspěvkovým organizacím
-# 5336  Neinvestiční transfery zřízeným příspěvkovým organizacím
 # 6351  Investiční transfery zřízeným příspěvkovým organizacím
-FOUNDER_TRANSFER_ITEMS = {"5331", "5336", "6351"}
+FOUNDER_TRANSFER_ITEMS = {"5331", "6351"}
 
 # ---------------------------------------------------------------------------
 # MONITOR CSV format notes:
@@ -103,7 +103,8 @@ FOUNDER_TRANSFER_ITEMS = {"5331", "5336", "6351"}
 #
 # VYKZZ (Výkaz zisku a ztrát) confirmed field names:
 #   ZC_ICO       IČO of reporting entity (school)
-#   ZC_SYNUC     Syntetický účet (e.g. "672", "673")
+#   ZC_POLVYK    statement row (A. is total costs)
+#   ZC_SYNUC     Syntetický účet (e.g. "502", "511")
 #   ZU_HLCIN     Hlavní činnost amount (main activity = school operations)
 # ---------------------------------------------------------------------------
 ICO_COLS_12M = ["ZC_ICO", "ico", "IČO"]
@@ -113,12 +114,17 @@ AMOUNT_COLS_12M = ["ZU_ROZKZ", "vysledek", "skutecnost"]
 
 ICO_COLS_PO = ["ZC_ICO", "ico", "IČO"]
 ACCOUNT_COLS_PO = ["ZC_SYNUC", "synteticky_ucet", "ucet", "SU"]
+ROW_COLS_PO = ["ZC_POLVYK", "polozka_vykazu", "POLVYK"]
 AMOUNT_COLS_PO = ["ZU_HLCIN", "hlavni_cinnost", "castka", "ZU_HLCIBO"]
 
-# Account codes for "received from founder" in VYKZZ
-# 672 = přijaté neinvestiční příspěvky a náhrady (operating grant from founder)
-# 673 = přijaté investiční transfery (investment transfer from founder)
-FOUNDER_INCOME_ACCOUNTS = {"672", "6720", "6721", "6722", "673", "6730"}
+SCHOOL_COST_ACCOUNTS = {
+    "materials_amount": {"501", "503", "504", "506", "507", "508"},
+    "energy_amount": {"502"},
+    "repairs_amount": {"511"},
+    "services_amount": {"512", "513", "516", "518"},
+    "personnel_amount": {"521", "524", "525", "527", "528"},
+    "depreciation_amount": {"551"},
+}
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +133,7 @@ FOUNDER_INCOME_ACCOUNTS = {"672", "6720", "6721", "6722", "673", "6730"}
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build founder_support.csv from MONITOR FIN 2-12 M and FIN 2-01 PO"
+        description="Build founder_support.csv and school_costs.csv from MONITOR"
     )
     parser.add_argument("--year", type=int, required=True, help="Budget year")
     parser.add_argument(
@@ -142,12 +148,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--finpo",
         type=Path,
-        help="Local FIN 2-01 PO CSV (skips download)",
+        help="Local VYKZZ ZIP/CSV (skips download)",
     )
     parser.add_argument(
+        "--no-costs",
         "--no-po",
+        dest="no_costs",
         action="store_true",
-        help="Skip FIN 2-01 PO pass (produce only inferred rows)",
+        help="Skip the VYKZZ school cost-profile pass",
     )
     parser.add_argument(
         "--no-cache",
@@ -179,6 +187,8 @@ def find_col(headers: list[str], candidates: list[str]) -> str | None:
 
 def to_int(raw: object) -> int:
     text = str(raw or "").replace("\xa0", "").replace(" ", "").replace(",", ".")
+    if text.endswith("-"):
+        text = f"-{text[:-1]}"
     try:
         return int(round(float(text)))
     except ValueError:
@@ -326,15 +336,15 @@ def load_msmt_weights(year: int) -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
-# Pass 1: FIN 2-01 PO — per-school observed příspěvek od zřizovatele
+# VYKZZ pass: observed per-school cost profile
 # ---------------------------------------------------------------------------
 
-def run_po_pass(
+def run_cost_profile_pass(
     zip_path: Path,
     school_icos: dict[str, dict[str, str]],
     list_columns: bool,
-) -> dict[str, int]:
-    """Return {school_ico → total CZK received from founder} from VYKZZ."""
+) -> dict[str, dict[str, int]]:
+    """Return realized main-activity cost categories keyed by school IČO."""
     stream = extract_csv_from_zip(zip_path)
     if stream is None:
         return {}
@@ -354,58 +364,74 @@ def run_po_pass(
 
     col_ico = find_col(headers, ICO_COLS_PO)
     col_account = find_col(headers, ACCOUNT_COLS_PO)
+    col_row = find_col(headers, ROW_COLS_PO)
     col_amount = find_col(headers, AMOUNT_COLS_PO)
 
     print(
-        f"FIN 2-01 PO columns → IČO: {col_ico!r} | "
-        f"Account: {col_account!r} | Amount: {col_amount!r}"
+        f"VYKZZ columns → IČO: {col_ico!r} | Account: {col_account!r} | "
+        f"Statement row: {col_row!r} | Amount: {col_amount!r}"
     )
 
-    if col_ico is None:
+    if col_ico is None or col_account is None or col_row is None or col_amount is None:
         print(
-            "WARNING: IČO column not found in FIN 2-01 PO — skipping PO pass.\n"
+            "WARNING: Required VYKZZ columns not found; skipping cost profiles.\n"
             "Run --list-columns to inspect actual headers.",
             file=sys.stderr,
         )
         return {}
 
     ico_idx = headers.index(col_ico)
-    account_idx = headers.index(col_account) if col_account else None
-    amount_idx = headers.index(col_amount) if col_amount else None
+    account_idx = headers.index(col_account)
+    row_idx = headers.index(col_row)
+    amount_idx = headers.index(col_amount)
 
-    totals: dict[str, int] = {}
-    scanned = 0
+    profiles: dict[str, dict[str, int]] = {}
+    matched = 0
 
     for row in reader:
-        if len(row) <= ico_idx:
+        if len(row) <= max(ico_idx, account_idx, row_idx, amount_idx):
             continue
         ico = normalize_ico(row[ico_idx])
         if ico not in school_icos:
             continue
 
-        # Filter to founder-income accounts (672, 673) when account column present
-        if account_idx is not None:
-            account = normalize_code(row[account_idx] if account_idx < len(row) else "")
-            # Match if the account starts with any known founder-income code
-            if not any(account.startswith(a) for a in FOUNDER_INCOME_ACCOUNTS):
-                continue
+        profile = profiles.setdefault(
+            ico,
+            {"total_costs_amount": 0, **{key: 0 for key in SCHOOL_COST_ACCOUNTS}},
+        )
+        account = normalize_code(row[account_idx])
+        statement_row = normalize_code(row[row_idx])
+        amount = to_int(row[amount_idx])
 
-        amount = to_int(row[amount_idx]) if (amount_idx is not None and amount_idx < len(row)) else 0
-        if amount <= 0:
+        if account == "-" and statement_row == "A":
+            profile["total_costs_amount"] = amount
+            matched += 1
             continue
 
-        totals[ico] = totals.get(ico, 0) + amount
-        scanned += 1
+        for bucket, accounts in SCHOOL_COST_ACCOUNTS.items():
+            if account in accounts:
+                profile[bucket] += amount
+                matched += 1
+                break
+
+    result: dict[str, dict[str, int]] = {}
+    for ico, profile in profiles.items():
+        total = profile["total_costs_amount"]
+        if total <= 0:
+            continue
+        categorized = sum(profile[key] for key in SCHOOL_COST_ACCOUNTS)
+        profile["other_costs_amount"] = max(total - categorized, 0)
+        result[ico] = profile
 
     print(
-        f"FIN 2-01 PO: scanned {scanned} matching account rows → "
-        f"{len(totals)} unique school IČOs with observed příspěvek"
+        f"VYKZZ: matched {matched} cost rows → "
+        f"{len(result)} school cost profiles"
     )
-    return totals
+    return result
 
 
 # ---------------------------------------------------------------------------
-# Pass 2: FIN 2-12 M — per-founder aggregate education transfers
+# FIN 2-12 M pass: per-founder own-budget education support
 # ---------------------------------------------------------------------------
 
 def run_12m_pass(
@@ -478,7 +504,7 @@ def run_12m_pass(
                 continue
         # If no paragraph column detected, accept all rows for this founder
 
-        # Filter by transfer-to-PO budget items
+        # Keep only the founder's own contribution, not pass-through transfers.
         if item_idx is not None and item_idx < len(row):
             item = normalize_code(row[item_idx])
             if item not in FOUNDER_TRANSFER_ITEMS:
@@ -529,7 +555,7 @@ def prorate_founder_to_schools(
                 "basis": "realized",
                 "certainty": "inferred",
                 "note": (
-                    f"FIN 2-12 M education transfers from founder {founder_ico}; "
+                    f"FIN 2-12 M own-budget items 5331/6351 from founder {founder_ico}; "
                     f"equal split across {n} schools (no MŠMT weight available)"
                 ),
             }
@@ -555,7 +581,7 @@ def prorate_founder_to_schools(
                 "basis": "realized",
                 "certainty": "inferred",
                 "note": (
-                    f"FIN 2-12 M education transfers from founder {founder_ico}; "
+                    f"FIN 2-12 M own-budget items 5331/6351 from founder {founder_ico}; "
                     f"pro-rated by MŠMT allocation share "
                     f"({w:,} / {total_weight:,} = {100*w/total_weight:.1f}%)"
                 ),
@@ -572,7 +598,41 @@ def write_founder_support(year: int, rows: list[dict[str, Any]]) -> Path:
     out_path = RAW_ROOT / str(year) / "founder_support.csv"
     fieldnames = ["institution_id", "amount", "basis", "certainty", "note"]
     with out_path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=fieldnames,
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+    return out_path
+
+
+def write_school_costs(year: int, rows: list[dict[str, Any]]) -> Path:
+    out_path = RAW_ROOT / str(year) / "school_costs.csv"
+    fieldnames = [
+        "institution_id",
+        "ico",
+        "total_costs_amount",
+        "materials_amount",
+        "energy_amount",
+        "repairs_amount",
+        "services_amount",
+        "personnel_amount",
+        "depreciation_amount",
+        "other_costs_amount",
+        "basis",
+        "certainty",
+        "note",
+    ]
+    with out_path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=fieldnames,
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
     return out_path
@@ -601,14 +661,10 @@ def main() -> None:
     founder_icos = set(founder_to_schools.keys())
     print(f"Targeting {len(founder_icos)} unique founder IČOs, {len(school_entities)} schools")
 
-    # ------------------------------------------------------------------
-    # Pass 1: FIN 2-01 PO (observed per-school příspěvek)
-    # ------------------------------------------------------------------
-    po_totals: dict[str, int] = {}  # school_ico → CZK
-
-    if not args.no_po:
+    cost_profiles: dict[str, dict[str, int]] = {}
+    if not args.no_costs:
         po_zip = resolve_zip(
-            "FIN 2-01 PO",
+            "VYKZZ",
             FIN01PO_URL_TEMPLATES,
             period,
             year,
@@ -617,26 +673,10 @@ def main() -> None:
             args.no_cache,
         )
         if po_zip is not None:
-            po_totals = run_po_pass(po_zip, school_entities, args.list_columns)
+            cost_profiles = run_cost_profile_pass(po_zip, school_entities, args.list_columns)
 
-    # ------------------------------------------------------------------
-    # Pass 2: FIN 2-12 M (aggregate per-founder, for founders whose
-    #          schools are not fully covered by Pass 1)
-    # ------------------------------------------------------------------
     fm12_totals: dict[str, int] = {}  # founder_ico → CZK
-
-    # Determine which founders still need aggregate coverage
-    covered_school_icos = set(po_totals.keys())
-    founders_needing_12m: set[str] = set()
-    for founder_ico, schools in founder_to_schools.items():
-        school_icos_for_founder = {normalize_ico(s.get("ico", "")) for s in schools}
-        if not school_icos_for_founder.issubset(covered_school_icos):
-            founders_needing_12m.add(founder_ico)
-
-    if founders_needing_12m:
-        print(
-            f"{len(founders_needing_12m)} founders need FIN 2-12 M aggregate coverage"
-        )
+    if founder_icos:
         fm12_zip = resolve_zip(
             "FIN 2-12 M",
             FIN12M_URL_TEMPLATES,
@@ -647,64 +687,51 @@ def main() -> None:
             args.no_cache,
         )
         if fm12_zip is not None:
-            fm12_totals = run_12m_pass(fm12_zip, founders_needing_12m, args.list_columns)
+            fm12_totals = run_12m_pass(fm12_zip, founder_icos, args.list_columns)
 
     if args.list_columns:
         return
 
-    # ------------------------------------------------------------------
-    # Assemble output rows
-    # ------------------------------------------------------------------
     output_rows: list[dict[str, Any]] = []
+    for founder_ico, founder_total in fm12_totals.items():
+        schools = founder_to_schools.get(founder_ico, [])
+        inferred = prorate_founder_to_schools(founder_ico, founder_total, schools, msmt_weights)
+        output_rows.extend(inferred)
+    output_rows.sort(key=lambda row: row["institution_id"])
 
-    # Observed rows from Pass 1
-    for school_ico, amount in po_totals.items():
+    cost_rows: list[dict[str, Any]] = []
+    for school_ico, profile in cost_profiles.items():
         entity = school_entities.get(school_ico)
         if entity is None:
             continue
-        output_rows.append(
+        cost_rows.append(
             {
                 "institution_id": entity["institution_id"],
-                "amount": amount,
+                "ico": school_ico,
+                **profile,
                 "basis": "realized",
                 "certainty": "observed",
-                "note": f"FIN 2-01 PO account 672/673; school IČO {school_ico}",
+                "note": "MONITOR VYKZZ main-activity costs; rent is included in account 518 services",
             }
         )
-
-    # Inferred rows from Pass 2 (pro-rated per founder)
-    observed_school_icos = set(po_totals.keys())
-
-    for founder_ico, founder_total in fm12_totals.items():
-        schools = founder_to_schools.get(founder_ico, [])
-        # Only include schools not already covered by Pass 1
-        uncovered = [
-            s for s in schools
-            if normalize_ico(s.get("ico", "")) not in observed_school_icos
-        ]
-        if not uncovered:
-            continue
-        inferred = prorate_founder_to_schools(founder_ico, founder_total, uncovered, msmt_weights)
-        output_rows.extend(inferred)
+    cost_rows.sort(key=lambda row: row["institution_id"])
 
     # ------------------------------------------------------------------
     # Report and write
     # ------------------------------------------------------------------
-    n_observed = sum(1 for r in output_rows if r["certainty"] == "observed")
-    n_inferred = sum(1 for r in output_rows if r["certainty"] == "inferred")
     total_czk = sum(r["amount"] for r in output_rows)
 
     print(
-        f"\nResults: {len(output_rows)} rows total\n"
-        f"  observed (FIN 2-01 PO):   {n_observed}\n"
-        f"  inferred (FIN 2-12 M):    {n_inferred}\n"
-        f"  total amount:             {total_czk:,} CZK"
+        f"\nResults:\n"
+        f"  inferred founder rows:    {len(output_rows)}\n"
+        f"  founder own-budget total: {total_czk:,} CZK\n"
+        f"  observed cost profiles:   {len(cost_rows)}"
     )
 
     if not output_rows:
         print(
             "\nNo rows produced. Possible causes:\n"
-            "  • MONITOR files could not be downloaded — pass --fin12m/--finpo\n"
+            "  • FIN 2-12 M could not be downloaded — pass --fin12m\n"
             "  • Column detection failed — run --list-columns to inspect headers\n"
             "  • Education paragraphs/items not present in this period's data\n"
             "  • IČO format mismatch between school_entities.csv and MONITOR\n"
@@ -713,6 +740,9 @@ def main() -> None:
 
     out_path = write_founder_support(year, output_rows)
     print(f"Wrote {len(output_rows)} rows → {out_path.relative_to(ROOT)}")
+    if cost_rows:
+        costs_path = write_school_costs(year, cost_rows)
+        print(f"Wrote {len(cost_rows)} rows → {costs_path.relative_to(ROOT)}")
     print(
         f"\nNext step: run build_school_year.py to incorporate these flows\n"
         f"  python3 etl/build_school_year.py --year {args.year}"

@@ -75,6 +75,9 @@ class TestToInt:
     def test_comma_decimal(self):
         assert fb.to_int("1000000,50") == 1_000_000
 
+    def test_trailing_minus(self):
+        assert fb.to_int("100,50-") == -100
+
     def test_empty_returns_zero(self):
         assert fb.to_int("") == 0
 
@@ -151,7 +154,7 @@ class TestProrateFounderToSchools:
 
 
 # ---------------------------------------------------------------------------
-# run_po_pass (VYKZZ)
+# run_cost_profile_pass (VYKZZ)
 # ---------------------------------------------------------------------------
 
 def _make_zip_with_csv(csv_content: str, csv_name: str = "VYKZZ.csv") -> Path:
@@ -168,70 +171,56 @@ def _zip_path(tmp_path: Path, csv_content: str, zip_name: str = "test.zip", csv_
     return p
 
 
-class TestRunPoPass:
+class TestRunCostProfilePass:
     def _vykzz_csv(self, rows: list[dict]) -> str:
         """Build a semicolon-delimited VYKZZ-style CSV with SAP BW header."""
-        fields = ["ZC_ICO", "ZC_SYNUC", "ZU_HLCIN"]
+        fields = ["ZC_ICO", "ZC_POLVYK", "ZC_SYNUC", "ZU_HLCIN"]
         header = ";".join(f'"Label"{f}:{f}' for f in fields)
         lines = [header]
         for row in rows:
             lines.append(";".join(str(row.get(f, "")) for f in fields))
         return "\n".join(lines)
 
-    def test_extracts_account_672(self, tmp_path):
+    def test_extracts_cost_accounts_and_reconciles_other(self, tmp_path):
         csv_content = self._vykzz_csv([
-            {"ZC_ICO": "11111111", "ZC_SYNUC": "672", "ZU_HLCIN": "1000000"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.", "ZC_SYNUC": "-", "ZU_HLCIN": "1000"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.I.1.", "ZC_SYNUC": "501", "ZU_HLCIN": "100"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.I.2.", "ZC_SYNUC": "502", "ZU_HLCIN": "200"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.I.8.", "ZC_SYNUC": "511", "ZU_HLCIN": "50"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.I.12.", "ZC_SYNUC": "518", "ZU_HLCIN": "150"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.I.13.", "ZC_SYNUC": "521", "ZU_HLCIN": "300"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.I.28.", "ZC_SYNUC": "551", "ZU_HLCIN": "100"},
         ])
         zip_path = _zip_path(tmp_path, csv_content)
         school_icos = {"11111111": {"institution_id": "school:test"}}
-        result = fb.run_po_pass(zip_path, school_icos, list_columns=False)
-        assert result == {"11111111": 1_000_000}
-
-    def test_extracts_account_673(self, tmp_path):
-        csv_content = self._vykzz_csv([
-            {"ZC_ICO": "22222222", "ZC_SYNUC": "673", "ZU_HLCIN": "500000"},
-        ])
-        zip_path = _zip_path(tmp_path, csv_content)
-        school_icos = {"22222222": {"institution_id": "school:test2"}}
-        result = fb.run_po_pass(zip_path, school_icos, list_columns=False)
-        assert result == {"22222222": 500_000}
-
-    def test_sums_multiple_account_rows(self, tmp_path):
-        csv_content = self._vykzz_csv([
-            {"ZC_ICO": "11111111", "ZC_SYNUC": "672", "ZU_HLCIN": "1000000"},
-            {"ZC_ICO": "11111111", "ZC_SYNUC": "673", "ZU_HLCIN": "200000"},
-        ])
-        zip_path = _zip_path(tmp_path, csv_content)
-        school_icos = {"11111111": {"institution_id": "school:test"}}
-        result = fb.run_po_pass(zip_path, school_icos, list_columns=False)
-        assert result == {"11111111": 1_200_000}
+        result = fb.run_cost_profile_pass(zip_path, school_icos, list_columns=False)
+        assert result["11111111"] == {
+            "total_costs_amount": 1_000,
+            "materials_amount": 100,
+            "energy_amount": 200,
+            "repairs_amount": 50,
+            "services_amount": 150,
+            "personnel_amount": 300,
+            "depreciation_amount": 100,
+            "other_costs_amount": 100,
+        }
 
     def test_ignores_non_school_icos(self, tmp_path):
         csv_content = self._vykzz_csv([
-            {"ZC_ICO": "99999999", "ZC_SYNUC": "672", "ZU_HLCIN": "999"},
+            {"ZC_ICO": "99999999", "ZC_POLVYK": "A.", "ZC_SYNUC": "-", "ZU_HLCIN": "999"},
         ])
         zip_path = _zip_path(tmp_path, csv_content)
         school_icos = {"11111111": {"institution_id": "school:test"}}
-        result = fb.run_po_pass(zip_path, school_icos, list_columns=False)
+        result = fb.run_cost_profile_pass(zip_path, school_icos, list_columns=False)
         assert result == {}
 
-    def test_ignores_non_founder_accounts(self, tmp_path):
+    def test_requires_positive_total_cost_row(self, tmp_path):
         csv_content = self._vykzz_csv([
-            {"ZC_ICO": "11111111", "ZC_SYNUC": "501", "ZU_HLCIN": "999"},
+            {"ZC_ICO": "11111111", "ZC_POLVYK": "A.I.1.", "ZC_SYNUC": "501", "ZU_HLCIN": "999"},
         ])
         zip_path = _zip_path(tmp_path, csv_content)
         school_icos = {"11111111": {"institution_id": "school:test"}}
-        result = fb.run_po_pass(zip_path, school_icos, list_columns=False)
-        assert result == {}
-
-    def test_skips_zero_or_negative_amounts(self, tmp_path):
-        csv_content = self._vykzz_csv([
-            {"ZC_ICO": "11111111", "ZC_SYNUC": "672", "ZU_HLCIN": "0"},
-            {"ZC_ICO": "11111111", "ZC_SYNUC": "672", "ZU_HLCIN": "-100"},
-        ])
-        zip_path = _zip_path(tmp_path, csv_content)
-        school_icos = {"11111111": {"institution_id": "school:test"}}
-        result = fb.run_po_pass(zip_path, school_icos, list_columns=False)
+        result = fb.run_cost_profile_pass(zip_path, school_icos, list_columns=False)
         assert result == {}
 
 
@@ -276,6 +265,14 @@ class TestRun12mPass:
     def test_ignores_non_transfer_items(self, tmp_path):
         csv_content = self._finm_csv([
             {"ZC_ICO": "11111111", "0FUNC_AREA": "3111", "ZCMMT_ITM": "5139", "ZU_ROZKZ": "999"},
+        ])
+        zip_path = _zip_path(tmp_path, csv_content, csv_name="FINM201.csv")
+        result = fb.run_12m_pass(zip_path, {"11111111"}, list_columns=False)
+        assert result == {}
+
+    def test_excludes_routed_transfer_item_5336(self, tmp_path):
+        csv_content = self._finm_csv([
+            {"ZC_ICO": "11111111", "0FUNC_AREA": "3111", "ZCMMT_ITM": "5336", "ZU_ROZKZ": "999"},
         ])
         zip_path = _zip_path(tmp_path, csv_content, csv_name="FINM201.csv")
         result = fb.run_12m_pass(zip_path, {"11111111"}, list_columns=False)
@@ -329,3 +326,29 @@ class TestWriteFounderSupport:
         with out.open() as fh:
             reader = csv.DictReader(fh)
             assert reader.fieldnames == ["institution_id", "amount", "basis", "certainty", "note"]
+
+
+class TestWriteSchoolCosts:
+    def test_writes_compact_cost_profile(self, tmp_path):
+        row = {
+            "institution_id": "school:a",
+            "ico": "11111111",
+            "total_costs_amount": 100,
+            "materials_amount": 10,
+            "energy_amount": 20,
+            "repairs_amount": 10,
+            "services_amount": 20,
+            "personnel_amount": 20,
+            "depreciation_amount": 10,
+            "other_costs_amount": 10,
+            "basis": "realized",
+            "certainty": "observed",
+            "note": "test",
+        }
+        with patch.object(fb, "RAW_ROOT", tmp_path):
+            (tmp_path / "2025").mkdir()
+            out = fb.write_school_costs(2025, [row])
+
+        written = list(csv.DictReader(out.open()))
+        assert written[0]["energy_amount"] == "20"
+        assert written[0]["other_costs_amount"] == "10"

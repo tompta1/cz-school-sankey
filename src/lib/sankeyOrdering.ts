@@ -32,9 +32,9 @@ export function normalizationGroup(link: SankeyLink): string | null {
   if (
     link.flowType === 'direct_school_finance' ||
     link.flowType === 'school_expenditure' ||
+    link.flowType === 'school_actual_cost' ||
     link.flowType === 'founder_support' ||
-    link.flowType === 'eu_project_support' ||
-    link.flowType === 'state_to_founders'
+    link.flowType === 'eu_project_support'
   ) {
     return 'school_pupil';
   }
