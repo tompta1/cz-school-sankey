@@ -532,9 +532,8 @@ with psycopg.connect(sys.argv[1]) as c:
 |---|---|---|
 | `ci.yml` | Push / PR | TypeScript check, Vite build, vitest unit tests |
 | `deploy-vercel-production.yml` | Manual | Builds the current ref with Vercel CLI and deploys it to the Vercel production environment |
-| `smoke-production.yml` | Push + nightly | Smoke-tests the live production API endpoints |
-| `refresh-neon-domains.yml` | Manual + scheduled | Refreshes selected ETL domains and reloads Neon via a shared workflow. Accepts aliases like `regions`, `business`, `culture`, `foreign`, `internal`, `finance`, and `defense`, and year tokens like `current` and `previous`. Scheduled runs are split into smaller domain batches and guarded by Neon storage checks. |
-| `refresh-neon-school-data.yml` | Manual / quarterly | Re-runs the school ETL and reloads Neon |
+| `smoke-production.yml` | Manual + nightly | Smoke-tests the live production API and reconciles its top-level links against Neon source aggregates. |
+| `refresh-neon-domains.yml` | Manual + scheduled | Canonical ETL workflow. Refreshes selected domains, loads Neon, verifies fresh published releases, then prunes superseded releases. |
 | `deploy-pages.yml` | Push to master | Builds and deploys the static frontend to GitHub Pages |
 
 ### Current automation status
@@ -545,16 +544,17 @@ The production path is now:
 
 Current platform status:
 
-- `GitHub Actions -> Neon` is working.
-- `GitHub Actions -> Vercel production` is working.
-- Production smoke validation is working against `https://cz-school-sankey.vercel.app`.
-- Neon retention is active for the free-tier instance, keeping the project focused on reporting years `2024` and `2025`.
+- The production sequence is intentionally three separate gates: ETL and Neon verification, Vercel production deploy, then production smoke.
+- The ETL fails unless every expected dataset was freshly loaded with positive rows and published metadata.
+- After deployment, top-level `state:cr` links are reconciled against Monitor-backed mart aggregates or the documented official chapter aggregate. Mixed and synthetic funding links are reported separately.
+- The broader all-state envelope is reported as a warning until the inferred `school_state_budget` envelope is replaced by a complete Monitor state-budget aggregate.
+- The smoke check validates both advertised years and deep 2024 domain endpoints against `https://cz-school-sankey.vercel.app` by default.
 
 Scheduled ETL batches:
 
-- Tuesday `02:20 UTC`: `environment regions business transport`
-- Thursday `02:20 UTC`: `social justice culture foreign internal finance defense`
-- Saturday `02:20 UTC`: `health agriculture`
+- Day 2 of January, April, July, and October at `03:00 UTC`: `environment regions business transport`
+- Day 4 of January, April, July, and October at `03:00 UTC`: `social justice culture foreign internal finance defense`
+- Day 6 of January, April, July, and October at `03:00 UTC`: `health agriculture`
 
 Manual-only ETL:
 
@@ -562,9 +562,11 @@ Manual-only ETL:
 
 Free-tier Neon guardrails:
 
-- The shared ETL workflow prunes superseded dataset releases before loading.
-- The workflow checks current database size before loading and fails early if Neon is already above the configured threshold.
-- The default storage guard threshold is `450 MB`.
+- The workflow checks storage before loading, leaving about 60 MB below the 500 MB free-tier limit by default.
+- A regular `VACUUM (ANALYZE)` runs before loading and after pruning so repeated replacements reuse dead-row pages without the locking and temporary-space cost of `VACUUM FULL`.
+- Superseded releases are pruned only after load and freshness verification succeed.
+- The default guard threshold is `440 MB`; it can be overridden manually, but `0` disables the protection and is not recommended.
+- Retention keeps reporting years `2024` and `2025`; switch to one year only after all top-level domain sources cover `2025`.
 
 Domain readiness summary:
 

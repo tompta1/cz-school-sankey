@@ -28,6 +28,7 @@ etl/data/raw/mpo/
 etl/data/raw/mk/
 etl/data/raw/mzv/
 etl/data/raw/mo/
+etl/data/raw/mf/
 .vercel
 .neon
 .tmp/

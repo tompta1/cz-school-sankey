@@ -177,7 +177,9 @@ def upsert_dataset_release(
                   local_path = excluded.local_path,
                   content_sha256 = excluded.content_sha256,
                   metadata = excluded.metadata,
-                  status = excluded.status
+                  status = excluded.status,
+                  fetched_at = now(),
+                  published_at = null
             returning dataset_release_id
             """,
             (
@@ -199,7 +201,8 @@ def finalize_dataset_release(conn: psycopg.Connection, *, dataset_release_id: in
             """
             update meta.dataset_release
             set row_count = %s,
-                status = 'staged'
+                status = 'published',
+                published_at = now()
             where dataset_release_id = %s
             """,
             (row_count, dataset_release_id),
@@ -733,7 +736,7 @@ def load_dataset(conn: psycopg.Connection, *, config: dict[str, object]) -> int:
     source_name, source_base_url = SOURCES[source_code]
     source_system_id = upsert_source_system(conn, source_code, source_name, source_base_url)
 
-    metadata = {"loader": "etl/load_health_raw.py"}
+    metadata = {**download_sidecar, "loader": "etl/load_health_raw.py"}
     if metadata_path is not None:
         metadata["metadata_path"] = str(metadata_path.relative_to(ROOT))
     if download_sidecar.get("metadata_url"):

@@ -14,7 +14,10 @@ function getConnectionConfig() {
 
   return {
     connectionString,
-    ssl: isLocal ? false : { rejectUnauthorized: false },
+    ssl: isLocal ? false : { rejectUnauthorized: true },
+    max: 3,
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 30_000,
   };
 }
 

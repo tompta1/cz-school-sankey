@@ -338,7 +338,7 @@ async function upsertDatasetRelease(client, { sourceSystemId, datasetCode, fileP
   const snapshotLabel = snapshotLabelFor(filePath);
   const downloadSidecar = sidecarFor(filePath);
   const metadataPath = metadataPathFor(filePath);
-  const metadata = { loader: 'scripts/load-health-claims-monthly.mjs' };
+  const metadata = { ...downloadSidecar, loader: 'scripts/load-health-claims-monthly.mjs' };
 
   if (metadataPath) {
     metadata.metadata_path = path.relative(ROOT, metadataPath);
@@ -368,7 +368,9 @@ async function upsertDatasetRelease(client, { sourceSystemId, datasetCode, fileP
             content_sha256 = excluded.content_sha256,
             row_count = excluded.row_count,
             metadata = excluded.metadata,
-            status = excluded.status
+            status = excluded.status,
+            fetched_at = now(),
+            published_at = null
       returning dataset_release_id
     `,
     [
@@ -390,7 +392,8 @@ async function finalizeDatasetRelease(client, datasetReleaseId, rowCount) {
     `
       update meta.dataset_release
       set row_count = $1,
-          status = 'staged'
+          status = 'published',
+          published_at = now()
       where dataset_release_id = $2
     `,
     [rowCount, datasetReleaseId],

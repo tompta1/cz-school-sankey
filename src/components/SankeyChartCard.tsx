@@ -74,6 +74,16 @@ function formatMetricValue(czk: number, label: string): string {
   return label === 'žáka/rok' ? formatPerPupil(czk) : formatPerUnit(czk, label);
 }
 
+export function escapeTooltipHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character);
+}
+
 function buildActiveOption(
   nodes: SankeyNode[],
   links: SankeyLink[],
@@ -117,13 +127,16 @@ function buildActiveOption(
               ? formatMetricValue(amountCzk / capacity, descriptor.perUnitLabel)
               : unavailableMetricMarkup(metricModeLabel)
             : formatCompactCzk(amountCzk);
-          return `<strong>${idToDisplay.get(source) ?? source} → ${idToDisplay.get(target) ?? target}</strong><br/>${amt}`;
+          const sourceName = escapeTooltipHtml(idToDisplay.get(source) ?? source);
+          const targetName = escapeTooltipHtml(idToDisplay.get(target) ?? target);
+          return `<strong>${sourceName} → ${targetName}</strong><br/>${amt}`;
         }
         const nodeId = (p.data as { name: string }).name;
         const displayName = idToDisplay.get(nodeId) ?? nodeId;
         const incomingLinks = links.filter((l) => l.target === nodeId);
         const total = incomingLinks.reduce((s, l) => s + l.amountCzk, 0);
-        if (total === 0) return `<strong>${displayName}</strong>`;
+        const safeDisplayName = escapeTooltipHtml(displayName);
+        if (total === 0) return `<strong>${safeDisplayName}</strong>`;
         const cap = perPupil ? (capacityMap.get(nodeId) ?? null) : null;
         const aggregatedMetric = perPupil && !cap
           ? comparableNodeMetric(nodeId, links, capacityMap, true)
@@ -149,7 +162,7 @@ function buildActiveOption(
               ? `<br/><small style="color:#94a3b8">${formatInteger(aggregatedMetric.totalCapacity)} ${descriptor.countLabel}</small>`
               : `<br/><small style="color:#94a3b8">${metricModeLabel} není pro tento uzel k dispozici</small>`
           : ` ${totalAmountLabel}`;
-        return `<strong>${displayName}</strong><br/>${totalFmt}${suffix}`;
+        return `<strong>${safeDisplayName}</strong><br/>${totalFmt}${suffix}`;
       },
       backgroundColor: 'rgba(8,16,30,0.92)',
       borderColor: 'rgba(148,163,184,0.2)',

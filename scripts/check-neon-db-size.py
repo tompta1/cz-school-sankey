@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-size-mb",
         type=float,
-        default=450.0,
+        default=440.0,
         help="Fail when the current database size exceeds this threshold in MB. Use 0 to disable.",
     )
     return parser.parse_args()

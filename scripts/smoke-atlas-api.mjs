@@ -23,6 +23,8 @@ function assert(condition, message) {
 async function main() {
   const years = await fetchJson('/api/atlas/years');
   assert(years.domain === 'atlas', 'atlas years endpoint returned unexpected domain');
+  assert(Array.isArray(years.years) && years.years.includes(2024), 'atlas years endpoint is missing 2024');
+  assert(Array.isArray(years.years) && years.years.includes(2025), 'atlas years endpoint is missing 2025');
 
   const overview2024 = await fetchJson('/api/atlas/overview?year=2024&metric=cost');
   assert(Array.isArray(overview2024.nodes) && overview2024.nodes.length > 20, 'overview 2024 has too few nodes');

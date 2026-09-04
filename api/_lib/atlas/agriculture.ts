@@ -254,8 +254,7 @@ function agricultureResidualAmount(
   metrics: AgricultureRecipientMetric[],
 ): number {
   const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
-  if (!totalMetric) return 0;
-  return Math.max(agricultureAdminAmount(budgetRows) - totalMetric.amount, 0);
+  return Math.max(agricultureAdminAmount(budgetRows) - (totalMetric?.amount ?? 0), 0);
 }
 
 function agricultureResidualEntityAmount(row: AgricultureBudgetEntity, subsidyAmount: number): number {
@@ -280,10 +279,8 @@ function lpisMetricValue(lpisMetric: AgricultureLpisMetric | null): number | nul
 
 export function getAgricultureTotal(
   budgetRows: AgricultureBudgetEntity[],
-  metrics: AgricultureRecipientMetric[],
+  _metrics: AgricultureRecipientMetric[],
 ): number {
-  const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
-  if (!totalMetric || totalMetric.amount <= 0) return 0;
   return agricultureAdminAmount(budgetRows);
 }
 
@@ -501,10 +498,9 @@ export function appendAgricultureBranch(
   metrics: AgricultureRecipientMetric[],
 ): void {
   const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
-  if (!totalMetric || totalMetric.amount <= 0) return;
-
   const residualAmount = agricultureResidualAmount(budgetRows, metrics);
   const rootTotal = agricultureAdminAmount(budgetRows);
+  if (rootTotal <= 0) return;
 
   addNode(nodes, createAgricultureMinistryNode());
   links.push(
@@ -514,23 +510,25 @@ export function appendAgricultureBranch(
       rootTotal,
       year,
       'state_to_agriculture_resort',
-      'Synteticka osa resortu zemedelstvi: celkove vydaje MZe a SZIF z Monitoru MF, z nichz je vyclenena primarni dotacni vetev publikovana SZIF',
-      'atlas.inferred',
+      'Celkove vydaje MZe a SZIF z Monitoru MF; dostupne platby SZIF se zobrazuji jako samostatna detailni vetev',
+      'agriculture_budget_entities',
     ),
   );
 
-  addNode(nodes, createAgricultureBranchNode(AGRICULTURE_SUBSIDY_TOTAL_ID, 'Zemedelske dotace pres SZIF', 2, null, true));
-  links.push(
-    makeLink(
-      AGRICULTURE_MINISTRY_ID,
-      AGRICULTURE_SUBSIDY_TOTAL_ID,
-      totalMetric.amount,
-      year,
-      'agriculture_subsidy_branch',
-      'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF',
-      totalMetric.sourceDataset,
-    ),
-  );
+  if (totalMetric && totalMetric.amount > 0) {
+    addNode(nodes, createAgricultureBranchNode(AGRICULTURE_SUBSIDY_TOTAL_ID, 'Zemedelske dotace pres SZIF', 2, null, true));
+    links.push(
+      makeLink(
+        AGRICULTURE_MINISTRY_ID,
+        AGRICULTURE_SUBSIDY_TOTAL_ID,
+        totalMetric.amount,
+        year,
+        'agriculture_subsidy_branch',
+        'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF',
+        totalMetric.sourceDataset,
+      ),
+    );
+  }
 
   if (residualAmount > 0) {
     addNode(nodes, createAgricultureBranchNode(AGRICULTURE_ADMIN_ID, 'MZe a SZIF ostatni vydaje', 2, null, true));
@@ -554,24 +552,25 @@ function buildAgricultureRootGraph(
   metrics: AgricultureRecipientMetric[],
 ) {
   const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
-  if (!totalMetric || totalMetric.amount <= 0) return null;
-
   const residualAmount = agricultureResidualAmount(budgetRows, metrics);
+  if (agricultureAdminAmount(budgetRows) <= 0) return null;
   const nodes: AtlasNode[] = [createAgricultureMinistryNode()];
   const links: AtlasLink[] = [];
 
-  addNode(nodes, createAgricultureBranchNode(AGRICULTURE_SUBSIDY_TOTAL_ID, 'Zemedelske dotace pres SZIF', 2, null, true));
-  links.push(
-    makeLink(
-      AGRICULTURE_MINISTRY_ID,
-      AGRICULTURE_SUBSIDY_TOTAL_ID,
-      totalMetric.amount,
-      year,
-      'agriculture_subsidy_branch',
-      'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF',
-      totalMetric.sourceDataset,
-    ),
-  );
+  if (totalMetric && totalMetric.amount > 0) {
+    addNode(nodes, createAgricultureBranchNode(AGRICULTURE_SUBSIDY_TOTAL_ID, 'Zemedelske dotace pres SZIF', 2, null, true));
+    links.push(
+      makeLink(
+        AGRICULTURE_MINISTRY_ID,
+        AGRICULTURE_SUBSIDY_TOTAL_ID,
+        totalMetric.amount,
+        year,
+        'agriculture_subsidy_branch',
+        'SZIF: soucet fondovych i narodnich zemedelskych dotaci bez technicke pomoci pro MZe a SZIF',
+        totalMetric.sourceDataset,
+      ),
+    );
+  }
 
   if (residualAmount > 0) {
     addNode(nodes, createAgricultureBranchNode(AGRICULTURE_ADMIN_ID, 'MZe a SZIF ostatni vydaje', 2, null, true));
@@ -593,10 +592,10 @@ function buildAgricultureRootGraph(
 
 function buildAgricultureAdminGraph(year: number, budgetRows: AgricultureBudgetEntity[], metrics: AgricultureRecipientMetric[]) {
   const totalMetric = agricultureMetricBySource(metrics, 'TOTAL');
-  if (!totalMetric || totalMetric.amount <= 0) return null;
+  const subsidyAmount = totalMetric?.amount ?? 0;
 
   const adminRows = budgetRows
-    .map((row) => ({ ...row, amount: agricultureResidualEntityAmount(row, totalMetric.amount) }))
+    .map((row) => ({ ...row, amount: agricultureResidualEntityAmount(row, subsidyAmount) }))
     .filter((row) => row.amount > 0)
     .sort((a, b) => b.amount - a.amount || a.entityName.localeCompare(b.entityName, 'cs'));
 

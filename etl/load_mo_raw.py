@@ -125,7 +125,9 @@ def upsert_dataset_release(
                   content_sha256 = excluded.content_sha256,
                   reporting_year = excluded.reporting_year,
                   metadata = excluded.metadata,
-                  status = excluded.status
+                  status = excluded.status,
+                  fetched_at = now(),
+                  published_at = null
             returning dataset_release_id
             """,
             (
@@ -148,7 +150,8 @@ def finalize_dataset_release(conn: psycopg.Connection, *, dataset_release_id: in
             """
             update meta.dataset_release
             set row_count = %s,
-                status = 'staged'
+                status = 'published',
+                published_at = now()
             where dataset_release_id = %s
             """,
             (row_count, dataset_release_id),

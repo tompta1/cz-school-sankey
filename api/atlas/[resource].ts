@@ -179,10 +179,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (resource === 'search') {
     const year = Number(req.query.year);
     const q = String(req.query.q || '').trim();
-    const limit = Math.min(Math.max(Number(req.query.limit || 8), 1), 25);
+    const requestedLimit = Number(req.query.limit || 8);
 
     if (!Number.isInteger(year)) return badRequest(res, 'Missing or invalid year');
     if (q.length < 2) return badRequest(res, 'Search query must be at least 2 characters');
+    if (!Number.isInteger(requestedLimit)) return badRequest(res, 'Invalid limit');
+
+    const limit = Math.min(Math.max(requestedLimit, 1), 25);
 
     const results = await searchAtlasEntities(year, q, limit);
     return json(res, 200, { year, q, results });

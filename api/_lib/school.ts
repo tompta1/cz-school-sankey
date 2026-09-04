@@ -848,24 +848,6 @@ export async function getSchoolOverviewGraph(year: number) {
     });
   }
 
-  const founderTotals = {
-    kraj: links
-      .filter((link) => link.source === FOUNDERS_KRAJ)
-      .reduce((sum, link) => sum + link.amountCzk, 0),
-    obec: links
-      .filter((link) => link.source === FOUNDERS_OBEC)
-      .reduce((sum, link) => sum + link.amountCzk, 0),
-  };
-
-  if (founderTotals.kraj > 0) {
-    links.push(makeLink(STATE_ID, FOUNDERS_KRAJ, founderTotals.kraj, year, 'state_to_founders'));
-  }
-  if (founderTotals.obec > 0) {
-    links.push(makeLink(STATE_ID, FOUNDERS_OBEC, founderTotals.obec, year, 'state_to_founders'));
-  }
-
-  let founderTransfer = founderTotals.kraj + founderTotals.obec;
-
   if (euRes.rows.length > 0) {
     ensureNode(nodesById, {
       id: EU_ALL_ID,
@@ -916,11 +898,7 @@ export async function getSchoolOverviewGraph(year: number) {
       });
     }
 
-    let amount = Number(row.amount_czk);
-    if (row.flow_type === 'state_to_other' && founderTransfer > 0) {
-      amount = Math.max(0, amount - founderTransfer);
-    }
-    links.push(makeLink(sourceId, targetId, amount, year, row.flow_type, 'core.financial_flow'));
+    links.push(makeLink(sourceId, targetId, Number(row.amount_czk), year, row.flow_type, 'core.financial_flow'));
   }
 
   return {

@@ -33,6 +33,16 @@ create table if not exists meta.dataset_release (
 create unique index if not exists dataset_release_identity_uidx
   on meta.dataset_release (domain_code, dataset_code, snapshot_label);
 
+create index if not exists dataset_release_published_lookup_idx
+  on meta.dataset_release (domain_code, dataset_code, reporting_year, published_at desc)
+  where status = 'published';
+
+update meta.dataset_release
+set status = 'published',
+    published_at = coalesce(published_at, fetched_at)
+where status = 'staged'
+  and coalesce(row_count, 0) > 0;
+
 create table if not exists meta.etl_run (
   etl_run_id bigserial primary key,
   domain_code text not null,
@@ -1133,11 +1143,13 @@ select distinct on (r.reporting_year, r.provider_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.health_monitor_indicator r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.provider_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1161,11 +1173,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.health_mz_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1192,14 +1206,16 @@ select distinct on (
   d.snapshot_label,
   d.dataset_release_id
 from raw.health_financing_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.financing_type_code,
   coalesce(r.financing_subtype_code, ''),
   r.provider_type_code,
   coalesce(r.provider_subtype_code, ''),
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1217,11 +1233,13 @@ select distinct on (
   d.snapshot_label,
   d.dataset_release_id
 from raw.health_zzs_activity_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.indicator_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1239,12 +1257,14 @@ select distinct on (r.reporting_year, r.metric_group, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.social_mpsv_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_group,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1260,11 +1280,13 @@ select distinct on (r.reporting_year, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.social_recipient_metric r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1283,12 +1305,14 @@ select distinct on (r.reporting_year, r.metric_group, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mv_budget_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_group,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1312,13 +1336,15 @@ select distinct on (
   d.snapshot_label,
   d.dataset_release_id
 from raw.mv_police_crime_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.region_code,
   r.indicator_code,
   r.crime_class_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1339,12 +1365,14 @@ select distinct on (
   d.snapshot_label,
   d.dataset_release_id
 from raw.mv_fire_rescue_activity_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.region_code,
   r.indicator_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1363,12 +1391,14 @@ select distinct on (r.reporting_year, r.metric_group, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.justice_budget_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_group,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1384,12 +1414,14 @@ select distinct on (r.reporting_year, r.activity_domain, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.justice_activity_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.activity_domain,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1409,11 +1441,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.transport_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1442,13 +1476,15 @@ select distinct on (r.reporting_year, r.action_id, r.budget_area_code, r.investo
   d.snapshot_label,
   d.dataset_release_id
 from raw.transport_sfdi_project r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.action_id,
   r.budget_area_code,
   r.investor_name,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1465,12 +1501,14 @@ select distinct on (r.reporting_year, r.activity_domain, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.transport_activity_metric r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.activity_domain,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1490,11 +1528,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.agriculture_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1517,12 +1557,14 @@ select distinct on (r.reporting_year, r.funding_source_code, r.recipient_key)
   d.snapshot_label,
   d.dataset_release_id
 from raw.agriculture_szif_recipient_yearly r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.funding_source_code,
   r.recipient_key,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1546,13 +1588,15 @@ select distinct on (r.reporting_year, r.funding_source_code, r.family_code, r.re
   d.snapshot_label,
   d.dataset_release_id
 from raw.agriculture_szif_family_recipient_yearly r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.funding_source_code,
   r.family_code,
   r.recipient_key,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1615,11 +1659,13 @@ select distinct on (r.reporting_year, r.user_name_normalized)
   d.snapshot_label,
   d.dataset_release_id
 from raw.agriculture_lpis_user_area_yearly r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.user_name_normalized,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1639,11 +1685,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.environment_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1664,12 +1712,14 @@ select distinct on (r.reporting_year, r.program_code, r.recipient_key)
   d.snapshot_label,
   d.dataset_release_id
 from raw.environment_sfzp_support_yearly r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.program_code,
   r.recipient_key,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1705,11 +1755,13 @@ select distinct on (r.reporting_year, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mmr_budget_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1736,12 +1788,14 @@ select distinct on (r.reporting_year, r.branch_code, r.project_id)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mmr_irop_operation_yearly r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.branch_code,
   r.project_id,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1809,11 +1863,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mpo_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1839,11 +1895,13 @@ select distinct on (r.reporting_year, r.project_id)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mpo_optak_operation_yearly r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.project_id,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1905,11 +1963,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mk_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1925,11 +1985,13 @@ select distinct on (r.reporting_year, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mk_budget_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1949,13 +2011,15 @@ select distinct on (r.reporting_year, r.program_code, r.recipient_key, r.project
   d.snapshot_label,
   d.dataset_release_id
 from raw.mk_support_award r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.program_code,
   r.recipient_key,
   r.project_name,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -1973,12 +2037,14 @@ select distinct on (r.reporting_year, r.program_code, coalesce(r.region_code, r.
   d.snapshot_label,
   d.dataset_release_id
 from raw.mk_region_metric r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.program_code,
   coalesce(r.region_code, r.region_name),
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2031,11 +2097,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mzv_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2050,11 +2118,13 @@ select distinct on (r.reporting_year, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mzv_diplomatic_metric r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2082,12 +2152,14 @@ select distinct on (r.reporting_year, r.source_workbook, r.project_key)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mzv_aid_operation_yearly r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.source_workbook,
   r.project_key,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2152,11 +2224,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mo_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2171,11 +2245,13 @@ select distinct on (r.reporting_year, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mo_budget_aggregate r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2190,11 +2266,13 @@ select distinct on (r.reporting_year, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mo_personnel_metric r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2303,11 +2381,13 @@ select distinct on (r.reporting_year, r.entity_ico)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mf_budget_entity r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.entity_ico,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;
 
@@ -2322,10 +2402,12 @@ select distinct on (r.reporting_year, r.metric_code)
   d.snapshot_label,
   d.dataset_release_id
 from raw.mf_activity_metric r
-join meta.dataset_release d on d.dataset_release_id = r.dataset_release_id
+join meta.dataset_release d
+  on d.dataset_release_id = r.dataset_release_id
+ and d.status = 'published'
 order by
   r.reporting_year,
   r.metric_code,
-  d.snapshot_label desc,
+  coalesce(d.published_at, d.fetched_at) desc,
   r.loaded_at desc,
   r.raw_id desc;

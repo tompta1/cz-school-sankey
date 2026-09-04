@@ -62,7 +62,7 @@ def fetch_prune_candidates(conn: psycopg.Connection, keep_years: set[int]) -> li
             row_count,
             row_number() over (
               partition by domain_code, dataset_code, reporting_year
-              order by snapshot_label desc, dataset_release_id desc
+              order by coalesce(published_at, fetched_at) desc, dataset_release_id desc
             ) as snapshot_rank
           from meta.dataset_release
         )

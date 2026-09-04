@@ -253,15 +253,18 @@ def upsert_dataset_release(
               local_path,
               row_count,
               metadata,
-              status
+              status,
+              published_at
             )
-            values (%s, 'school', %s, %s, %s, %s, %s, %s, %s, %s::jsonb, 'staged')
+            values (%s, 'school', %s, %s, %s, %s, %s, %s, %s, %s::jsonb, 'published', now())
             on conflict (domain_code, dataset_code, snapshot_label) do update
               set row_count = excluded.row_count,
                   local_path = excluded.local_path,
                   source_url = excluded.source_url,
                   metadata = excluded.metadata,
-                  status = excluded.status
+                  status = excluded.status,
+                  fetched_at = now(),
+                  published_at = now()
             returning dataset_release_id
             """,
             (

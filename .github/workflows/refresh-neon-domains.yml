@@ -27,7 +27,7 @@ on:
         type: boolean
         default: true
       prune_old_releases:
-        description: Prune superseded Neon dataset releases before loading
+        description: Prune superseded Neon dataset releases after successful verification
         required: false
         type: boolean
         default: true
@@ -38,7 +38,7 @@ on:
       max_db_size_mb:
         description: Fail before loading if Neon is already above this size in MB (0 disables the guard)
         required: false
-        default: "490"
+        default: "440"
   schedule:
     - cron: "0 3 2 1,4,7,10 *"
     - cron: "0 3 4 1,4,7,10 *"
@@ -110,10 +110,11 @@ jobs:
           verify_neon="${INPUT_VERIFY_NEON:-true}"
           prune_old_releases="${INPUT_PRUNE_OLD_RELEASES:-true}"
           retention_years_raw="$(echo "${INPUT_RETENTION_YEARS:-2024 2025}" | xargs)"
-          max_db_size_mb="${INPUT_MAX_DB_SIZE_MB:-490}"
+          max_db_size_mb="${INPUT_MAX_DB_SIZE_MB:-440}"
           event_name="${GITHUB_EVENT_NAME:-workflow_dispatch}"
           event_schedule="${GITHUB_EVENT_SCHEDULE:-}"
           schedule_profile="manual"
+          run_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           current_year="$(TZ=Europe/Prague date +%Y)"
           previous_year="$((current_year - 1))"
 
@@ -205,17 +206,15 @@ jobs:
           echo "Event name: ${event_name}"
           echo "Schedule profile: ${schedule_profile}"
           echo "Max DB size guard: ${max_db_size_mb} MB"
+          echo "Run started at: ${run_started_at}"
 
-          if [[ "${prune_old_releases}" == "true" ]]; then
-            prune_args=()
-            for year in ${retention_years}; do
-              prune_args+=(--keep-year "${year}")
-            done
-            python3 ./scripts/prune-neon-dataset-releases.py \
-              --database-url "$DATABASE_URL" \
-              "${prune_args[@]}" \
-              --execute | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ "${prune_old_releases}" == "true" && "${verify_neon}" != "true" ]]; then
+            echo "Pruning requires verify_neon=true so a failed load cannot remove the last good release." >&2
+            exit 1
           fi
+
+          python3 ./scripts/vacuum-neon-etl-tables.py \
+            --database-url "$DATABASE_URL" | tee -a "$GITHUB_STEP_SUMMARY"
 
           python3 ./scripts/check-neon-db-size.py \
             --database-url "$DATABASE_URL" \
@@ -747,5 +746,25 @@ jobs:
 
             python3 ./scripts/verify-neon-etl.py \
               --database-url "$DATABASE_URL" \
+              --started-after "$run_started_at" \
               "${verify_args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          fi
+
+          if [[ "${prune_old_releases}" == "true" ]]; then
+            prune_args=()
+            for year in ${retention_years}; do
+              prune_args+=(--keep-year "${year}")
+            done
+            python3 ./scripts/prune-neon-dataset-releases.py \
+              --database-url "$DATABASE_URL" \
+              "${prune_args[@]}" \
+              --execute | tee -a "$GITHUB_STEP_SUMMARY"
+
+            python3 ./scripts/vacuum-neon-etl-tables.py \
+              --database-url "$DATABASE_URL" | tee -a "$GITHUB_STEP_SUMMARY"
+
+            python3 ./scripts/check-neon-db-size.py \
+              --database-url "$DATABASE_URL" \
+              --max-size-mb "${max_db_size_mb}" | tee -a "$GITHUB_STEP_SUMMARY"
           fi

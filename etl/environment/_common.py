@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.request import Request, urlopen
+
+import requests
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW_ROOT = ROOT / "etl" / "data" / "raw" / "environment"
@@ -17,10 +19,24 @@ def timestamp_label(explicit: str | None) -> str:
     return datetime.now(UTC).strftime("%Y%m%d")
 
 
-def fetch_bytes(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": USER_AGENT})
-    with urlopen(request, timeout=180) as response:
-        return response.read()
+def fetch_bytes(url: str, *, attempts: int = 3) -> bytes:
+    last_error: requests.RequestException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.get(
+                url,
+                headers={"User-Agent": USER_AGENT},
+                timeout=180,
+            )
+            response.raise_for_status()
+            return response.content
+        except requests.RequestException as error:
+            last_error = error
+            if attempt < attempts:
+                time.sleep(2 ** (attempt - 1))
+
+    assert last_error is not None
+    raise last_error
 
 
 def sha256_bytes(data: bytes) -> str:

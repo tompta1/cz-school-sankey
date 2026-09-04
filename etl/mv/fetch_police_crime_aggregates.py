@@ -6,6 +6,7 @@ import csv
 import io
 import json
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from _common import RAW_ROOT, USER_AGENT, fetch_bytes, sha256_bytes, timestamp_label
@@ -35,6 +36,16 @@ def normalize_region_name(name: str) -> str:
     return value
 
 
+def parse_count(value: str) -> int:
+    try:
+        parsed = Decimal(value.strip())
+    except InvalidOperation as exc:
+        raise RuntimeError(f"Invalid police crime count: {value!r}") from exc
+    if parsed != parsed.to_integral_value():
+        raise RuntimeError(f"Police crime count is not an integer: {value!r}")
+    return int(parsed)
+
+
 def build_rows(csv_bytes: bytes, requested_years: set[int] | None) -> list[dict[str, object]]:
     text = csv_bytes.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
@@ -57,7 +68,7 @@ def build_rows(csv_bytes: bytes, requested_years: set[int] | None) -> list[dict[
                 "indicator_name": row["Ukazatel"],
                 "crime_class_code": row["TSKKC"],
                 "crime_class_name": row["Takticko statistická klasifikace kriminality Police ČR"],
-                "count_value": int(row["Hodnota"]),
+                "count_value": parse_count(row["Hodnota"]),
                 "source_url": SOURCE_URL,
             }
         )
