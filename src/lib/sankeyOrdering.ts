@@ -7,7 +7,15 @@ const NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES = new Set([
   'health_outpatient_region_group',
   'health_outpatient_specialty_group',
   'health_outpatient_provider_allocated_cost',
+  'mpo_optak_support_branch',
+  'mpo_optak_region_allocated',
+  'mpo_optak_recipient_allocated',
+  'mpo_optak_recipient_page',
+  'mzv_foreign_service_branch',
   'mzv_foreign_service_type_allocated',
+  'mzv_aid_branch',
+  'mzv_aid_country',
+  'mzv_aid_project',
 ]);
 
 export function normalizedValue(amountCzk: number, capacity: number | null, perUnit: boolean): number {

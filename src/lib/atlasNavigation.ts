@@ -39,3 +39,12 @@ export function backAtlasView(stack: AtlasDrilldownState[]): AtlasDrilldownState
 export function atlasBackLabel(stack: AtlasDrilldownState[], rootLabel: string): string {
   return stack.length > 1 ? stack.at(-2)!.label : rootLabel;
 }
+
+export function defaultAtlasYear(years: number[]): number | null {
+  if (years.includes(2025)) return 2025;
+  return [...years].sort((left, right) => left - right).at(-1) ?? null;
+}
+
+export function preserveAtlasViewForYear(stack: AtlasDrilldownState[]): AtlasDrilldownState[] {
+  return stack.map((view) => ({ ...view, offset: 0 }));
+}

@@ -296,36 +296,26 @@ button, select, input { font: inherit; }
   margin-bottom: 6px;
 }
 
-.reference-card__title a {
-  color: inherit;
+.reference-card__url {
+  display: block;
+  color: #7dd3fc;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
   text-decoration: none;
 }
 
-.reference-card__title a:hover {
+.reference-card__url:hover {
   text-decoration: underline;
 }
 
-.reference-card__text {
-  color: rgba(226,232,240,0.88);
-  font-size: 0.85rem;
-  line-height: 1.45;
-  margin-bottom: 8px;
-}
-
-.reference-card__meta {
-  color: rgba(148,163,184,0.82);
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
-.reference-note-list {
-  padding-left: 18px;
-  color: rgba(226,232,240,0.88);
-  font-size: 0.84rem;
-  line-height: 1.5;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.reference-card__key,
+.reference-card__missing-url {
+  margin-top: 7px;
+  color: rgba(148,163,184,0.72);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 /* ── Chart area ──────────────────────────────────────────── */

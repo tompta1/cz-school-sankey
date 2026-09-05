@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { atlasBackLabel, backAtlasView, pageAtlasView, pushAtlasView, type AtlasDrilldownState } from '../atlasNavigation';
+import {
+  atlasBackLabel,
+  backAtlasView,
+  defaultAtlasYear,
+  pageAtlasView,
+  preserveAtlasViewForYear,
+  pushAtlasView,
+  type AtlasDrilldownState,
+} from '../atlasNavigation';
 
 describe('atlasNavigation', () => {
   it('preserves the previous scoped view when paging the current drilldown', () => {
@@ -32,5 +40,23 @@ describe('atlasNavigation', () => {
 
     expect(backAtlasView(stack)).toEqual([{ scope: 'school', nodeId: 'founder:abc', label: 'Kraj', offset: 20 }]);
     expect(atlasBackLabel(stack, 'Sjednoceny Sankey')).toBe('Kraj');
+  });
+
+  it('defaults to 2025 and otherwise uses the newest advertised year', () => {
+    expect(defaultAtlasYear([2024, 2025, 2026])).toBe(2025);
+    expect(defaultAtlasYear([2023, 2024])).toBe(2024);
+    expect(defaultAtlasYear([])).toBeNull();
+  });
+
+  it('keeps semantic drilldown IDs but resets pagination when the year changes', () => {
+    const stack: AtlasDrilldownState[] = [
+      { scope: 'school', nodeId: 'founder:00063941', label: 'Praha 10', offset: 28 },
+      { scope: 'school', nodeId: 'school:600040925', label: 'Mateřská škola', offset: 0 },
+    ];
+
+    expect(preserveAtlasViewForYear(stack)).toEqual([
+      { ...stack[0], offset: 0 },
+      stack[1],
+    ]);
   });
 });

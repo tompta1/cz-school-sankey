@@ -335,6 +335,41 @@ describe('sankeyOrdering', () => {
     expect(normalizationGroup(branchLink)).toBe('mpo_support_recipient');
     expect(normalizationGroup(regionLink)).toBe('mpo_support_recipient');
     expect(normalizationGroup(recipientLink)).toBe('mpo_support_recipient');
+    const capacities = new Map([
+      ['mpo:optak:support', 100],
+      ['mpo:region:CZ020', 50],
+      ['mpo:recipient:12345678', 1],
+    ]);
+    expect(normalizationCapacity(branchLink, capacities, true)).toBeNull();
+    expect(normalizationCapacity(regionLink, capacities, true)).toBeNull();
+    expect(normalizationCapacity(recipientLink, capacities, true)).toBeNull();
+  });
+
+  it('keeps MZV post and project ratios out of comparative mode', () => {
+    const foreignServiceLink: SankeyLink = {
+      source: 'mzv:ministry:mzv',
+      target: 'mzv:foreign-service',
+      value: 100,
+      amountCzk: 100,
+      year: 2024,
+      flowType: 'mzv_foreign_service_branch',
+      basis: 'allocated',
+      certainty: 'observed',
+      sourceDataset: 'test',
+    };
+    const aidProjectLink: SankeyLink = {
+      ...foreignServiceLink,
+      source: 'mzv:country:development|Moldavsko',
+      target: 'mzv:project:development|example',
+      flowType: 'mzv_aid_project',
+    };
+    const capacities = new Map([
+      ['mzv:foreign-service', 120],
+      ['mzv:project:development|example', 1],
+    ]);
+
+    expect(normalizationCapacity(foreignServiceLink, capacities, true)).toBeNull();
+    expect(normalizationCapacity(aidProjectLink, capacities, true)).toBeNull();
   });
 
   it('normalizes only explicit MK support drilldowns', () => {

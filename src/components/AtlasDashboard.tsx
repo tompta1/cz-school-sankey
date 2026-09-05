@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { buildApiUrl, fetchJson } from '../lib/api';
-import { atlasBackLabel, backAtlasView, pageAtlasView, pushAtlasView, type AtlasDrilldownState } from '../lib/atlasNavigation';
+import {
+  atlasBackLabel,
+  backAtlasView,
+  defaultAtlasYear,
+  pageAtlasView,
+  preserveAtlasViewForYear,
+  pushAtlasView,
+  type AtlasDrilldownState,
+} from '../lib/atlasNavigation';
 import {
   EU_ALL_ID,
   FOUNDERS_KRAJ,
@@ -226,7 +234,7 @@ export function AtlasDashboard() {
         if (!active) return;
         const nextYears = response.years.map((row) => row.year);
         setYears(nextYears);
-        setSelectedYear((current) => current ?? (nextYears.includes(2024) ? 2024 : nextYears.at(-1)) ?? null);
+        setSelectedYear((current) => current ?? defaultAtlasYear(nextYears));
       })
       .catch((reason) => {
         if (!active) return;
@@ -311,6 +319,11 @@ export function AtlasDashboard() {
       })
       .catch((reason) => {
         if (controller.signal.aborted) return;
+        if (reason instanceof Error && reason.message === '404' && viewStack.length > 0) {
+          setViewStack((previous) => previous.slice(0, -1));
+          setError(`Vybraná vrstva není v roce ${selectedYear} dostupná. Zobrazuji nejbližší nadřazený pohled.`);
+          return;
+        }
         setGraph(null);
         setError(String(reason));
       })
@@ -705,7 +718,7 @@ function handleMvNodeClick(node: SankeyNode) {
                 className={`year-toggle-btn${year === selectedYear ? ' year-toggle-btn--active' : ''}`}
                 onClick={() => {
                   setSelectedYear(year);
-                  setViewStack([]);
+                  setViewStack((previous) => preserveAtlasViewForYear(previous));
                 }}
               >
                 {year}
@@ -715,7 +728,7 @@ function handleMvNodeClick(node: SankeyNode) {
               className={`year-toggle-btn${referenceOpen ? ' year-toggle-btn--active' : ''}`}
               onClick={() => setReferenceOpen((value) => !value)}
             >
-              Metodika
+              Zdroje
             </button>
             <button
               className="search-icon-btn"

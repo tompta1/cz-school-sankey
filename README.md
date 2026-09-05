@@ -1,622 +1,152 @@
-# Český rozpočtový atlas — Interaktivní Sankey vizualizace státního rozpočtu ČR
+# Kam šla moje daňová koruna?
 
-**Live:** [cz-school-sankey.vercel.app](https://cz-school-sankey.vercel.app)
+Interaktivní Sankey diagram českých veřejných výdajů. Sleduje peníze od státního rozpočtu přes resorty k programům, regionům a tam, kde existují otevřená data, až ke konkrétním institucím nebo příjemcům.
 
-An open-source, interactive Sankey diagram of the Czech state budget — tracking every major crown from the national treasury through fourteen ministry chapters down to individual schools, hospitals, farms, infrastructure projects, and aid recipients. Built for journalists, researchers, policy analysts, and curious citizens who want to understand where public money actually goes.
+**Aplikace:** [cz-school-sankey.vercel.app](https://cz-school-sankey.vercel.app)
 
----
+Výchozí rok je **2025**. Rok 2024 zůstává pro srovnání a pro oblasti, kde ještě není dostupný stejně podrobný rok 2025. Absolutní částky jsou primární pohled; srovnávací režim používá pro každou větev její vlastní označenou jednotku. Nepodložené poměry jsou `N/A`.
 
-## Co atlas zobrazuje / What the atlas shows
+## Co je kde
 
-The atlas covers the **unified Czech state budget** (`Státní rozpočet ČR`) for fiscal years **2024** and **2025** (coverage varies by chapter — see details below). Every flow in the diagram is sourced from a named, publicly available dataset. Amounts that cannot be directly observed are labelled as *inferred* and the methodology is documented in the reference panel next to the chart.
-
-The root view shows the flow `Stát → všechny resortní kapitoly → dílčí větve`. Clicking on any highlighted node drills into that chapter's own Sankey — revealing sub-branches, programmes, regions, or individual recipients depending on what open data exist for that ministry.
-
-### Chapters currently in the atlas
-
-| Chapter | Czech name | Drilldown depth | Years |
-|---|---|---|---|
-| **MŠMT** | Ministerstvo školství, mládeže a tělovýchovy | State → MŠMT → Region → Founder → School → Cost bucket | 2024, 2025 |
-| **MPSV** | Ministerstvo práce a sociálních věcí | State → MPSV → Benefit group | 2024 fully; 2025 budget only |
-| **MV** | Ministerstvo vnitra | State → MV → Police / HZS → Region → Crime class | 2024 fully; 2025 budget only |
-| **MSp** | Ministerstvo spravedlnosti | State → MSp → Courts / Prison / Prosecutors | 2024 fully; 2025 budget only |
-| **MD** | Ministerstvo dopravy + SFDI | State → MD → Rail / Road vignette / Road toll / SFDI investor → Project | 2024, 2025 |
-| **MZe** | Ministerstvo zemědělství + SZIF | State → MZe → Subsidy family / Admin → Subsidy recipient | 2024 fully; 2025 budget only |
-| **MŽP** | Ministerstvo životního prostředí + SFŽP | State → MŽP → SFŽP support / Admin → Support recipient | 2024, 2025 |
-| **MMR** | Ministerstvo pro místní rozvoj | State → MMR → IROP regional / Housing → Region → Recipient | 2024, 2025 |
-| **MPO** | Ministerstvo průmyslu a obchodu | State → MPO → OP TAK support → Region → Recipient | 2024, 2025 |
-| **MK** | Ministerstvo kultury | State → MK → Heritage (PZAD) / Culture → Programme → Region / Recipient | 2024 fully; 2025 budget only |
-| **MZV** | Ministerstvo zahraničních věcí | State → MZV → Foreign service / Development aid / Humanitarian aid → Country → Project | 2024 fully; 2025 budget only |
-| **MO** | Ministerstvo obrany | State → MO → Program financing / Personnel / Other operating | 2024, 2025 |
-| **MF** | Ministerstvo financí | State → MF → Tax admin (GFŘ) / Customs (GŘC) / Ministry core | 2024, 2025 |
-| **MZ** | Ministerstvo zdravotnictví | State → MZ → Hospitals by owner / ZZS / Public health / Outpatient | 2024, 2025 |
-
----
-
-## Datové zdroje / Data sources
-
-Every node and link in the atlas is backed by one of the sources below. The in-app reference panel shows exactly which sources are active for the currently displayed graph.
-
-### Státní rozpočet a Monitor MF
-
-**Souhrnný státní závěrečný účet MF, sešit G** provides the independently reported state-budget envelope. The ETL reads the realized total revenue and expenditure plus the four top-level revenue classes from tables 1 and 2a, and 14 ministry chapter totals from table 7. The 2024 envelope is CZK 2.23679077748 trillion and the 2025 envelope is CZK 2.37177456284 trillion. Revenue plus the reported deficit is reconciled to expenditure before publication.
-
-**Monitor státní pokladny** (`monitor.statnipokladna.gov.cz`) is the primary budget data source for the top layer of almost every ministry chapter. It provides annual realised expenditure (`vydaje`) and cost (`naklady`) at the level of individual state-budget chapters and their subordinate organisational units, identified by their IČO. The atlas queries the `/api/ukazatele` endpoint for each relevant IČO and uses the December period snapshot (`YY12`) as the final annual figure.
-
-The root chart is arithmetically balanced to the final-account envelope, but not every visible root is a clean state-budget chapter. MD includes SFDI, MZe includes SZIF, MŽP includes SFŽP, and the ZZS branch contains regional emergency-service costs. The reconciliation workflow reports those components separately because they may overlap chapter transfers; consequently, `state:other` is a balancing residual rather than an independently observed sum of omitted chapters.
-
-Ministries sourced directly from Monitor MF:
-
-| Ministry | IČOs queried |
-|---|---|
-| MD — Ministerstvo dopravy | `66003008` |
-| SFDI — Státní fond dopravní infrastruktury | `70856508` |
-| MZe — Ministerstvo zemědělství | `00020478` |
-| SZIF — Státní zemědělský intervenční fond (admin) | `48133981` |
-| MŽP — Ministerstvo životního prostředí | `00164801` |
-| SFŽP — Státní fond životního prostředí | `00020729` |
-| MMR — Ministerstvo pro místní rozvoj | `66002222` |
-| MPO — Ministerstvo průmyslu a obchodu | `47609109` |
-| MK — Ministerstvo kultury | `00023671` |
-| MZV — Ministerstvo zahraničních věcí | `45769851` |
-| MO — Ministerstvo obrany | `60162694` (+ several subordinate units) |
-| MF — Ministerstvo financí | `00006947` |
-| GFŘ — Generální finanční ředitelství | `72080043` |
-| GŘC — Generální ředitelství cel | `71214011` |
-| MZ — Ministerstvo zdravotnictví | `00024341` |
-
----
-
-### Školství (MŠMT)
-
-**MŠMT „Podrobný rozpis rozpočtu" XLSX** — published annually at `msmt.cz`. One row per school with per-tariff-band pedagogical salary allocations, non-pedagogical salaries, ONIV (other non-investment expenditure), and operational grants. The ETL summates salary columns across school types (MŠ, ZŠ, ŠD, SŠ, KN, VOŠ, ZUŠ) into two buckets: pedagogical wages and non-pedagogical wages.
-
-**DotaceEU „Seznam operací"** — EU structural-fund project list from `dotaceeu.cz`, matched to schools by IČO. Projects with no matching school IČO are excluded.
-
-**ARES** (Administrativní registr ekonomických subjektů) — REST API for resolving official legal names, municipality, and region for every IČO. Results are cached locally.
-
-**Monitor MF: FIN 2-12 M** — realized own-budget support from municipalities and regions, restricted to education paragraphs and items 5331/6351. Pass-through items 5336/6356 are excluded because they can contain MŠMT money already represented by the direct-school flow. Founder totals are allocated to individual schools by their share of the MŠMT allocation and are therefore labelled inferred.
-
-**Official founder budget annexes** provide a source-priority replacement where a complete founder-year schedule is available. Current coverage is Praha 10 in 2024 and 2025, all 153 Moravian-Silesian Region registry schools in 2024, and 135 Prague HMP registry schools with a stated operating component in 2025: 186 source-backed schools in 2024 and 168 in 2025. Prague's own operating component `000000091` is reconciled against direct education component `000033353` and the latter is excluded to avoid duplicating MŠMT funding. The companion workbook cross-checks all 160 HMP-founded registry schools, but the 25 Prague art schools have no `000000091` line. They remain region-founded and retain the nationwide inferred fallback rather than being assigned a false zero. Later targeted grants are not folded in without a complete recipient schedule.
-
-**Remaining founder gap:** the audit queue still contains 905 multi-school founders needing a recipient schedule for 2024 and 907 for 2025. Another 64 founder rows in 2024 and 66 in 2025 have no usable FIN 2-12 M education line and need a direct founder source. The largest unresolved schedules are the regional authorities (including Jihomoravský, Jihočeský and Středočeský kraj), Brno and Ostrava; HMP remains unresolved for 2024 and Moravskoslezský kraj for 2025. Eighteen 2024 school rows still lack a founder IČO, while 2025 has none. Art schools remain assigned to their registered regional founder even when an operating annex omits them.
-
-**Monitor MF: VYKZZ** — realized per-school costs from public-sector income statements. School detail separates materials, energy, repairs and maintenance, services (including rent), personnel, depreciation, and other net costs. Rent cannot be isolated from account 518 in the national extract. Rare negative accounting adjustments can make the displayed positive categories slightly exceed the reported net total.
-
-**Years:** 2024, 2025.
-
-**Per-unit metric:** **Kč/žák/rok** — annual expenditure per pupil. Pupil counts come from the MŠMT XLSX itself (capacity field) or from the school entity register.
-
----
-
-### Public-finance boundary
-
-The atlas distinguishes collection from legal budget ownership. For the main shared taxes in 2025, municipalities received 24.16% and regions 9.45% under the tax-assignment system; these are local-budget revenues even though the Financial Administration collects them centrally. Local fees are therefore only a small part of local revenue, not the whole of it. See [MF's 2025 budget guide](https://mf.gov.cz/assets/attachments/2025-03-27_Statni-rozpocet-2025-v-kostce.pdf).
-
-Public health insurance is a separate public-finance system funded primarily by insurance contributions. The state budget contributes for state-insured people but does not finance the entire system; the realized 2025 state payment was CZK 153.7 billion. See the [MF 2025 final-account report](https://mf.gov.cz/assets/attachments/2026-04-30_C-Zprava-o-vysledcich-hospodareni-statniho-rozpoctu.pdf). ZZS is shown as mixed financing because its costs combine public insurance, state-budget, and regional-budget sources without a reliable open payer split.
-
-SFDI, SFPI, SFŽP, and SZIF also have budgets outside the state-budget chapter envelope, although they receive state transfers and other public revenues. Their gross spending must not be deducted wholesale from the state-budget residual. Separating those fund sources is the next top-level reconciliation task.
-
----
-
-### Sociální věci (MPSV)
-
-**MPSV kapitolní agregace** — automatically parsed annual breakdown of the MPSV chapter into four blocks: důchody (pensions), ostatní dávky (other benefits), péče (care services), and správa (administration). Sourced from the official MF final-account chapter tables.
-
-**ČSSZ a MPSV: počty příjemců** — annual or December-state recipient counts for each benefit type, sourced from ČSSZ open data (`data.cssz.cz`) and MPSV publications.
-
-**Years:** 2024, 2025 budget data; recipient denominators are currently 2024-only.
-
-**Per-unit metrics (by node):**
-- Důchody → **Kč/příjemce důchodu/rok**
-- Podpora v nezaměstnanosti → **Kč/příjemce podpory/rok**
-- Příspěvek na péči → **Kč/příjemce příspěvku/rok**
-- Náhradní výživné → **Kč/příjemce dávky/rok**
-- Mixed or administration nodes → no per-unit metric (labelled as non-normalizable)
-
----
-
-### Bezpečnost a vnitro (MV)
-
-**MV kapitolní bezpečnostní agregace** — annual breakdown of the MV chapter into: Policie ČR, Hasičský záchranný sbor (HZS), MV social benefits, and residual administration. Derived from final budget accounts.
-
-**Policie ČR veřejné kriminální statistiky** — registered crime acts (`registrované skutky`) broken down by region and crime class. Used as the denominator for the police branch and as the basis for regional drilldown.
-
-**HZS statistická ročenka zásahů** — annual HZS intervention statistics by region. Used as the denominator for the fire-rescue branch.
-
-**Years:** 2024, 2025 budget data; police and HZS activity denominators are currently 2024-only.
-
-**Per-unit metrics (by node):**
-- Policie ČR → **Kč/registrovaný skutek** (region- and crime-class-level)
-- HZS → **Kč/zásah** (region-level)
-- MV social / administration nodes → no per-unit metric
-
----
-
-### Justice (MSp)
-
-**MSp kapitolní justiční agregace** — breakdown of the Ministry of Justice chapter into: soudy (courts), Vězeňská služba (prison service), státní zastupitelství (state prosecutors), and residual blocks. Sourced from the official budget final accounts.
-
-**Soudní a vězeňské výkonové statistiky** — annual statistics on resolved court cases and average daily inmate population, published in Ministry of Justice annual reports.
-
-**Years:** 2024 fully; 2025 currently covers budget aggregates only.
-
-**Per-unit metrics (by node):**
-- Soudy → **Kč/vyřízenou věc**
-- Vězeňská služba → **Kč/vězněnou osobu/rok**
-- Prosecutors and residual nodes → no per-unit metric
-
----
-
-### Doprava (MD + SFDI)
-
-**Monitor MF: MD a SFDI** — annual realised expenditure of Ministerstvo dopravy (ICO `66003008`) and Státní fond dopravní infrastruktury (ICO `70856508`).
-
-**SFDI projektové čerpání** — open CSV of SFDI-funded infrastructure projects with investor, project name, and drawn amount, published at `kz.sfdi.cz`. Used to build the SFDI investor → project drilldown.
-
-**Dopravní výkonové proxy metriky** — three separate annual series:
-- Rail: annual passenger count in rail public transport (source: SŽDC/Správa železnic annual report)
-- Vignette: annual count of sold electronic motorway vignettes (source: CENDIS / SDA annual publication)
-- Toll: annual count of registered toll-paying heavy vehicles (source: CCS / toll operator reports)
-
-**Years:** 2024, 2025.
-
-**Per-unit metrics (by node):**
-- Železnice → **Kč/cestujícího**
-- Dálnice — osobní auta → **Kč/prodanou dálniční známku**
-- Dálnice — těžká vozidla → **Kč/zpoplatněné vozidlo**
-- SFDI investor / projekt → **Kč/akci** (project count)
-
----
-
-### Zemědělství (MZe + SZIF)
-
-**Monitor MF: MZe a SZIF správa** — annual expenditure of Ministerstvo zemědělství (IČO `00020478`) and the administrative costs of SZIF (IČO `48133981`). Forms the administrative layer of the agriculture branch.
-
-**SZIF seznamy příjemců dotací** — open CSV recipient lists for EU-funded and national agricultural subsidies, published at `szif.gov.cz`. Each row contains recipient name, IČO, subsidy measure, and paid amount. The atlas groups measures into *subsidy families* (area-based, livestock, investment, other) and uses them for the recipient-level drilldown.
-
-**MZe pLPIS výměra uživatelů** — aggregated LPIS land-block area per user from a dated public LPIS export, cross-referenced with the WFS layer to resolve user identities. Used exclusively as the denominator for the area-family subsidy branch. This is the best available public hectare proxy but is not an official closed annual statement of supported hectares.
-
-**Years:** 2024 fully; 2025 currently covers budget entities only.
-
-**Per-unit metrics (by node):**
-- Plošné dotace (area-family) → **Kč/ha** (LPIS-matched hectares)
-- Recipient dotace (other families) → **Kč/příjemce dotace** (unique SZIF recipient count)
-- Admin nodes → no per-unit metric
-
----
-
-### Životní prostředí (MŽP + SFŽP)
-
-**Monitor MF: MŽP a SFŽP** — annual expenditure of Ministerstvo životního prostředí (IČO `00164801`) and Státní fond životního prostředí (IČO `00020729`).
-
-**SFŽP aktivní registr podpor** — continuously updated register of active SFŽP grants published at `otevrenadata.sfzp.cz`. Each row contains recipient name, municipality, programme, grant amount, paid amount, and decision date. The atlas creates an annual snapshot based on the decision year and uses it for the support-family → programme → recipient drilldown.
-
-**Years:** 2024, 2025.
-
-**Per-unit metric:** **Kč/příjemce podpory** — unique recipient count from the SFŽP registry. Applied to SFŽP support branches; the MŽP administrative residual does not carry a per-unit metric.
-
----
-
-### Místní rozvoj (MMR + IROP)
-
-**MMR otevřené rozpočtové ukazatele** — official CSV of MMR budget indicators by expenditure block, published as open data at `mmr.gov.cz`. Used to split the MMR chapter into regional development (IROP), housing, and residual administration.
-
-**DotaceEU / IROP: seznam operací příjemců** — monthly workbook of IROP-funded projects with project name, recipient, IČO, region, and allocated eligible expenditure, published at `dotaceeu.cz`. The atlas uses December snapshots. Enables the regional → recipient drilldown inside the IROP branch.
-
-**Years:** 2024, 2025.
-
-**Per-unit metric:** **Kč/příjemce podpory** — unique recipient IČO count from the IROP operations workbook. Applied to the IROP regional and housing branches.
-
----
-
-### Průmysl a obchod (MPO + OP TAK)
-
-**Monitor MF: MPO** — annual expenditure of Ministerstvo průmyslu a obchodu (IČO `47609109`).
-
-**DotaceEU / OP TAK: seznam operací příjemců** — monthly workbook of OP TAK (Operational Programme Technologies and Applications for Competitiveness, 2021–2027) projects with project name, recipient, IČO, region, and allocated eligible expenditure. December snapshots. Enables the region → recipient drilldown inside the OP TAK support branch.
-
-**Years:** 2024, 2025.
-
-**Per-unit metric:** **Kč/příjemce podpory** — unique recipient IČO count from the OP TAK operations workbook. Applied to the OP TAK support branch.
-
----
-
-### Kultura (MK)
-
-**Monitor MF: MK** — annual expenditure of Ministerstvo kultury (IČO `00023671`).
-
-**MK závěrečný účet kapitoly 334** — manually curated selection of large budget line items from the official MK final account, specifically film incentives (`filmové pobídky`) and church restitution support (`církevní podpora`). These are large unmixed blocks that would otherwise remain hidden in the residual.
-
-**MK zveřejněné výsledky dotačních programů** — recipient-level results of selected MK grant programmes, in particular:
-- *Kulturní aktivity pro spolky v muzejnictví* (culture-museums programme)
-- *Kulturní aktivity v oblasti umění* and related cultural activity grants
-Published as result lists after each grant round.
-
-**MK PZAD souhrnné tabulky** — official summary tables of the Programme for the Rescue of Architectural Heritage (Program záchrany architektonického dědictví) with allocation and recipient counts by region. Published as a summary PDF after the grant round. Enables the regional drilldown inside the PZAD heritage branch without requiring a recipient-level breakdown that MK does not openly publish.
-
-**Years:** 2024 fully; 2025 currently covers budget entities only.
-
-**Per-unit metric:** **Kč/příjemce podpory** — applied to programme branches where recipient-level data are published (culture-museums, PZAD regional). Film incentive and church restitution nodes do not carry a per-unit metric.
-
----
-
-### Zahraniční věci (MZV)
-
-**Monitor MF: MZV** — annual expenditure of Ministerstvo zahraničních věcí (IČO `45769851`).
-
-**MZV Česká diplomacie 2024** — official annual publication of the Czech diplomatic network, available as a PDF at `mzv.gov.cz`. The ETL extracts the total count of foreign posts (`zastupitelské úřady a úřady v zahraničí`) as the denominator for the foreign-service branch.
-
-**MZV a ČRA výroční přehledy rozvojových a humanitárních projektů** — official annual workbooks of Czech development cooperation (ODA) and humanitarian aid projects, published by MZV and the Czech Development Agency (ČRA). Each row contains country, sector, recipient organisation, project name, planned amount, and actual drawn amount. The atlas separates the development and humanitarian branches and enables the country → project drilldown for both.
-
-**Years:** 2024 fully; 2025 currently covers budget entities only.
-
-**Per-unit metrics (by node):**
-- Zahraniční služba → **Kč/zastupitelský úřad** (total foreign post count from Česká diplomacie 2024)
-- Rozvojová pomoc → **Kč/projekt** (project count from ODA workbook)
-- Humanitární pomoc → **Kč/projekt** (project count from humanitarian workbook)
-
----
-
-### Obrana (MO)
-
-**Monitor MF: MO** — annual expenditure of Ministerstvo obrany. Due to the organisational structure of the defence chapter, the ETL aggregates expenditure across the ministry and its subordinate units.
-
-**MO Fakta a trendy 2025** — official publication of the Ministry of Defence (`mocr.mo.gov.cz`) containing a multi-year summary table of three expenditure categories: Programové financování a modernizace (programme financing and modernisation), Osobní mandatorní výdaje (mandatory personnel expenditure), and Ostatní běžné výdaje (other current expenditure). The category amounts are proportionally scaled to the total Monitor MF volume to ensure consistency.
-
-**MO počty vojáků z povolání** — official table of professional soldier (`voják z povolání`) headcounts from the same Fakta a trendy 2025 publication. Used as the denominator for all defence nodes.
-
-**Years:** 2024, 2025.
-
-**Per-unit metric:** **Kč/vojáka z povolání/rok** — applied uniformly to the MO ministry node and all three category branches. This is the most legible public denominator available; MO does not publish open operational performance data that would allow a more granular unit.
-
----
-
-### Finance (MF)
-
-**Monitor MF: MF, GFŘ, GŘC** — annual expenditure of three separate state-budget organisational units that together constitute the Ministry of Finance chapter:
-- Ministerstvo financí — vlastní aparát (IČO `00006947`): the ministry proper, ~2.9 billion CZK in 2024
-- Generální finanční ředitelství / Finanční správa (IČO `72080043`): tax administration body overseeing ~14 000 staff, ~12.7 billion CZK in 2024
-- Generální ředitelství cel / Celní správa (IČO `71214011`): customs administration, ~6.4 billion CZK in 2024
-
-All three are queried individually from Monitor MF, giving directly observed branch amounts — no scaling or estimation is required, unlike ministries with a single reporting IČO.
-
-**Finanční správa ČR výroční zpráva — počet daňových subjektů** — annual count of registered tax entities (`registrované daňové subjekty`) from the Financial Administration annual report, published at `financnisprava.cz`. Approximately 3.617 million in 2024.
-
-**Years:** 2024, 2025.
-
-**Per-unit metric:** **Kč/daňový subjekt** — applied to the MF ministry node and all three sub-branches. The registered tax entity count is the most legible and consistently published public denominator for tax administration; it is available annually in the Financial Administration annual report.
-
----
-
-### Zdravotnictví (MZ)
-
-**Monitor MF: MZ a rozpočtové entity hygieny** — annual expenditure of Ministerstvo zdravotnictví (IČO `00024341`) and subordinate entities including regional hygiene stations (KHS) and national public health institutes.
-
-**Monitor MF: zdravotní pojišťovny** — annual financial statements of public health insurers queried from Monitor MF by their IČOs. Public insurance is displayed as a separate top-level source rather than as a child of the state budget.
-
-**NZIP A038: zdravotnická záchranná služba** — annual aggregated performance data for the Emergency Medical Service (ZZS) from the National Health Information Portal (`nzip.cz`), including departures, patients, events, and emergency calls. Departures are used as the denominator for the ZZS branch.
-
-**ÚZIS NRHZS: vykázané výkony podle IČO** — annual publicly insured procedure quantities at provider-IČO level. The atlas sums `mnozstvi` for the hospital denominator. It deliberately does not sum `pocet_pacientu` or `pocet_kontaktu` as unique people because those fields are unique only inside each procedure-and-diagnosis row.
-
-**ČSÚ ZDR02: financování zdravotnictví** — National Health Accounts dataset from the Czech Statistical Office (`data.csu.gov.cz`), covering healthcare financing by provider type and financing type, including the outpatient sector. Used for the ambulatory / outpatient branch aggregate where provider-level finance data are not available.
-
-**ÚZIS Monitor: výkazy zdravotnických zařízení** — annual financial statements of individual healthcare providers (IČO-level) from the Institute of Health Information and Statistics (ÚZIS), accessed via Monitor MF. Used to build the hospital owner-type (region / municipality / state / unverified) breakdown and the ZZS branch.
-
-**Years:** 2024, 2025.
-
-**Per-unit metrics (by node):**
-- Nemocnice → **Kč/vykázaný výkon** for 2024 at owner, region and provider levels. This is an activity-intensity proxy, not the price of one treatment: procedures differ in complexity and the numerator is total institutional cost while the denominator covers publicly insured reported procedures. Among the 79 providers with a displayed Monitor cost numerator, the current denominator covers 74 providers and 99.67% of hospital costs; unmatched providers remain `N/A` individually. Closed 2025 claims are not available, so 2025 remains `N/A`.
-- ZZS → **Kč/výjezd ZZS** at the national root. A038 currently closes at 2024, so the 2025 finance view transparently reuses the latest 2024 departure count and lower regional/provider links remain `N/A`.
-- Ambulantní péče → no per-unit metric yet. The new ÚZIS 2024 annual ambulatory-care file has district/report-level visits and patients, but it does not map cleanly to the five ČSÚ ZDR02 provider subtypes or to allocated provider costs.
-- Veřejné zdravotnictví → no per-unit metric
-
----
-
-## Architektura / Architecture
-
-```
-Browser (React + ECharts)
-        │
-        ▼
-GitHub Pages  ───── static bundle ─────▶  Vercel Edge Functions (/api/atlas/*)
-                                                │
-                                                ▼
-                                       Neon Postgres (PostgreSQL 17)
-                                       ┌──────────────────────────┐
-                                       │  meta.*  – ETL lineage   │
-                                       │  raw.*   – ingested data  │
-                                       │  core.*  – normalised     │
-                                       │  mart.*  – query-ready    │
-                                       └──────────────────────────┘
-                                                ▲
-                                        GitHub Actions ETL
-```
-
-- **Frontend**: React 19 + TypeScript, ECharts Sankey component, served as a static bundle from GitHub Pages.
-- **API**: Vercel serverless functions (`api/atlas/[resource].ts`) — read-only, one function per ministry resource.
-- **Database**: Neon serverless PostgreSQL 17 hosted in `aws-eu-central-1`. Four schemas: `meta` (ETL lineage and dataset releases), `raw` (ingested source data), `core` (normalised shared entities), `mart` (denormalised latest views consumed by the API).
-- **ETL**: Python 3.11+ scripts in `etl/`, one subdirectory per domain. Each domain has a `fetch_*.py` (download) and is loaded via a shared `load_*_raw.py` loader that registers dataset releases in `meta.dataset_release`.
-
-### Database schema conventions
-
-Every raw table follows the same pattern:
-
-```sql
-create table raw.<domain>_<entity> (
-  raw_id             bigserial primary key,
-  dataset_release_id bigint references meta.dataset_release,
-  reporting_year     integer,
-  -- domain-specific columns --
-  payload            jsonb,          -- full source row as JSON
-  loaded_at          timestamptz
-);
-
-create or replace view mart.<domain>_<entity>_latest as
-select distinct on (reporting_year, <natural_key>)
-  ...
-from raw.<domain>_<entity> r
-join meta.dataset_release d using (dataset_release_id)
-order by reporting_year, <natural_key>, d.snapshot_label desc, r.raw_id desc;
-```
-
-This `distinct on` pattern ensures that re-running an ETL load always reflects the latest snapshot without requiring destructive deletes of historical data.
-
----
-
-## ETL pipeline
-
-```
-etl/
-├── mf/                         # Ministerstvo financí
-│   ├── fetch_budget_entities.py    # Monitor MF → 3 IČOs (MF, GFŘ, GŘC)
-│   └── fetch_activity_metrics.py   # Finanční správa VZ → tax subject count
-├── mo/                         # Ministerstvo obrany
-│   ├── fetch_budget_entities.py    # Monitor MF → MO entities
-│   ├── fetch_budget_aggregates.py  # PDF: Fakta a trendy 2025 → category amounts
-│   └── fetch_personnel_metrics.py  # PDF: Fakta a trendy 2025 → soldier count
-├── mzv/                        # Ministerstvo zahraničních věcí
-│   ├── fetch_budget_entities.py    # Monitor MF → MZV
-│   ├── fetch_diplomatic_metrics.py # PDF: Česká diplomacie 2024 → post count
-│   └── fetch_aid_operations.py     # XLSX: ODA + humanitarian project workbooks
-├── mk/                         # Ministerstvo kultury
-│   ├── fetch_budget_entities.py
-│   ├── fetch_budget_aggregates.py  # PDF: závěrečný účet kap. 334
-│   ├── fetch_support_awards.py     # XLSX/web: dotační výsledkové listy
-│   └── fetch_region_metrics.py     # PDF: PZAD souhrnné tabulky
-├── mpo/                        # Ministerstvo průmyslu a obchodu
-│   ├── fetch_budget_entities.py
-│   └── fetch_optak_operations.py   # XLSX: DotaceEU OP TAK seznam operací
-├── mmr/                        # Ministerstvo pro místní rozvoj
-│   ├── fetch_budget_aggregates.py  # CSV: MMR otevřená data
-│   └── fetch_irop_operations.py    # XLSX: DotaceEU IROP seznam operací
-├── environment/                # MŽP + SFŽP
-│   ├── fetch_budget_entities.py
-│   └── fetch_sfzp_supports.py      # API: SFŽP aktivní registr podpor
-├── agriculture/                # MZe + SZIF
-│   ├── fetch_budget_entities.py
-│   ├── fetch_szif_payments.py      # CSV: SZIF seznamy příjemců
-│   └── fetch_lpis_user_area.py     # WFS/LPIS: výměra uživatelů
-├── transport/                  # MD + SFDI
-│   ├── fetch_budget_entities.py
-│   ├── fetch_sfdi_projects.py      # CSV: SFDI projektové čerpání
-│   └── fetch_activity_metrics.py   # Various: rail/vignette/toll metrics
-├── mv/                         # Ministerstvo vnitra
-│   ├── fetch_budget_aggregates.py
-│   ├── fetch_police_crime.py       # CSV: Policie ČR kriminální statistiky
-│   └── fetch_fire_rescue.py        # PDF/CSV: HZS ročenka zásahů
-├── justice/                    # Ministerstvo spravedlnosti
-│   ├── fetch_budget_aggregates.py
-│   └── fetch_activity_aggregates.py
-├── social/                     # MPSV
-│   ├── fetch_mpsv_aggregates.py
-│   └── fetch_recipient_metrics.py  # ČSSZ open data
-├── health/                     # MZ + pojišťovny
-│   ├── fetch_monitor_indicators.py # Monitor MF: zdravotní entity
-│   ├── fetch_provider_sites.py     # NRPZS: registr poskytovatelů
-│   ├── fetch_claims_*.py           # VZP/pojišťovny: výkazy péče
-│   ├── fetch_financing_aggregates.py  # ČSÚ ZDR02
-│   └── fetch_zzs_activity.py       # NZIP A038
-├── load_mf_raw.py
-├── load_mo_raw.py
-├── load_mzv_raw.py
-├── load_mk_raw.py
-├── load_mpo_raw.py
-├── load_mmr_raw.py
-├── load_environment_raw.py
-├── load_agriculture_raw.py
-├── load_transport_raw.py
-├── load_mv_raw.py
-├── load_justice_raw.py
-├── load_social_raw.py
-└── load_health_raw.py
-```
-
-### Running a domain ETL locally
-
-```bash
-# Example: MF (Ministerstvo financí)
-cd etl/mf
-python3 fetch_budget_entities.py --year 2024
-python3 fetch_activity_metrics.py --year 2024
-cd ../..
-python3 etl/load_mf_raw.py --database-url "$DATABASE_URL"
-
-# Example: MO (Ministerstvo obrany)
-cd etl/mo
-python3 fetch_budget_entities.py --year 2024 --year 2025
-python3 fetch_budget_aggregates.py --year 2024 --year 2025
-python3 fetch_personnel_metrics.py --year 2024 --year 2025
-cd ../..
-python3 etl/load_mo_raw.py --database-url "$DATABASE_URL"
-```
-
-The Neon CLI is the recommended way to obtain the connection string in CI:
-
-```bash
-npx neonctl connection-string --project-id <project-id> | \
-  xargs -I{} python3 etl/load_mf_raw.py --database-url {}
-```
-
----
-
-## Srovnávací metriky / Per-unit metrics
-
-Toggling **"Na jednotku"** in the chart switches all node weights and link widths from absolute CZK amounts to a normalised per-unit value, enabling meaningful cross-ministry comparison. The denominator used for each branch is shown in the in-app reference panel.
-
-| Metric | Denominator | Applies to |
+| Cesta | Obsah | Proč existuje |
 |---|---|---|
-| Kč/žák/rok | Pupil count (MŠMT XLSX) | All school-finance flows |
-| Kč/příjemce důchodu/rok | Pension recipient count (ČSSZ) | Pensions branch |
-| Kč/příjemce podpory/rok | Unemployment benefit recipients | Unemployment branch |
-| Kč/příjemce příspěvku/rok | Care-allowance recipients | Care allowance branch |
-| Kč/příjemce dávky/rok | Substitute alimony recipients | Substitute alimony branch |
-| Kč/registrovaný skutek | Registered crime acts (Policie ČR) | Police branch & regional drilldown |
-| Kč/zásah | HZS interventions | Fire-rescue branch & regional drilldown |
-| Kč/vyřízenou věc | Resolved court cases (MSp statistics) | Courts branch |
-| Kč/vězněnou osobu/rok | Average daily inmate population | Prison service branch |
-| Kč/cestujícího | Rail passengers (Správa železnic) | Rail infrastructure branch |
-| Kč/prodanou dálniční známku | Annual vignette sales | Road vignette branch |
-| Kč/zpoplatněné vozidlo | Toll-registered heavy vehicles | Road toll branch |
-| Kč/akci | SFDI project count | SFDI investor / project drilldown |
-| Kč/příjemce dotace | Unique SZIF recipients | Agriculture subsidy branches |
-| Kč/ha | LPIS-matched hectares (pLPIS) | Area-based subsidy branch |
-| Kč/příjemce podpory | Unique SFŽP recipient count | SFŽP support branches |
-| Kč/příjemce podpory | Unique IROP recipient IČO count | MMR IROP branches |
-| Kč/příjemce podpory | Unique OP TAK recipient IČO count | MPO OP TAK branch |
-| Kč/příjemce podpory | Unique MK grant recipient count | MK programme branches |
-| Kč/zastupitelský úřad | Foreign post count (Česká diplomacie 2024) | MZV foreign service branch |
-| Kč/projekt | ODA / humanitarian project count (MZV/ČRA workbooks) | MZV aid branches |
-| Kč/vojáka z povolání/rok | Professional soldier headcount (MO Fakta a trendy 2025) | All MO branches |
-| Kč/daňový subjekt | Registered tax entity count (Finanční správa VZ) | All MF branches |
+| `src/` | React/Vite aplikace, Sankey graf a klientské řazení | Uživatelské rozhraní |
+| `api/` | Vercel read-only API nad mart vrstvou | Malé odpovědi pro jednotlivé drilldowny |
+| `etl/` | Python fetchery, loadery a transformace po doménách | Opakovatelný sběr a publikace dat |
+| `etl/data/raw/` | Sledované malé snapshoty a lokální zdrojové soubory | Reprodukovatelnost bez ukládání velkých upstreamů do Gitu |
+| `db/` | PostgreSQL schéma, migrace a lokální nástroje | Neon warehouse `meta`, `raw`, `core`, `mart` |
+| `.github/workflows/` | CI, ETL, deploy a smoke testy | Bezobslužný produkční tok |
+| `scripts/` | DQ, smoke a lokální DB utility | Ověření produkce a reconciliation |
+| [`TODO.md`](TODO.md) | Prioritizované chyby a datové mezery | Jediné místo pro otevřený backlog |
 
-Flows for which no defensible per-unit denominator exists (mixed administrative residuals, inferred synthetic links) are excluded from normalisation and rendered at their absolute CZK weight when per-unit mode is active.
+## Pokrytí
 
----
+| Doména | Interní kód | Detail | Dostupné roky |
+|---|---|---|---|
+| Školství | `school` | kraj → zřizovatel → škola → náklad | 2024, 2025 |
+| Zdraví | `health` | nemocnice, ZZS, veřejné zdraví, ambulance | 2024, 2025; výkony nemocnic do 2024 |
+| Sociální věci | `social` | skupiny dávek | rozpočet 2024–2025; příjemci hlavně 2024 |
+| Spravedlnost | `justice` | soudy, vězeňství, zastupitelství | rozpočet 2024–2025; výkon hlavně 2024 |
+| Zemědělství | `agriculture` | typ podpory → příjemce | rozpočet 2024–2025; detail hlavně 2024 |
+| Životní prostředí | `environment` | SFŽP program → příjemce | 2024, 2025 |
+| Regionální rozvoj | `mmr` / `regions` | IROP → kraj → příjemce | 2024, 2025 |
+| Průmysl a obchod | `mpo` / `business` | OP TAK → kraj → příjemce | 2024, 2025 |
+| Kultura | `mk` / `culture` | vybrané programy → kraj/příjemce | rozpočet 2024–2025; detail hlavně 2024 |
+| Zahraničí | `mzv` / `foreign` | služba, pomoc → země → projekt | rozpočet 2024–2025; detail hlavně 2024 |
+| Doprava | `transport` | druh infrastruktury → investor → akce | 2024, 2025 |
+| Vnitro | `mv` / `internal` | Policie, HZS → kraj | rozpočet 2024–2025; výkon hlavně 2024 |
+| Finance | `mf` / `finance` | MF, GFŘ, GŘC | 2024, 2025 |
+| Obrana | `mo` / `defense` | programové, osobní a běžné výdaje | 2024, 2025 |
 
-## Vyhledávání / Search
+## Datové zdroje
 
-The search bar at the top of the atlas supports full-text, diacritic-insensitive search across:
-- All 8 000+ school entities (by name or IČO)
-- All health providers in the ÚZIS / Monitor MF directory (by name or IČO)
+Aplikace v panelu **Zdroje** ukazuje odkazy použité v právě otevřeném grafu. Hlavní upstreamy jsou:
 
-Selecting a result navigates directly to that entity's drilldown view regardless of the current atlas level.
+| Oblast | Co používáme | URL |
+|---|---|---|
+| Státní rozpočet | závěrečný účet MF, sešit G | [mf.gov.cz](https://mf.gov.cz/cs/rozpoctova-politika/statni-rozpocet/plneni-statniho-rozpoctu) |
+| Resorty a veřejné organizace | realizované výdaje a náklady podle IČO | [Monitor státní pokladny](https://monitor.statnipokladna.gov.cz) |
+| Školy | rozpis rozpočtu a registr škol | [MŠMT](https://www.msmt.cz/vzdelavani/skolstvi-v-cr/statistika-skolstvi) |
+| Zřizovatelé škol | FIN 2-12 M a účetní výkazy škol | [Monitor MF](https://monitor.statnipokladna.gov.cz) |
+| EU projekty škol a IROP | seznamy operací | [DotaceEU](https://www.dotaceeu.cz/cs/informace-o-cerpani/seznamy-prijemcu) |
+| OP TAK | seznam operací a příjemců | [DotaceEU](https://www.dotaceeu.cz/cs/statistiky-a-analyzy/seznam-operaci-%28prijemcu%29) |
+| Identita organizací | názvy a sídla podle IČO | [ARES API](https://ares.gov.cz/swagger-ui/) |
+| Nemocniční výkony | NRHZS podle IČO | [ÚZIS](https://datanzis.uzis.gov.cz/data/NR-04-NRHZS/NR-04-02/) |
+| Ambulantní financování | národní zdravotní účty ZDR02 | [ČSÚ](https://data.csu.gov.cz/opendata/sady/ZDR02/distribuce/csv) |
+| Záchranná služba | výkaz A038 | [NZIP](https://www.nzip.cz/data/1802-vykaz-a038-zdravotnicka-zachranna-sluzba-datovy-souhrn) |
+| Sociální dávky | počty příjemců | [ČSSZ](https://data.cssz.cz/web/otevrena-data/), [MPSV](https://data.mpsv.cz) |
+| Policie | registrované skutky KRI10 | [ČSÚ](https://data.csu.gov.cz/opendata/sady/KRI10/distribuce/csv) |
+| HZS | zásahy podle krajů | [HZS](https://hzscr.gov.cz/hasicien/ViewFile.aspx?docid=22436114) |
+| Justice | rozpočet a soudní data | [závěrečný účet 2024](https://msp.gov.cz/documents/d/msp/zaverecny-ucet-kapitoly-za-rok-2024-pdf), [ukazatele 2025](https://msp.gov.cz/documents/d/msp/zavazne-ukazatele-2025-pdf), [soudní data 2024](https://msp.gov.cz/documents/d/msp/data_soudy_2024-xlsm) |
+| Doprava | čerpání projektů SFDI | [SFDI](https://sfdi.gov.cz) |
+| Dopravní výkon | cestující, známky a mýtná vozidla | [SYDOS](https://www.sydos.cz/cs/rocenka-2024), [eDalnice](https://edalnice.cz), [CzechToll](https://www.czechtoll.cz) |
+| Zemědělské podpory | příjemci SZIF | [SZIF](https://szif.gov.cz/cs/seznam-prijemcu-dotaci) |
+| Zemědělská plocha | výměra uživatelů LPIS | [MZe pLPIS](https://mze.gov.cz/public/app/eagriapp/LpisData/Cr.aspx) |
+| Životní prostředí | registr podpor SFŽP | [SFŽP](https://otevrenadata.sfzp.cz/) |
+| MMR | rozpočtová otevřená data | [MMR](https://mmr.gov.cz/cs/ministerstvo/urad/povinne-zverejnene-informace/otevrena-data-mmr) |
+| Kultura | závěrečný účet a výsledky podpor | [MK](https://mk.gov.cz) |
+| Zahraniční pomoc | výroční projektové přehledy | [MZV](https://mzv.gov.cz/jnp/cz/zahranicni_vztahy/rozvojova_spoluprace/koncepce_publikace/vyrocni_prehledy/prehled_rozvojove_spoluprace_a_2.html) |
+| Obrana | Fakta a trendy | [MO](https://mocr.mo.gov.cz/finance-a-zakazky/resortni-rozpocet/1resortni-rozpocet--263042/) |
+| Správa daní | výroční zprávy Finanční správy | [Finanční správa](https://www.financnisprava.cz/cs/financni-sprava/zpravy-a-analyzy/vyrocni-zpravy) |
 
----
+## Srovnávací režim
 
-## Vývoj / Development
+| Větev | Jednotka |
+|---|---|
+| školy | Kč/žák/rok |
+| veřejné nemocnice | Kč/vykázaný výkon |
+| ZZS | Kč/výjezd |
+| důchody a vybrané dávky | Kč/příjemce/rok |
+| Policie / HZS | Kč/registrovaný skutek / zásah |
+| soudy / vězeňství | Kč/vyřízenou věc / vězněnou osobu |
+| železnice / známky / mýto | Kč/cestujícího / známku / vozidlo |
+| plošné zemědělské podpory | Kč/ha |
+| ostatní dohledatelné podpory | Kč/příjemce |
+| obrana / finanční správa | Kč/vojáka / daňový subjekt |
+| MPO, MZV a nepodložené smíšené větve | `N/A` |
 
-### Prerequisites
+Jednotky nejsou totožné výsledkové ukazatele. Slouží k orientačnímu srovnání intenzity uvnitř označených větví, ne k hodnocení jejich společenské hodnoty.
 
-- Node.js ≥ 22
-- Python ≥ 3.11 with `psycopg`, `openpyxl`, `pypdf`, `requests`
-- Neon Postgres instance (or any PostgreSQL 17-compatible database)
-- Vercel CLI for local API development
+## Architektura
 
-### Quick start
+```text
+Browser
+  └─ Vercel: Vite frontend + /api/atlas/*
+       └─ Neon PostgreSQL
+            ├─ meta  release a lineage
+            ├─ raw   malé zdrojové snapshoty
+            ├─ core  sdílené entity
+            └─ mart  query-ready pohledy
+
+GitHub Actions
+  ├─ refresh-neon-domains.yml
+  ├─ deploy-vercel-production.yml
+  └─ smoke-production.yml
+```
+
+Produkční sled je záměrně rozdělený na `ETL → Neon verification → Vercel deploy → production smoke`. GitHub Pages není produkční API cíl.
+
+## Lokální vývoj
+
+Požadavky: Node.js 22+, Python 3.11+ a PostgreSQL 17 nebo Neon.
 
 ```bash
 npm install
-cp .env.vercel.health .env.local   # or set DATABASE_URL manually
-vercel dev                          # starts frontend + /api/* on localhost:3000
+npm run dev
+npm test
+npm run build
 ```
 
-### Tests
+Pro lokální API nastavte `DATABASE_URL` a spusťte `vercel dev`. Lokální databázi lze spravovat přes:
 
 ```bash
-npm test              # vitest unit tests
-npm run smoke:prod    # smoke-check the live production API
+npm run db:up
+npm run db:apply:schema
+npm run db:down
 ```
 
-The smoke test suite (`scripts/smoke-atlas-api.mjs`) verifies that every atlas resource endpoint returns the expected node and link structure for year 2024, including all drilldown levels. It runs on every GitHub Actions push and nightly against the production URL.
+## ETL a produkce
 
-### Build & deploy
+Hlavní vstup je ruční i plánovaný workflow `.github/workflows/refresh-neon-domains.yml`. Přátelské názvy domén (`regions`, `business`, `culture`, `foreign`, `internal`, `finance`, `defense`) se mapují na interní kódy (`mmr`, `mpo`, `mk`, `mzv`, `mv`, `mf`, `mo`). Školství zůstává ruční, protože používá sledované roční workbooky a evidence zřizovatelů.
+
+GitHub konfigurace:
+
+- secret `NEON_DATABASE_URL`
+- secret `VERCEL_TOKEN`
+- variable `PRODUCTION_API_BASE_URL`
+- variables `VERCEL_ORG_ID` a `VERCEL_PROJECT_ID`, případně `.vercel/project.json`
+
+Neon free-tier ochrana kontroluje velikost před loadem, používá výchozí limit **440 MB**, po ověření maže nahrazené releasy a spouští běžný `VACUUM (ANALYZE)`. Velké upstream soubory se nesmí ukládat celé do Neon.
+
+Ověření:
 
 ```bash
-npm run build         # tsc + vite build → dist/
-vercel --prod         # deploy to production
+npm test
+npm run build
+npm run dq:top-level
+npm run smoke:prod
 ```
-
-Database schema is applied by running `db/schema.sql` against the Neon instance. All statements use `create table if not exists` and `create or replace view`, making the schema idempotent:
-
-```bash
-npx neonctl connection-string --project-id <id> | \
-  xargs -I{} python3 -c "
-import psycopg, sys
-with psycopg.connect(sys.argv[1]) as c:
-    c.execute(open('db/schema.sql').read()); c.commit()
-" {}
-```
-
----
-
-## CI/CD
-
-| Workflow | Trigger | What it does |
-|---|---|---|
-| `ci.yml` | Push / PR | TypeScript check, Vite build, vitest unit tests |
-| `deploy-vercel-production.yml` | Manual | Builds the current ref with Vercel CLI and deploys it to the Vercel production environment |
-| `smoke-production.yml` | Manual + nightly | Smoke-tests the live production API and reconciles its top-level links against Neon source aggregates. |
-| `refresh-neon-domains.yml` | Manual + scheduled | Canonical ETL workflow. Refreshes selected domains, loads Neon, verifies fresh published releases, then prunes superseded releases. |
-| `deploy-pages.yml` | Push to master | Builds and deploys the static frontend to GitHub Pages |
-
-### Current automation status
-
-The production path is now:
-
-`GitHub Actions ETL -> Neon -> GitHub Actions Vercel deploy -> production smoke test`
-
-Current platform status:
-
-- The production sequence is intentionally three separate gates: ETL and Neon verification, Vercel production deploy, then production smoke.
-- The ETL fails unless every expected dataset was freshly loaded with positive rows and published metadata.
-- After deployment, top-level `state:cr` links are reconciled against Monitor-backed mart aggregates or documented official chapter aggregates.
-- Total state inflow and outflow must equal the official MF final-account envelope; mixed SFDI, SZIF, SFŽP, and regional ZZS scope is reported separately instead of being treated as a chapter-total match.
-- The smoke check validates both advertised years and deep 2024 domain endpoints against `https://cz-school-sankey.vercel.app` by default.
-
-Scheduled ETL batches:
-
-- Day 2 of January, April, July, and October at `03:00 UTC`: `state environment regions business transport`
-- Day 4 of January, April, July, and October at `03:00 UTC`: `social justice culture foreign internal finance defense`
-- Day 6 of January, April, July, and October at `03:00 UTC`: `health agriculture`
-
-Manual-only ETL:
-
-- `school` stays manual for now because it still depends on tracked MŠMT source workbooks and related bundled fallback files.
-- `state` is the storage-safe state-envelope refresh. It replaces only the tiny final-account summary and its core root flows, without rebuilding school detail.
-
-Free-tier Neon guardrails:
-
-- The workflow checks storage before loading, leaving about 60 MB below the 500 MB free-tier limit by default.
-- A regular `VACUUM (ANALYZE)` runs before loading and after pruning so repeated replacements reuse dead-row pages without the locking and temporary-space cost of `VACUUM FULL`.
-- Superseded releases are pruned only after load and freshness verification succeed.
-- The default guard threshold is `440 MB`; it can be overridden manually, but `0` disables the protection and is not recommended.
-- Retention keeps reporting years `2024` and `2025`; switch to one year only after all top-level domain sources cover `2025`.
-
-Domain readiness summary:
-
-| Domain | Automation status | Current years | Main remaining gap |
-|---|---|---|---|
-| `state` | Scheduled | `2024`, `2025` | exact MF envelope is automated; mixed public-fund scope is disclosed separately |
-| `school` | Manual only | `2024`, `2025` | source-backed founder overlays cover 186 schools in 2024 and 168 in 2025; remaining schools use the inferred nationwide fallback |
-| `health` | Scheduled | `2024`, `2025` | hospital activity closes at 2024; Neon still has the 2023 outpatient finance snapshot although ČSÚ now publishes 2024; outpatient activity still lacks a clean subtype crosswalk |
-| `social` | Scheduled | `2024`, `2025` budget; recipients `2024` | 2025 benefit recipient denominators are not yet integrated |
-| `justice` | Scheduled | `2024`, `2025`; activity mainly `2024` | realized MF root is reconciled to budget-based branches; activity coverage is still limited |
-| `agriculture` | Scheduled | `2024`, `2025` | LPIS denominator is a proxy and depends on fallback-friendly source discovery |
-| `environment` | Scheduled | `2024`, `2025` | relatively clean; no major automation blocker |
-| `regions` / `mmr` | Scheduled | `2024`, `2025` | realized MF root is reconciled to budget-based branches; DotaceEU discovery still scrapes listing pages |
-| `business` / `mpo` | Scheduled | `2024`, `2025` | same DotaceEU listing fragility as MMR |
-| `culture` / `mk` | Scheduled | substantively mainly `2024` | code path is automated, but real source coverage is still `2024`-heavy |
-| `foreign` / `mzv` | Scheduled | substantively mainly `2024` | code path is automated, but real source coverage is still `2024`-heavy |
-| `transport` | Scheduled | `2024`, `2025` | denominator metrics remain curated/static in code |
-| `internal` / `mv` | Scheduled | `2024`, `2025` | realized MF root is reconciled to budget-based branches; some PDF parsing remains layout-fragile |
-| `finance` / `mf` | Scheduled | `2023`, `2024`, `2025` in code; retention keeps `2024`, `2025` | activity denominator is still curated/static in code |
-| `defense` / `mo` | Scheduled | `2024`, `2025` | parser depends on a fixed publication and extracted PDF text |
-
----
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
-
-Data sources are published by Czech public authorities under the conditions described in the in-app reference panel for each dataset. The atlas does not modify source data; it aggregates, joins, and normalises it for visualisation purposes.
+MIT. Zdrojová data zůstávají pod podmínkami příslušných veřejných institucí.
