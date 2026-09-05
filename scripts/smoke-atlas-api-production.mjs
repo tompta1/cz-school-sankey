@@ -80,6 +80,33 @@ async function main() {
     'overview 2024 is missing the mixed-financing ZZS source',
   );
 
+  const health2024 = await fetchJson('/api/atlas/health?year=2024');
+  assert(
+    health2024.nodes.some((node) => node.id === 'health:owner:central_state' && Number(node.metadata?.capacity) > 0),
+    'health 2024 is missing the hospital reported-procedure denominator',
+  );
+  assert(
+    health2024.links.some((link) => link.flowType === 'health_hospital_owner_group'),
+    'health 2024 is missing the hospital metric flow',
+  );
+  assert(
+    health2024.nodes.some((node) => node.id === 'health:zzs' && Number(node.metadata?.capacity) > 0),
+    'health 2024 is missing the ZZS departure denominator',
+  );
+
+  const health2025 = await fetchJson('/api/atlas/health?year=2025');
+  assert(
+    health2025.nodes
+      .filter((node) => node.id.startsWith('health:owner:'))
+      .every((node) => !node.metadata?.capacity),
+    'health 2025 must not fabricate a hospital procedure denominator',
+  );
+  assert(
+    health2025.nodes.some((node) =>
+      node.id === 'health:zzs' && Number(node.metadata?.capacity) > 0 && node.metadata?.sourceYear === 2024),
+    'health 2025 is missing the disclosed 2024 ZZS departure fallback',
+  );
+
   const school2025 = await fetchJson('/api/graph/node?year=2025&nodeId=school%3A60552255');
   assert(
     school2025.nodes.some((node) => node.id === 'actual-cost:energy'),
