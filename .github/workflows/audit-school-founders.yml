@@ -1,0 +1,67 @@
+name: Audit school founder attribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: Space-separated completed reporting years
+        required: false
+        default: "2024 2025"
+      refresh_sources:
+        description: Ignore cached MONITOR archives
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-school-founders
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install parser dependencies
+        run: python -m pip install openpyxl
+
+      - name: Build founder evidence queue
+        env:
+          INPUT_YEARS: ${{ inputs.years }}
+          REFRESH_SOURCES: ${{ inputs.refresh_sources }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          for year in ${INPUT_YEARS:-2024 2025}; do
+            case "${year}" in
+              2024|2025) args+=(--year "${year}") ;;
+              *) echo "Unsupported completed school year: ${year}" >&2; exit 1 ;;
+            esac
+          done
+          if [[ "${REFRESH_SOURCES:-false}" == "true" ]]; then
+            args+=(--no-cache)
+          fi
+          python3 etl/fetch_founder_recipient_evidence.py "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 etl/audit_founder_attribution.py "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload compact audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: school-founder-attribution-audit
+          path: |
+            etl/data/quality/founder_attribution/
+            etl/data/raw/*/founder_recipient_evidence.csv
+            etl/data/raw/*/founder_recipient_evidence.meta.json
+            etl/data/raw/*/founder_recipient_evidence_unmatched.csv
+          if-no-files-found: error
+          retention-days: 30

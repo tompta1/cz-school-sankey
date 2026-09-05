@@ -1,0 +1,21 @@
+{
+  "reporting_year": 2024,
+  "founder_count": 3495,
+  "school_count": 7997,
+  "linked_school_count": 7979,
+  "missing_founder_school_count": 18,
+  "current_support_school_count": 7969,
+  "missing_current_support_school_count": 10,
+  "single_school_founders": 2545,
+  "multi_school_founders": 950,
+  "large_multi_school_founders": 39,
+  "founders_with_recipient_source_cataloged": 1,
+  "multi_school_founders_missing_recipient_source": 949,
+  "schools_under_multi_school_founders": 5434,
+  "founders_with_finm_total": 3430,
+  "relevant_finm_lines": 5831,
+  "finm_total_czk": 36578182376,
+  "current_attributed_czk": 214575515288,
+  "source_url": "https://monitor.statnipokladna.gov.cz/data/extrakty/csv/FinM/2024_12_Data_CSUIS_FINM.zip",
+  "source_limitation": "FINM identifies the reporting founder but not the recipient school."
+}

@@ -248,6 +248,7 @@ jobs:
                 if [[ -f "etl/data/raw/${year}/msmt_allocations.csv" \
                    && -f "etl/data/raw/${year}/eu_projects.csv" \
                    && -f "etl/data/raw/${year}/founder_support.csv" \
+                   && -f "etl/data/raw/${year}/founder_recipient_evidence.csv" \
                    && -f "etl/data/raw/${year}/school_costs.csv" \
                    && -f "etl/data/raw/${year}/state_budget.csv" \
                    && -f "etl/data/raw/${year}/school_entities.csv" ]]; then
@@ -259,6 +260,14 @@ jobs:
                       echo "Falling back to tracked school EU projects for ${year}" >&2
                     else
                       echo "Missing fallback school EU projects: etl/data/raw/${year}/eu_projects.csv" >&2
+                      exit 1
+                    fi
+                  fi
+                  if ! timeout 15m python3 etl/fetch_founder_recipient_evidence.py --year "${year}"; then
+                    if [[ -f "etl/data/raw/${year}/founder_recipient_evidence.csv" ]]; then
+                      echo "Falling back to tracked recipient-level founder evidence for ${year}" >&2
+                    else
+                      echo "Missing recipient-level founder evidence: etl/data/raw/${year}/founder_recipient_evidence.csv" >&2
                       exit 1
                     fi
                   fi

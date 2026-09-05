@@ -369,7 +369,71 @@ class TestWriteFounderSupport:
             ])
         with out.open() as fh:
             reader = csv.DictReader(fh)
-            assert reader.fieldnames == ["institution_id", "amount", "basis", "certainty", "note"]
+            fieldnames = reader.fieldnames
+        assert fieldnames == [
+            "institution_id",
+            "founder_id",
+            "amount",
+            "basis",
+            "certainty",
+            "attribution_method",
+            "source_document_kind",
+            "source_url",
+            "note",
+        ]
+
+
+class TestApplyRecipientEvidence:
+    def test_replaces_inferred_row_with_validated_recipient_amount(self):
+        entities = {
+            "11111111": {
+                "institution_id": "school:a",
+                "founder_id": "founder:12345678",
+            }
+        }
+        base = [
+            {
+                "institution_id": "school:a",
+                "amount": 9_000,
+                "basis": "realized",
+                "certainty": "inferred",
+            }
+        ]
+        evidence = [
+            {
+                "institution_id": "school:a",
+                "founder_id": "founder:12345678",
+                "amount": "2600",
+                "basis": "budgeted",
+                "certainty": "observed",
+                "source_url": "https://example.test/budget.xlsx",
+            }
+        ]
+
+        rows = fb.apply_recipient_evidence(base, evidence, entities)
+
+        assert rows[0]["amount"] == 2_600
+        assert rows[0]["basis"] == "budgeted"
+        assert rows[0]["certainty"] == "observed"
+        assert rows[0]["attribution_method"] == "recipient_reported_founder_budget"
+
+    def test_rejects_evidence_for_wrong_founder(self):
+        entities = {
+            "11111111": {
+                "institution_id": "school:a",
+                "founder_id": "founder:12345678",
+            }
+        }
+        evidence = [
+            {
+                "institution_id": "school:a",
+                "founder_id": "founder:87654321",
+                "amount": "2600",
+            }
+        ]
+
+        with pytest.raises(RuntimeError, match="founder mismatch"):
+            fb.apply_recipient_evidence([], evidence, entities)
 
 
 class TestWriteSchoolCosts:

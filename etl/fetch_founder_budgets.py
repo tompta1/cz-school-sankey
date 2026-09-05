@@ -335,6 +335,15 @@ def load_msmt_weights(year: int) -> dict[str, int]:
     return weights
 
 
+def load_recipient_evidence(year: int) -> list[dict[str, str]]:
+    path = RAW_ROOT / str(year) / "founder_recipient_evidence.csv"
+    if not path.exists():
+        return []
+    rows = load_csv(path)
+    print(f"Loaded {len(rows)} recipient-level founder evidence rows")
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # VYKZZ pass: observed transfer revenue attributed to the registry founder
 # ---------------------------------------------------------------------------
@@ -493,12 +502,12 @@ def run_cost_profile_pass(
 # FIN 2-12 M pass: per-founder own-budget education support
 # ---------------------------------------------------------------------------
 
-def run_12m_pass(
+def run_12m_detail_pass(
     zip_path: Path,
     founder_icos: set[str],
     list_columns: bool,
-) -> dict[str, int]:
-    """Return {founder_ico → total CZK education transfers to POs}."""
+) -> dict[str, dict[str, Any]]:
+    """Return compact FINM evidence for each founder without recipient inference."""
     # FINM201 = Plnění rozpočtu místně řízených organizací (the right table for ÚSC→PO flows)
     stream = extract_csv_from_zip(zip_path, preferred_prefix="FINM201")
     if stream is None:
@@ -541,7 +550,7 @@ def run_12m_pass(
     item_idx = headers.index(col_item) if col_item else None
     amount_idx = headers.index(col_amount)
 
-    totals: dict[str, int] = {}
+    details: dict[str, dict[str, Any]] = {}
     scanned = matched = 0
 
     for row in reader:
@@ -573,14 +582,44 @@ def run_12m_pass(
         if amount <= 0:
             continue
 
-        totals[ico] = totals.get(ico, 0) + amount
+        detail = details.setdefault(
+            ico,
+            {
+                "actual_amount_czk": 0,
+                "operating_amount_czk": 0,
+                "investment_amount_czk": 0,
+                "line_count": 0,
+                "paragraph_codes": set(),
+            },
+        )
+        detail["actual_amount_czk"] += amount
+        detail["line_count"] += 1
+        if item_idx is not None and item_idx < len(row):
+            item = normalize_code(row[item_idx])
+            target = "investment_amount_czk" if item == "6351" else "operating_amount_czk"
+            detail[target] += amount
+        if para_idx is not None and para_idx < len(row):
+            detail["paragraph_codes"].add(normalize_code(row[para_idx]))
         matched += 1
 
     print(
         f"FIN 2-12 M: scanned {scanned} rows → {matched} matching "
-        f"(education+transfer) → {len(totals)} unique founder IČOs"
+        f"(education+transfer) → {len(details)} unique founder IČOs"
     )
-    return totals
+    return details
+
+
+def run_12m_pass(
+    zip_path: Path,
+    founder_icos: set[str],
+    list_columns: bool,
+) -> dict[str, int]:
+    """Return {founder_ico -> total CZK education transfers to POs}."""
+    details = run_12m_detail_pass(zip_path, founder_icos, list_columns)
+    return {
+        founder_ico: int(detail["actual_amount_czk"])
+        for founder_ico, detail in details.items()
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -613,6 +652,7 @@ def prorate_founder_to_schools(
                 "amount": share,
                 "basis": "realized",
                 "certainty": "inferred",
+                "attribution_method": "founder_total_prorated_by_msmt_allocation",
                 "note": (
                     f"FIN 2-12 M own-budget items 5331/6351 from founder {founder_ico}; "
                     f"equal split across {n} schools (no MŠMT weight available)"
@@ -639,6 +679,7 @@ def prorate_founder_to_schools(
                 "amount": share,
                 "basis": "realized",
                 "certainty": "inferred",
+                "attribution_method": "founder_total_prorated_by_msmt_allocation",
                 "note": (
                     f"FIN 2-12 M own-budget items 5331/6351 from founder {founder_ico}; "
                     f"pro-rated by MŠMT allocation share "
@@ -653,9 +694,67 @@ def prorate_founder_to_schools(
 # Write output
 # ---------------------------------------------------------------------------
 
+def apply_recipient_evidence(
+    base_rows: list[dict[str, Any]],
+    evidence_rows: list[dict[str, str]],
+    school_entities: dict[str, dict[str, str]],
+) -> list[dict[str, Any]]:
+    entity_by_institution = {
+        entity["institution_id"]: entity for entity in school_entities.values()
+    }
+    rows_by_institution = {row["institution_id"]: row for row in base_rows}
+    for evidence in evidence_rows:
+        institution_id = evidence.get("institution_id", "").strip()
+        entity = entity_by_institution.get(institution_id)
+        if entity is None:
+            raise RuntimeError(f"Recipient evidence references unknown school {institution_id}")
+        expected_founder = entity.get("founder_id", "").strip()
+        evidence_founder = evidence.get("founder_id", "").strip()
+        if evidence_founder != expected_founder:
+            raise RuntimeError(
+                f"Recipient evidence founder mismatch for {institution_id}: "
+                f"{evidence_founder} != {expected_founder}"
+            )
+        amount = to_int(evidence.get("amount"))
+        if amount <= 0:
+            raise RuntimeError(f"Recipient evidence has non-positive amount for {institution_id}")
+        rows_by_institution[institution_id] = {
+            "institution_id": institution_id,
+            "founder_id": evidence_founder,
+            "amount": amount,
+            "basis": evidence.get("basis") or "budgeted",
+            "certainty": evidence.get("certainty") or "observed",
+            "attribution_method": (
+                evidence.get("attribution_method") or "recipient_reported_founder_budget"
+            ),
+            "source_url": evidence.get("source_url") or "",
+            "source_document_kind": evidence.get("source_document_kind") or "",
+            "note": evidence.get("note") or "Recipient-level founder budget evidence",
+        }
+
+    for institution_id, row in rows_by_institution.items():
+        entity = entity_by_institution.get(institution_id)
+        if entity is not None:
+            row.setdefault("founder_id", entity.get("founder_id", ""))
+        row.setdefault("attribution_method", "school_transfer_revenue_routed_to_registry_founder")
+        row.setdefault("source_url", "")
+        row.setdefault("source_document_kind", "")
+    return sorted(rows_by_institution.values(), key=lambda row: row["institution_id"])
+
+
 def write_founder_support(year: int, rows: list[dict[str, Any]]) -> Path:
     out_path = RAW_ROOT / str(year) / "founder_support.csv"
-    fieldnames = ["institution_id", "amount", "basis", "certainty", "note"]
+    fieldnames = [
+        "institution_id",
+        "founder_id",
+        "amount",
+        "basis",
+        "certainty",
+        "attribution_method",
+        "source_document_kind",
+        "source_url",
+        "note",
+    ]
     with out_path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(
             fh,
@@ -708,6 +807,7 @@ def main() -> None:
 
     school_entities = load_school_entities(year)
     msmt_weights = load_msmt_weights(year)
+    recipient_evidence = load_recipient_evidence(year)
 
     # Build index: founder_ico → list of school entity rows
     founder_to_schools: dict[str, list[dict[str, str]]] = {}
@@ -772,6 +872,7 @@ def main() -> None:
                 "amount": amount,
                 "basis": "realized",
                 "certainty": "inferred",
+                "attribution_method": "school_transfer_revenue_routed_to_registry_founder",
                 "note": (
                     f"MONITOR VYKZZ account 672/673 public-transfer revenue for school IČO {school_ico}; "
                     "amount observed at school, attribution to registered founder inferred"
@@ -789,7 +890,7 @@ def main() -> None:
         inferred = prorate_founder_to_schools(founder_ico, founder_total, uncovered, msmt_weights)
         output_rows.extend(inferred)
 
-    output_rows.sort(key=lambda row: row["institution_id"])
+    output_rows = apply_recipient_evidence(output_rows, recipient_evidence, school_entities)
 
     cost_rows: list[dict[str, Any]] = []
     for school_ico, profile in cost_profiles.items():

@@ -33,6 +33,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def founder_lineage(row: dict, year: int) -> Jsonb:
+    payload = row.get("payload") or {}
+    lineage = {"year": year, "institution_id": row.get("institution_id")}
+    for key in ("attribution_method", "source_document_kind"):
+        if payload.get(key):
+            lineage[key] = payload[key]
+    return Jsonb(lineage)
+
+
 def ensure_reporting_period(conn: psycopg.Connection, year: int) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -245,7 +254,7 @@ def fetch_founder_support(conn: psycopg.Connection, year: int) -> list[dict]:
     with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
         cur.execute(
             """
-            select dataset_release_id, institution_id, ico, amount_czk, basis, certainty, note
+            select dataset_release_id, institution_id, ico, amount_czk, basis, certainty, note, payload
             from raw.school_founder_support
             where reporting_year = %s
             order by institution_id nulls last
@@ -486,8 +495,8 @@ def insert_financial_flows(
                 None,
                 None,
                 row.get("note"),
-                None,
-                Jsonb({"year": year, "institution_id": row.get("institution_id")}),
+                (row.get("payload") or {}).get("source_url"),
+                founder_lineage(row, year),
             )
         )
 
@@ -688,8 +697,8 @@ def sync_founder_support_core(conn: psycopg.Connection, year: int) -> int:
             None,
             None,
             row.get("note"),
-            None,
-            Jsonb({"year": year, "institution_id": row.get("institution_id")}),
+            (row.get("payload") or {}).get("source_url"),
+            founder_lineage(row, year),
         )
         for row in founder_support_rows
         if int(row["amount_czk"]) > 0

@@ -19,6 +19,15 @@ SOURCES = {
     "mf": ("Ministerstvo financí ČR", "https://mf.gov.cz"),
 }
 
+
+def founder_support_payload(row: dict[str, str], path: Path) -> Jsonb:
+    payload = {"local_path": str(path.relative_to(ROOT))}
+    for key in ("attribution_method", "source_document_kind", "source_url"):
+        if row.get(key):
+            payload[key] = row[key]
+    return Jsonb(payload)
+
+
 DATASETS = [
     {
         "table": "raw.school_entities",
@@ -155,7 +164,7 @@ DATASETS = [
                 row.get("basis") or None,
                 row.get("certainty") or None,
                 row.get("note") or None,
-                Jsonb({"local_path": str(path.relative_to(ROOT))}),
+                founder_support_payload(row, path),
             )
             for row in rows
         ],

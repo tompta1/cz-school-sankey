@@ -1,0 +1,63 @@
+name: Apply school founder evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: Space-separated completed reporting years
+        required: false
+        default: "2024 2025"
+      max_db_size_mb:
+        description: Fail when Neon exceeds this safety threshold
+        required: false
+        default: "440"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-neon-domains
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      INPUT_YEARS: ${{ inputs.years }}
+      MAX_DB_SIZE_MB: ${{ inputs.max_db_size_mb }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install database dependency
+        run: python -m pip install "psycopg[binary]"
+
+      - name: Apply compact source-backed overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL"
+          python3 scripts/check-neon-db-size.py \
+            --database-url "$DATABASE_URL" \
+            --max-size-mb "${MAX_DB_SIZE_MB:-440}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          args=()
+          for year in ${INPUT_YEARS:-2024 2025}; do
+            case "${year}" in
+              2024|2025) args+=(--year "${year}") ;;
+              *) echo "Unsupported completed school year: ${year}" >&2; exit 1 ;;
+            esac
+          done
+          python3 etl/apply_founder_recipient_evidence.py \
+            "${args[@]}" \
+            --database-url "$DATABASE_URL" \
+            --execute | tee -a "$GITHUB_STEP_SUMMARY"
+
+          python3 scripts/check-neon-db-size.py \
+            --database-url "$DATABASE_URL" \
+            --max-size-mb "${MAX_DB_SIZE_MB:-440}" | tee -a "$GITHUB_STEP_SUMMARY"

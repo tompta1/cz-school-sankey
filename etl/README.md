@@ -132,6 +132,37 @@ founder-only payment.
 Downloaded ZIPs are cached under `etl/data/monitor_cache/`. Re-run with
 `--no-cache` to force a fresh download.
 
+The FINM extract identifies the reporting municipality or region, paragraph,
+budget item, and amount, but it does not identify the recipient school. Build a
+compact evidence queue before collecting municipal budget annexes:
+
+```bash
+npm run etl:founders:audit
+```
+
+This writes one founder row per year under
+`etl/data/quality/founder_attribution/`. Founders with multiple registered
+schools are marked `recipient_schedule_required` and ranked by school count.
+Single-school founders remain candidates rather than verified allocations,
+because the aggregate can still include education organizations outside the
+school registry. The audit files and MONITOR URLs may be retained in GitHub;
+downloaded ZIP, HTML, and PDF source documents must not be loaded into Neon.
+Discovered recipient-level documents belong in
+`etl/data/founder_source_catalog.csv`; one catalog row represents a complete
+founder-year source, not an individual school override.
+
+Run `npm run etl:founders:evidence` to download and normalize cataloged
+recipient-level workbooks. The parser requires every school registered under a
+cataloged founder to match exactly once. Historical organization renames are
+kept separately in `etl/data/founder_source_aliases.csv`; amounts never belong
+in the alias file. The resulting `founder_recipient_evidence.csv` is a
+reviewable source-priority overlay: `fetch_founder_budgets.py` uses it for
+matched schools and retains the inferred nationwide fallback everywhere else.
+For an existing Neon database, the `Apply school founder evidence` workflow
+updates only source-backed raw rows and matching core flows. It does not create
+a new dataset release or rebuild the 16,000-row founder table, which keeps the
+operation safe near the Free-plan storage limit.
+
 If column detection fails, run with `--list-columns` to print the actual
 headers and update the `*_COLS_*` lists at the top of the script.
 

@@ -1324,7 +1324,7 @@ export async function getSchoolFounderGraph(year: number, founderId: string, off
       ensureNode(nodesById, createInstitutionNode(schoolById.get(row.institutionId)));
     }
     links.push(makeLink(founderId, target, row.amountCzk, year, 'founder_support', 'school_founder_support', {
-      basis: 'realized',
+      basis: row.basis === 'budgeted' ? 'budgeted' : 'realized',
       certainty: row.certainty === 'observed' ? 'observed' : 'inferred',
       institutionId: row.institutionId,
       note: row.note ?? undefined,
@@ -1400,7 +1400,7 @@ export async function getSchoolNodeGraph(year: number, nodeId: string, offset = 
     }
     for (const row of founderSupport.filter((row) => row.institutionId === nodeId)) {
       links.push(makeLink(entity.founderId, nodeId, row.amountCzk, year, 'founder_support', 'school_founder_support', {
-        basis: 'realized',
+        basis: row.basis === 'budgeted' ? 'budgeted' : 'realized',
         certainty: row.certainty === 'observed' ? 'observed' : 'inferred',
         institutionId: row.institutionId,
         note: row.note ?? undefined,
