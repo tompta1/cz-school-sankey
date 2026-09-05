@@ -154,6 +154,50 @@ class TestProrateFounderToSchools:
 
 
 # ---------------------------------------------------------------------------
+# run_transfer_revenue_pass (VYKZZ)
+# ---------------------------------------------------------------------------
+
+class TestRunTransferRevenuePass:
+    def _vykzz_csv(self, rows: list[dict]) -> str:
+        fields = ["ZC_ICO", "ZC_POLVYK", "ZC_SYNUC", "ZU_HLCIN"]
+        header = ";".join(f'"Label"{field}:{field}' for field in fields)
+        lines = [header]
+        for row in rows:
+            lines.append(";".join(str(row.get(field, "")) for field in fields))
+        return "\n".join(lines)
+
+    def test_extracts_school_transfer_revenue_accounts(self, tmp_path):
+        csv_content = self._vykzz_csv([
+            {"ZC_ICO": "11111111", "ZC_SYNUC": "672", "ZU_HLCIN": "900"},
+            {"ZC_ICO": "11111111", "ZC_SYNUC": "673", "ZU_HLCIN": "100"},
+            {"ZC_ICO": "11111111", "ZC_SYNUC": "602", "ZU_HLCIN": "500"},
+        ])
+        zip_path = _zip_path(tmp_path, csv_content)
+
+        result = fb.run_transfer_revenue_pass(
+            zip_path,
+            {"11111111": {"institution_id": "school:test"}},
+            list_columns=False,
+        )
+
+        assert result == {"11111111": 1_000}
+
+    def test_ignores_non_school_icos(self, tmp_path):
+        csv_content = self._vykzz_csv([
+            {"ZC_ICO": "99999999", "ZC_SYNUC": "672", "ZU_HLCIN": "900"},
+        ])
+        zip_path = _zip_path(tmp_path, csv_content)
+
+        result = fb.run_transfer_revenue_pass(
+            zip_path,
+            {"11111111": {"institution_id": "school:test"}},
+            list_columns=False,
+        )
+
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
 # run_cost_profile_pass (VYKZZ)
 # ---------------------------------------------------------------------------
 

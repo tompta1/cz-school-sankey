@@ -3,22 +3,17 @@
 
 Two-pass strategy
 -----------------
-Pass 1  FIN 2-12 M (MONITOR national extract)
-        Per-founder local-government budget execution. Filters education
-        paragraphs and only own-budget items 5331 and 6351. Routed transfers
-        such as MŠMT direct education funding on item 5336 are excluded.
-        Founder totals are pro-rated across schools by their MŠMT allocation
-        weight and marked basis=realized, certainty=inferred.
+Pass 1  VYKZZ (Výkaz zisku a ztráty, MONITOR national extract)
+        Per-school realized public-transfer revenue from accounts 672/673,
+        routed through the school's registered founder. The amount is observed,
+        but founder attribution is inferred because these accounts can include
+        transfers from several public budgets. The same pass builds compact
+        realized school cost profiles.
 
-Pass 2  VYKZZ (Výkaz zisku a ztráty, MONITOR national extract)
-        Per-school realized cost accounts. Produces a compact cost profile for
-        materials, energy, repairs, services including rent, personnel,
-        depreciation, and a reconciled residual. These are costs, not another
-        funding source.
-
-Account 672 is deliberately not used for founder support. It includes transfer
-revenue routed from other public budgets, including MŠMT, and would double-count
-the direct-school allocation already present in the atlas.
+Pass 2  FIN 2-12 M (MONITOR national extract)
+        Fallback for schools without VYKZZ transfer revenue. Founder totals use
+        own-budget items 5331/6351 in education paragraphs and are pro-rated by
+        MŠMT allocation weight with certainty=inferred.
 
 MONITOR extrakty base URL:
     https://monitor.statnipokladna.gov.cz/data/extrakty/csv/
@@ -125,6 +120,11 @@ SCHOOL_COST_ACCOUNTS = {
     "personnel_amount": {"521", "524", "525", "527", "528"},
     "depreciation_amount": {"551"},
 }
+
+# VYKZZ transfer-revenue accounts used by the former nationwide method.
+# The value is observed at the school, while attribution to its registry founder
+# remains inferred because the account does not identify the sending budget.
+FOUNDER_INCOME_ACCOUNTS = {"672", "673"}
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +333,65 @@ def load_msmt_weights(year: int) -> dict[str, int]:
             weights[inst_id] = total
     print(f"Loaded {len(weights)} MŠMT weights for pro-ration")
     return weights
+
+
+# ---------------------------------------------------------------------------
+# VYKZZ pass: observed transfer revenue attributed to the registry founder
+# ---------------------------------------------------------------------------
+
+def run_transfer_revenue_pass(
+    zip_path: Path,
+    school_icos: dict[str, dict[str, str]],
+    list_columns: bool,
+) -> dict[str, int]:
+    """Return observed account 672/673 revenue keyed by school IČO."""
+    stream = extract_csv_from_zip(zip_path)
+    if stream is None:
+        return {}
+
+    reader = csv.reader(stream, delimiter=";")
+    raw_row = next(reader, [])
+    headers = [h.strip().split(":")[-1].strip().strip('"') for h in raw_row]
+
+    if list_columns:
+        return {}
+
+    col_ico = find_col(headers, ICO_COLS_PO)
+    col_account = find_col(headers, ACCOUNT_COLS_PO)
+    col_amount = find_col(headers, AMOUNT_COLS_PO)
+    if col_ico is None or col_account is None or col_amount is None:
+        print(
+            "WARNING: Required VYKZZ transfer-revenue columns not found; using FIN 2-12 M fallback.",
+            file=sys.stderr,
+        )
+        return {}
+
+    ico_idx = headers.index(col_ico)
+    account_idx = headers.index(col_account)
+    amount_idx = headers.index(col_amount)
+    totals: dict[str, int] = {}
+    matched = 0
+
+    for row in reader:
+        if len(row) <= max(ico_idx, account_idx, amount_idx):
+            continue
+        ico = normalize_ico(row[ico_idx])
+        if ico not in school_icos:
+            continue
+        account = normalize_code(row[account_idx])
+        if not any(account.startswith(code) for code in FOUNDER_INCOME_ACCOUNTS):
+            continue
+        amount = to_int(row[amount_idx])
+        if amount <= 0:
+            continue
+        totals[ico] = totals.get(ico, 0) + amount
+        matched += 1
+
+    print(
+        f"VYKZZ: matched {matched} account 672/673 rows -> "
+        f"{len(totals)} school transfer-revenue totals"
+    )
+    return totals
 
 
 # ---------------------------------------------------------------------------
@@ -661,6 +720,7 @@ def main() -> None:
     founder_icos = set(founder_to_schools.keys())
     print(f"Targeting {len(founder_icos)} unique founder IČOs, {len(school_entities)} schools")
 
+    transfer_totals: dict[str, int] = {}
     cost_profiles: dict[str, dict[str, int]] = {}
     if not args.no_costs:
         po_zip = resolve_zip(
@@ -673,10 +733,19 @@ def main() -> None:
             args.no_cache,
         )
         if po_zip is not None:
+            transfer_totals = run_transfer_revenue_pass(po_zip, school_entities, args.list_columns)
             cost_profiles = run_cost_profile_pass(po_zip, school_entities, args.list_columns)
 
     fm12_totals: dict[str, int] = {}  # founder_ico → CZK
-    if founder_icos:
+    covered_school_icos = set(transfer_totals)
+    founders_needing_12m = {
+        founder_ico
+        for founder_ico, schools in founder_to_schools.items()
+        if not {
+            normalize_ico(school.get("ico", "")) for school in schools
+        }.issubset(covered_school_icos)
+    }
+    if founders_needing_12m:
         fm12_zip = resolve_zip(
             "FIN 2-12 M",
             FIN12M_URL_TEMPLATES,
@@ -687,16 +756,39 @@ def main() -> None:
             args.no_cache,
         )
         if fm12_zip is not None:
-            fm12_totals = run_12m_pass(fm12_zip, founder_icos, args.list_columns)
+            fm12_totals = run_12m_pass(fm12_zip, founders_needing_12m, args.list_columns)
 
     if args.list_columns:
         return
 
     output_rows: list[dict[str, Any]] = []
+    for school_ico, amount in transfer_totals.items():
+        entity = school_entities.get(school_ico)
+        if entity is None:
+            continue
+        output_rows.append(
+            {
+                "institution_id": entity["institution_id"],
+                "amount": amount,
+                "basis": "realized",
+                "certainty": "inferred",
+                "note": (
+                    f"MONITOR VYKZZ account 672/673 public-transfer revenue for school IČO {school_ico}; "
+                    "amount observed at school, attribution to registered founder inferred"
+                ),
+            }
+        )
+
     for founder_ico, founder_total in fm12_totals.items():
         schools = founder_to_schools.get(founder_ico, [])
-        inferred = prorate_founder_to_schools(founder_ico, founder_total, schools, msmt_weights)
+        uncovered = [
+            school
+            for school in schools
+            if normalize_ico(school.get("ico", "")) not in covered_school_icos
+        ]
+        inferred = prorate_founder_to_schools(founder_ico, founder_total, uncovered, msmt_weights)
         output_rows.extend(inferred)
+
     output_rows.sort(key=lambda row: row["institution_id"])
 
     cost_rows: list[dict[str, Any]] = []
@@ -723,15 +815,16 @@ def main() -> None:
 
     print(
         f"\nResults:\n"
-        f"  inferred founder rows:    {len(output_rows)}\n"
-        f"  founder own-budget total: {total_czk:,} CZK\n"
+        f"  VYKZZ transfer rows:      {len(transfer_totals)}\n"
+        f"  FIN 2-12 M fallback rows: {len(output_rows) - len(transfer_totals)}\n"
+        f"  attributed transfer total:{total_czk:>15,} CZK\n"
         f"  observed cost profiles:   {len(cost_rows)}"
     )
 
     if not output_rows:
         print(
             "\nNo rows produced. Possible causes:\n"
-            "  • FIN 2-12 M could not be downloaded — pass --fin12m\n"
+            "  • MONITOR files could not be downloaded — pass --fin12m/--finpo\n"
             "  • Column detection failed — run --list-columns to inspect headers\n"
             "  • Education paragraphs/items not present in this period's data\n"
             "  • IČO format mismatch between school_entities.csv and MONITOR\n"

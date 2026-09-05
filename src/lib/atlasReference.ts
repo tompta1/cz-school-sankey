@@ -43,10 +43,10 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
   },
   school_founder_support: {
     datasetKey: 'school_founder_support',
-    title: 'Monitor MF: rozpočty zřizovatelů škol',
-    description: 'Skutečné vlastní příspěvky obcí a krajů jejich školám z položek 5331 a 6351 v odvětví vzdělávání.',
-    freshness: 'Roční plnění FIN 2-12 M. Součet je pozorovaný za zřizovatele; rozdělení mezi jeho školy je odhadnuté podle podílu přímé alokace MŠMT.',
-    rationale: 'Vylučuje průtokové transfery na položkách 5336/6356, aby se přímé financování MŠMT nezapočítalo podruhé.',
+    title: 'Monitor MF: transferové výnosy škol',
+    description: 'Skutečné transferové výnosy škol z účtů 672/673, přiřazené k obci nebo kraji vedenému jako zřizovatel v registru MŠMT.',
+    freshness: 'Roční výkaz VYKZZ. Částka je pozorovaná u školy; přiřazení celého výnosu registrovanému zřizovateli je odhad.',
+    rationale: 'Poskytuje jednotné celostátní pokrytí zřizovatelské větve, ale účet nerozlišuje MŠMT, zřizovatele ani jiné veřejné zdroje a může se překrývat s přímou alokací MŠMT.',
     url: 'https://monitor.statnipokladna.gov.cz',
   },
   school_state_budget: {

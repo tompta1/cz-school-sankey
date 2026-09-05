@@ -59,14 +59,16 @@ One row per project-to-school link.
 
 ### `founder_support.csv`
 
-One row per inferred founder-to-school share of the founder's observed own-budget education support.
+One row per school with public-transfer revenue attributed to its registered
+founder. VYKZZ account 672/673 provides the observed school amount; the source
+attribution is inferred because the account can combine several public budgets.
 
 | column | required | note |
 | --- | --- | --- |
 | `institution_id` or `ico` | yes | join key |
 | `amount` | yes | CZK |
 | `basis` | no | defaults to `budgeted` |
-| `certainty` | no | `inferred`; FIN 2-12 M founder totals are pro-rated to schools |
+| `certainty` | no | `inferred`; VYKZZ does not identify the sender and FIN 2-12 M fallbacks are pro-rated |
 | `note` | no | explains source dataset and reconstruction method |
 
 This file is produced by `fetch_founder_budgets.py` (see below).
@@ -107,23 +109,25 @@ python3 etl/fetch_founder_budgets.py --year 2025 --no-costs
 
 ### Founder budget pipeline notes
 
-`fetch_founder_budgets.py` runs two passes against MONITOR national extracts:
+`fetch_founder_budgets.py` runs two nationwide passes against MONITOR extracts:
 
-**Pass 1 — FIN 2-12 M** (founder aggregate, inferred at school level):
-Downloads the FIN 2-12 M national extract, filters for founder IČOs and
-education paragraphs §3100–§3299 with own-budget items 5331/6351. Pass-through
-items 5336/6356 are deliberately excluded. The per-founder total is
-pro-rated across that founder's schools weighted by their MŠMT allocation
-share. These rows are marked `certainty=inferred, basis=realized`.
+**Pass 1 — VYKZZ** (school-level amount, inferred sender):
+Reads realized public-transfer revenue on accounts 672/673 for every school and
+routes it through the municipality or region recorded as founder in the MŠMT
+registry. The amount is observed, but the edge is marked `certainty=inferred`
+because VYKZZ does not identify which public budget sent each part.
 
-**Pass 2 — VYKZZ** (school-level, observed):
-Downloads the national income-statement extract and reads realized main-activity
-cost accounts. Account 502 gives energy, 511 gives repairs and maintenance, and
-518 contains services including rent. The output is `school_costs.csv`.
+The VYKZZ pass also reads realized main-activity cost accounts. Account 502 gives
+energy, 511 gives repairs and maintenance, and 518 contains services including
+rent. The output is `school_costs.csv`.
 
-Account 672 is not a founder-support measure: it can contain transfers routed
-from MŠMT and other public budgets. Using it would double-count direct education
-funding already present in the atlas.
+**Pass 2 — FIN 2-12 M** (fallback):
+For schools without VYKZZ transfer revenue, founder own-budget items 5331/6351
+in education paragraphs are pro-rated by the schools' MŠMT allocation weights.
+
+This restores broad coverage, but account 672 can overlap direct MŠMT funding.
+The UI therefore presents the edge as inferred attribution, not a verified
+founder-only payment.
 
 Downloaded ZIPs are cached under `etl/data/monitor_cache/`. Re-run with
 `--no-cache` to force a fresh download.
