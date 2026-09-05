@@ -79,6 +79,8 @@ Ministries sourced directly from Monitor MF:
 
 **Official founder budget annexes** provide a source-priority replacement where a complete founder-year schedule is available. Current coverage is Praha 10 in 2024 and 2025, all 153 Moravian-Silesian Region registry schools in 2024, and 135 Prague HMP registry schools with a stated operating component in 2025: 186 source-backed schools in 2024 and 168 in 2025. Prague's own operating component `000000091` is reconciled against direct education component `000033353` and the latter is excluded to avoid duplicating MŠMT funding. The companion workbook cross-checks all 160 HMP-founded registry schools, but the 25 Prague art schools have no `000000091` line. They remain region-founded and retain the nationwide inferred fallback rather than being assigned a false zero. Later targeted grants are not folded in without a complete recipient schedule.
 
+**Remaining founder gap:** the audit queue still contains 905 multi-school founders needing a recipient schedule for 2024 and 907 for 2025. Another 64 founder rows in 2024 and 66 in 2025 have no usable FIN 2-12 M education line and need a direct founder source. The largest unresolved schedules are the regional authorities (including Jihomoravský, Jihočeský and Středočeský kraj), Brno and Ostrava; HMP remains unresolved for 2024 and Moravskoslezský kraj for 2025. Eighteen 2024 school rows still lack a founder IČO, while 2025 has none. Art schools remain assigned to their registered regional founder even when an operating annex omits them.
+
 **Monitor MF: VYKZZ** — realized per-school costs from public-sector income statements. School detail separates materials, energy, repairs and maintenance, services (including rent), personnel, depreciation, and other net costs. Rent cannot be isolated from account 518 in the national extract. Rare negative accounting adjustments can make the displayed positive categories slightly exceed the reported net total.
 
 **Years:** 2024, 2025.
@@ -293,7 +295,9 @@ All three are queried individually from Monitor MF, giving directly observed bra
 
 **Monitor MF: zdravotní pojišťovny** — annual financial statements of public health insurers queried from Monitor MF by their IČOs. Public insurance is displayed as a separate top-level source rather than as a child of the state budget.
 
-**NZIP A038: zdravotnická záchranná služba** — annual aggregated performance data for the Emergency Medical Service (ZZS) from the National Health Information Portal (`nzip.cz`), including total interventions, patients, and emergency calls. Used as the denominator for the ZZS branch.
+**NZIP A038: zdravotnická záchranná služba** — annual aggregated performance data for the Emergency Medical Service (ZZS) from the National Health Information Portal (`nzip.cz`), including departures, patients, events, and emergency calls. Departures are used as the denominator for the ZZS branch.
+
+**ÚZIS NRHZS: vykázané výkony podle IČO** — annual publicly insured procedure quantities at provider-IČO level. The atlas sums `mnozstvi` for the hospital denominator. It deliberately does not sum `pocet_pacientu` or `pocet_kontaktu` as unique people because those fields are unique only inside each procedure-and-diagnosis row.
 
 **ČSÚ ZDR02: financování zdravotnictví** — National Health Accounts dataset from the Czech Statistical Office (`data.csu.gov.cz`), covering healthcare financing by provider type and financing type, including the outpatient sector. Used for the ambulatory / outpatient branch aggregate where provider-level finance data are not available.
 
@@ -302,9 +306,9 @@ All three are queried individually from Monitor MF, giving directly observed bra
 **Years:** 2024, 2025.
 
 **Per-unit metrics (by node):**
-- Nemocnice → no per-unit metric at the top level (mixed owner types); per-owner drilldown uses cost per institution
-- ZZS → denominator is total annual ZZS interventions (**Kč/zásah**)
-- Ambulantní péče → no per-unit metric (ČSÚ ZDR02 does not publish a clean unit count at the atlas level)
+- Nemocnice → **Kč/vykázaný výkon** for 2024 at owner, region and provider levels. This is an activity-intensity proxy, not the price of one treatment: procedures differ in complexity and the numerator is total institutional cost while the denominator covers publicly insured reported procedures. Among the 79 providers with a displayed Monitor cost numerator, the current denominator covers 74 providers and 99.67% of hospital costs; unmatched providers remain `N/A` individually. Closed 2025 claims are not available, so 2025 remains `N/A`.
+- ZZS → **Kč/výjezd ZZS** at the national root. A038 currently closes at 2024, so the 2025 finance view transparently reuses the latest 2024 departure count and lower regional/provider links remain `N/A`.
+- Ambulantní péče → no per-unit metric yet. The new ÚZIS 2024 annual ambulatory-care file has district/report-level visits and patients, but it does not map cleanly to the five ČSÚ ZDR02 provider subtypes or to allocated provider costs.
 - Veřejné zdravotnictví → no per-unit metric
 
 ---
@@ -595,7 +599,7 @@ Domain readiness summary:
 |---|---|---|---|
 | `state` | Scheduled | `2024`, `2025` | exact MF envelope is automated; mixed public-fund scope is disclosed separately |
 | `school` | Manual only | `2024`, `2025` | source-backed founder overlays cover 186 schools in 2024 and 168 in 2025; remaining schools use the inferred nationwide fallback |
-| `health` | Scheduled | `2024`, `2025` | ordered multi-step pipeline; Monitor fetch depends on prior loaded data |
+| `health` | Scheduled | `2024`, `2025` | hospital activity closes at 2024; Neon still has the 2023 outpatient finance snapshot although ČSÚ now publishes 2024; outpatient activity still lacks a clean subtype crosswalk |
 | `social` | Scheduled | `2024`, `2025` budget; recipients `2024` | 2025 benefit recipient denominators are not yet integrated |
 | `justice` | Scheduled | `2024`, `2025`; activity mainly `2024` | realized MF root is reconciled to budget-based branches; activity coverage is still limited |
 | `agriculture` | Scheduled | `2024`, `2025` | LPIS denominator is a proxy and depends on fallback-friendly source discovery |

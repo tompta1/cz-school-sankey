@@ -364,8 +364,8 @@ function sumAmount(rows: HealthFinanceRow[]): number {
   return rows.reduce((sum, row) => sum + row.costs, 0);
 }
 
-function sumPeople(rows: HealthFinanceRow[]): number {
-  return rows.reduce((sum, row) => sum + row.patientCount, 0);
+function sumReportedProcedures(rows: HealthFinanceRow[]): number {
+  return rows.reduce((sum, row) => sum + row.totalQuantity, 0);
 }
 
 function sumSiteCount(rows: OutpatientDirectoryRow[]): number {
@@ -492,7 +492,6 @@ function createPublicHealthNode(rows: HealthFinanceRow[]): AtlasNode {
     category: 'other',
     level: 2,
     metadata: {
-      capacity: sumPeople(rows) || null,
       providerCount: rows.length,
       focus: 'public_health',
     },
@@ -506,7 +505,7 @@ function createZzsNode(rows: HealthFinanceRow[], activity: HealthZzsActivityAggr
     category: 'other',
     level: 2,
     metadata: {
-      capacity: activity?.patientsTotal ?? null,
+      capacity: activity?.departuresTotal ?? null,
       providerCount: rows.length,
       focus: 'zzs',
       sourceYear: activity?.sourceYear ?? null,
@@ -551,13 +550,16 @@ function createRegionNode(
   rows: HealthFinanceRow[],
   extra: Record<string, string | number | boolean | null> = {},
 ): AtlasNode {
+  const capacity = rows.some((row) => row.focus === 'hospital')
+    ? sumReportedProcedures(rows) || null
+    : null;
   return {
     id,
     name,
     category: 'region',
     level,
     metadata: {
-      capacity: sumPeople(rows) || null,
+      capacity,
       providerCount: rows.length,
       ...extra,
     },
@@ -573,7 +575,7 @@ function createProviderNode(row: HealthFinanceRow, level: number): AtlasNode {
     ico: row.providerIco,
     ...(row.founderType ? { founderType: row.founderType } : {}),
     metadata: {
-      capacity: row.patientCount || null,
+      capacity: row.focus === 'hospital' ? row.totalQuantity || null : null,
       patientCount: row.patientCount,
       contactCount: row.contactCount,
       totalQuantity: row.totalQuantity,
@@ -890,7 +892,7 @@ async function getHealthZzsActivityAggregate(year: number): Promise<HealthZzsAct
     }
   }
 
-  if (aggregate.patientsTotal <= 0) return null;
+  if (aggregate.departuresTotal <= 0) return null;
   return aggregate;
 }
 
@@ -1220,7 +1222,7 @@ function buildCombinedRootGraph(
     const ownerGroups = buildOwnerGroups(hospitalRows);
     // VZP is a top-level source node (level 0) alongside state:cr — it is funded
     // through insurance premiums, not the state budget.
-    addNode(nodes, { ...createInsuranceNode(sumPeople(hospitalRows) || null), level: 0 });
+    addNode(nodes, { ...createInsuranceNode(sumReportedProcedures(hospitalRows) || null), level: 0 });
 
     for (const group of ownerGroups) {
       const node = ownerNode(group.ownerBranch);
@@ -1230,7 +1232,7 @@ function buildCombinedRootGraph(
         category: node.category,
         level: 2,
         metadata: {
-          capacity: sumPeople(group.rows) || null,
+          capacity: sumReportedProcedures(group.rows) || null,
           providerCount: group.rows.length,
           ownerBranch: group.ownerBranch,
           focus: 'hospital',
@@ -1267,7 +1269,7 @@ function buildCombinedRootGraph(
   }
 
   if (zzsAmount > 0) {
-    addNode(nodes, createZzsMixedSourceNode(zzsActivity?.patientsTotal ?? null));
+    addNode(nodes, createZzsMixedSourceNode(zzsActivity?.departuresTotal ?? null));
     addNode(nodes, createZzsNode(zzsRows, zzsActivity));
     links.push(
       makeLink(
@@ -1283,7 +1285,7 @@ function buildCombinedRootGraph(
   }
 
   if (ministryTotal > 0) {
-    addNode(nodes, createMinistryNode(sumPeople(publicHealthRows) || null));
+    addNode(nodes, createMinistryNode());
     links.push(
       makeLink(
         STATE_ID,
@@ -1371,10 +1373,10 @@ function buildHealthRootGraph(
   const namedAdminAmount = sumAdminAmount(adminEntities);
   const adminAmount = Math.max(ministryTotal - publicHealthAmount - namedAdminAmount, 0);
 
-  addNode(nodes, createStateNode(sumPeople(healthRows) || null));
+  addNode(nodes, createStateNode());
 
   if (hospitalRows.length > 0) {
-    addNode(nodes, createInsuranceNode(sumPeople(hospitalRows) || null));
+    addNode(nodes, createInsuranceNode(sumReportedProcedures(hospitalRows) || null));
 
     for (const group of buildOwnerGroups(hospitalRows)) {
       const node = ownerNode(group.ownerBranch);
@@ -1384,7 +1386,7 @@ function buildHealthRootGraph(
         category: node.category,
         level: 2,
         metadata: {
-          capacity: sumPeople(group.rows) || null,
+          capacity: sumReportedProcedures(group.rows) || null,
           providerCount: group.rows.length,
           ownerBranch: group.ownerBranch,
           focus: 'hospital',
@@ -1421,7 +1423,7 @@ function buildHealthRootGraph(
   }
 
   if (zzsAmount > 0) {
-    addNode(nodes, createZzsMixedSourceNode(zzsActivity?.patientsTotal ?? null));
+    addNode(nodes, createZzsMixedSourceNode(zzsActivity?.departuresTotal ?? null));
     addNode(nodes, createZzsNode(zzsRows, zzsActivity));
     links.push(
       makeLink(
@@ -1437,7 +1439,7 @@ function buildHealthRootGraph(
   }
 
   if (ministryTotal > 0) {
-    addNode(nodes, createMinistryNode(sumPeople(publicHealthRows) || null));
+    addNode(nodes, createMinistryNode());
     links.push(
       makeLink(
         STATE_ID,
@@ -1512,14 +1514,14 @@ function buildOwnerRegionGraph(year: number, ownerBranch: OwnerBranch, rows: Hea
   const owner = ownerNode(ownerBranch);
   const regions = buildRegionGroups(ownerRows);
 
-  addNode(nodes, createInsuranceNode(sumPeople(ownerRows) || null));
+  addNode(nodes, createInsuranceNode(sumReportedProcedures(ownerRows) || null));
   addNode(nodes, {
     id: owner.id,
     name: owner.name,
     category: owner.category,
     level: 2,
     metadata: {
-      capacity: sumPeople(ownerRows) || null,
+      capacity: sumReportedProcedures(ownerRows) || null,
       providerCount: ownerRows.length,
       ownerBranch,
       focus: 'hospital',
@@ -1563,8 +1565,8 @@ function buildPublicHealthRegionGraph(year: number, rows: HealthFinanceRow[]) {
   const links: AtlasLink[] = [];
   const regions = buildRegionGroups(publicHealthRows);
 
-  addNode(nodes, createStateNode(sumPeople(publicHealthRows) || null));
-  addNode(nodes, createMinistryNode(sumPeople(publicHealthRows) || null));
+  addNode(nodes, createStateNode());
+  addNode(nodes, createMinistryNode());
   addNode(nodes, createPublicHealthNode(publicHealthRows));
 
   links.push(
@@ -1615,7 +1617,7 @@ function buildZzsRegionGraph(year: number, rows: HealthFinanceRow[], activity: H
   const regions = buildRegionGroups(zzsRows);
   const totalAmount = sumAmount(zzsRows);
 
-  addNode(nodes, createZzsMixedSourceNode(activity?.patientsTotal ?? null));
+  addNode(nodes, createZzsMixedSourceNode(activity?.departuresTotal ?? null));
   addNode(nodes, createZzsNode(zzsRows, activity));
   links.push(
     makeLink(
@@ -1879,35 +1881,37 @@ function buildRegionProviderGraph(year: number, branchKey: string, regionName: s
   const nodes: AtlasNode[] = [];
   const links: AtlasLink[] = [];
   const totalAmount = sumAmount(regionRows);
-  const totalPeople = sumPeople(regionRows) || null;
+  const activityCapacity = branchKey === 'public_health' || branchKey === 'zzs'
+    ? null
+    : sumReportedProcedures(regionRows) || null;
   const regionId = regionNodeId(branchKey, regionName);
 
-  addNode(nodes, createCostsNode(totalPeople));
+  addNode(nodes, createCostsNode(activityCapacity));
 
   if (branchKey === 'public_health') {
-    addNode(nodes, createStateNode(totalPeople));
-    addNode(nodes, createMinistryNode(totalPeople));
+    addNode(nodes, createStateNode());
+    addNode(nodes, createMinistryNode());
     addNode(nodes, createPublicHealthNode(regionRows));
     addNode(nodes, createRegionNode(regionId, regionName, 3, regionRows, { branchKey }));
     links.push(makeLink(STATE_ID, HEALTH_MINISTRY_ID, totalAmount, year, 'state_to_health_ministry', 'Synteticka osa pro hygienu a verejne zdravi pod MZd'));
     links.push(makeLink(HEALTH_MINISTRY_ID, HEALTH_PUBLIC_HEALTH_ID, totalAmount, year, 'health_public_health_group', 'Agregovane verejne zdravi a hygiena'));
     links.push(makeLink(HEALTH_PUBLIC_HEALTH_ID, regionId, totalAmount, year, 'health_public_health_region_group', 'Regionální seskupeni hygieny a verejneho zdravi'));
   } else if (branchKey === 'zzs') {
-    addNode(nodes, createZzsMixedSourceNode(totalPeople));
+    addNode(nodes, createZzsMixedSourceNode());
     addNode(nodes, createZzsNode(regionRows, null));
     addNode(nodes, createRegionNode(regionId, regionName, 3, [], { branchKey, focus: 'zzs', providerCount: regionRows.length }));
     links.push(makeLink(HEALTH_ZZS_MIXED_SOURCE_ID, HEALTH_ZZS_ID, totalAmount, year, 'health_zzs_mixed_financing', zzsNote(null, 'root'), 'health_monitor_indicators'));
     links.push(makeLink(HEALTH_ZZS_ID, regionId, totalAmount, year, 'health_zzs_region_group', zzsNote(null, 'region'), 'health_monitor_indicators'));
   } else {
     const owner = ownerNode(branchKey as OwnerBranch);
-    addNode(nodes, createInsuranceNode(totalPeople));
+    addNode(nodes, createInsuranceNode(activityCapacity));
     addNode(nodes, {
       id: owner.id,
       name: owner.name,
       category: owner.category,
       level: 2,
       metadata: {
-        capacity: totalPeople,
+        capacity: activityCapacity,
         providerCount: regionRows.length,
         ownerBranch: branchKey,
         focus: 'hospital',
@@ -1927,7 +1931,7 @@ function buildRegionProviderGraph(year: number, branchKey: string, regionName: s
         providerId,
         row.costs,
         year,
-        'health_provider_costs',
+        row.focus === 'hospital' ? 'health_hospital_provider_costs' : 'health_provider_costs',
         providerCostNote(row),
         row.sourceDataset,
       ),
@@ -1938,7 +1942,7 @@ function buildRegionProviderGraph(year: number, branchKey: string, regionName: s
         HEALTH_COSTS_ID,
         row.costs,
         year,
-        'health_operating_costs',
+        row.focus === 'hospital' ? 'health_hospital_operating_costs' : 'health_operating_costs',
         providerCostNote(row),
         row.sourceDataset,
       ),
@@ -2013,7 +2017,7 @@ function buildProviderDetailGraph(year: number, providerIco: string, rows: Healt
   const regionName = row.regionName || 'Nezname uzemi';
   const branchKey = row.focus === 'public_health' ? 'public_health' : row.focus === 'zzs' ? 'zzs' : (row.ownerBranch ?? OWNER_BRANCH.unverified);
   const regionId = regionNodeId(branchKey, regionName);
-  const capacity = row.patientCount || null;
+  const capacity = row.focus === 'hospital' ? row.totalQuantity || null : null;
 
   addNode(nodes, createCostsNode(capacity));
   addNode(nodes, createProviderNode(row, 4));
@@ -2052,8 +2056,24 @@ function buildProviderDetailGraph(year: number, providerIco: string, rows: Healt
     links.push(makeLink(owner.id, regionId, row.costs, year, 'health_region_group', 'Regionální seskupeni nemocnic pod overenym zrizovatelem'));
   }
 
-  links.push(makeLink(regionId, providerId, row.costs, year, 'health_provider_costs', providerCostNote(row), row.sourceDataset));
-  links.push(makeLink(providerId, HEALTH_COSTS_ID, row.costs, year, 'health_operating_costs', providerCostNote(row), row.sourceDataset));
+  links.push(makeLink(
+    regionId,
+    providerId,
+    row.costs,
+    year,
+    row.focus === 'hospital' ? 'health_hospital_provider_costs' : 'health_provider_costs',
+    providerCostNote(row),
+    row.sourceDataset,
+  ));
+  links.push(makeLink(
+    providerId,
+    HEALTH_COSTS_ID,
+    row.costs,
+    year,
+    row.focus === 'hospital' ? 'health_hospital_operating_costs' : 'health_operating_costs',
+    providerCostNote(row),
+    row.sourceDataset,
+  ));
 
   return { year, nodes, links };
 }

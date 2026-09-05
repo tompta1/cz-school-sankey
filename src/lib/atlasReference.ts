@@ -65,6 +65,22 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
     rationale: 'Je to nejpřímější oficiální zdroj pro top-level veřejné zdravotnictví a hygienu.',
     url: 'https://monitor.statnipokladna.gov.cz',
   },
+  health_monitor_indicators: {
+    datasetKey: 'health_monitor_indicators',
+    title: 'Monitor MF: účetní výkazy poskytovatelů',
+    description: 'Roční náklady veřejných nemocnic a krajských zdravotnických záchranných služeb podle IČO.',
+    freshness: 'Roční účetní výkazy. V atlasu jsou nahrané roky 2024 a 2025.',
+    rationale: 'Poskytují účetní čitatel pro zdravotní srovnávací metriky, nikoli platbu za konkrétní výkon.',
+    url: 'https://monitor.statnipokladna.gov.cz',
+  },
+  nrhzs_claims_provider_ico: {
+    datasetKey: 'nrhzs_claims_provider_ico',
+    title: 'ÚZIS NRHZS: vykázané výkony podle IČO',
+    description: 'Počty zdravotních výkonů vykázaných v rámci veřejného zdravotního pojištění, agregované za rok a poskytovatele.',
+    freshness: 'Uzavřená roční data jsou dostupná do roku 2024; rok 2025 proto zatím nemá nemocniční výkonový jmenovatel.',
+    rationale: 'Součet množství výkonů je použitelný jako intenzitní jmenovatel. Součty pacientů ani kontaktů se nepoužívají, protože jsou unikátní jen uvnitř kombinace výkonu a diagnózy.',
+    url: 'https://datanzis.uzis.gov.cz/data/NR-04-NRHZS/NR-04-02/',
+  },
   health_financing_aggregates: {
     datasetKey: 'health_financing_aggregates',
     title: 'ČSÚ ZDR02: financování zdravotnictví',
@@ -331,6 +347,11 @@ const DATASET_REFERENCES: Record<string, DatasetReference> = {
   },
 };
 
+const METRIC_DATASET_KEYS: Record<string, string[]> = {
+  health_billed_procedure: ['health_monitor_indicators', 'nrhzs_claims_provider_ico'],
+  health_zzs_departure: ['health_monitor_indicators', 'health_zzs_activity_aggregates'],
+};
+
 function lookupDatasetReference(datasetKey: string): DatasetReference {
   if (DATASET_REFERENCES[datasetKey]) return DATASET_REFERENCES[datasetKey];
   if (datasetKey === 'atlas.inferred') return DATASET_REFERENCES.atlas_inferred;
@@ -370,10 +391,16 @@ export function buildAtlasReferenceSummary(
   fallbackPerUnitLabel: string,
   fallbackCountLabel: string,
 ): AtlasReferenceSummary {
-  const datasetKeys = [...new Set(graph.links.map((link) => link.sourceDataset).filter(Boolean))];
   const metrics = perUnit
     ? metricDescriptorsForLinks(graph.links, fallbackPerUnitLabel, fallbackCountLabel)
     : [];
+  const metricDatasetKeys = metrics.flatMap((metric) => metric.group ? METRIC_DATASET_KEYS[metric.group] ?? [] : []);
+  const datasetKeys = [
+    ...new Set([
+      ...graph.links.map((link) => link.sourceDataset).filter(Boolean),
+      ...metricDatasetKeys,
+    ]),
+  ];
 
   return {
     metrics,

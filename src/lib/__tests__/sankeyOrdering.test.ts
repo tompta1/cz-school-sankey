@@ -514,4 +514,57 @@ describe('sankeyOrdering', () => {
     expect(normalizationCapacity(projectLink, capacityMap, true)).toBe(1);
     expect(normalizationGroup(projectLink)).toBe('transport_project_count');
   });
+
+  it('uses reported procedures for hospital costs without leaking into other health flows', () => {
+    const capacityMap = new Map<string, number>([
+      ['health:owner:region', 1_000],
+      ['health:provider:12345678', 100],
+      ['health:costs', 1_000],
+      ['health:zzs', 500],
+    ]);
+    const hospitalOwnerLink: SankeyLink = {
+      source: 'health:system:public-insurance',
+      target: 'health:owner:region',
+      value: 2_000_000,
+      amountCzk: 2_000_000,
+      year: 2024,
+      flowType: 'health_hospital_owner_group',
+      basis: 'allocated',
+      certainty: 'inferred',
+      sourceDataset: 'atlas.inferred',
+    };
+    const hospitalOperatingLink: SankeyLink = {
+      ...hospitalOwnerLink,
+      source: 'health:provider:12345678',
+      target: 'health:costs',
+      amountCzk: 500_000,
+      value: 500_000,
+      flowType: 'health_hospital_operating_costs',
+    };
+    const publicHealthLink: SankeyLink = {
+      ...hospitalOwnerLink,
+      source: 'health:ministry:mzcr',
+      target: 'health:public-health',
+      flowType: 'health_public_health_group',
+    };
+    const outpatientLink: SankeyLink = {
+      ...hospitalOwnerLink,
+      target: 'health:outpatient:hp31',
+      flowType: 'health_outpatient_subtype_aggregate',
+    };
+    const zzsLink: SankeyLink = {
+      ...hospitalOwnerLink,
+      source: 'health:system:zzs-mixed-financing',
+      target: 'health:zzs',
+      flowType: 'health_zzs_mixed_financing',
+    };
+
+    expect(normalizationGroup(hospitalOwnerLink)).toBe('health_billed_procedure');
+    expect(normalizationCapacity(hospitalOwnerLink, capacityMap, true)).toBe(1_000);
+    expect(normalizationCapacity(hospitalOperatingLink, capacityMap, true)).toBe(100);
+    expect(normalizationGroup(publicHealthLink)).toBeNull();
+    expect(normalizationGroup(outpatientLink)).toBeNull();
+    expect(normalizationGroup(zzsLink)).toBe('health_zzs_departure');
+    expect(normalizationCapacity(zzsLink, capacityMap, true)).toBe(500);
+  });
 });

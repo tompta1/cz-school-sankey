@@ -29,6 +29,22 @@ const METRIC_DESCRIPTORS: Record<string, MetricDescriptor> = {
     description: 'Roční školské výdaje vztažené k počtu žáků v dané části toku.',
     rationale: 'U školství je počet žáků nejstabilnější a nejlépe čitelný výkonový jmenovatel.',
   },
+  health_billed_procedure: {
+    group: 'health_billed_procedure',
+    perUnitLabel: 'vykázaný výkon',
+    countLabel: 'vykázaných výkonů',
+    title: 'Kč/vykázaný výkon',
+    description: 'Celkové náklady veřejných nemocnic z účetních výkazů vztažené k počtu výkonů vykázaných veřejnému zdravotnímu pojištění.',
+    rationale: 'Jde o intenzitní proxy, nikoli cenu jednoho ošetření: výkony se liší složitostí a jmenovatel nepokrývá činnost mimo veřejné zdravotní pojištění.',
+  },
+  health_zzs_departure: {
+    group: 'health_zzs_departure',
+    perUnitLabel: 'výjezd ZZS',
+    countLabel: 'výjezdů ZZS',
+    title: 'Kč/výjezd ZZS',
+    description: 'Celkové náklady krajských ZZS vztažené k počtu výjezdů pozemních výjezdových skupin v národním výkazu A038.',
+    rationale: 'Výjezd je nejbližší společný provozní jmenovatel pro smíšené financování ZZS; používá se pouze na národním vrcholu větve.',
+  },
   police_registered_case: {
     group: 'police_registered_case',
     perUnitLabel: 'registrovaný skutek',

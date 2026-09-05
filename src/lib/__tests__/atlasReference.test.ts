@@ -88,4 +88,52 @@ describe('atlasReference', () => {
       title: 'MF: souhrnný státní závěrečný účet, sešit G',
     });
   });
+
+  it('adds denominator sources for active health metrics', () => {
+    const healthGraph: ApiGraph = {
+      year: 2024,
+      nodes: [
+        { id: 'health:system:public-insurance', name: 'Insurance', category: 'health_system', level: 0 },
+        { id: 'health:owner:region', name: 'Hospitals', category: 'health_provider', level: 2, metadata: { capacity: 100 } },
+        { id: 'health:system:zzs-mixed-financing', name: 'ZZS finance', category: 'health_system', level: 0 },
+        { id: 'health:zzs', name: 'ZZS', category: 'health_provider', level: 2, metadata: { capacity: 50 } },
+      ],
+      links: [
+        {
+          source: 'health:system:public-insurance',
+          target: 'health:owner:region',
+          value: 1_000,
+          amountCzk: 1_000,
+          year: 2024,
+          flowType: 'health_hospital_owner_group',
+          basis: 'allocated',
+          certainty: 'inferred',
+          sourceDataset: 'health_monitor_indicators',
+        },
+        {
+          source: 'health:system:zzs-mixed-financing',
+          target: 'health:zzs',
+          value: 500,
+          amountCzk: 500,
+          year: 2024,
+          flowType: 'health_zzs_mixed_financing',
+          basis: 'allocated',
+          certainty: 'observed',
+          sourceDataset: 'health_monitor_indicators',
+        },
+      ],
+    };
+
+    const summary = buildAtlasReferenceSummary(healthGraph, true, '', '');
+
+    expect(summary.metrics.map((entry) => entry.group)).toEqual([
+      'health_billed_procedure',
+      'health_zzs_departure',
+    ]);
+    expect(summary.datasets.map((entry) => entry.datasetKey)).toEqual(expect.arrayContaining([
+      'health_monitor_indicators',
+      'nrhzs_claims_provider_ico',
+      'health_zzs_activity_aggregates',
+    ]));
+  });
 });

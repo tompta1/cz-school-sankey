@@ -25,6 +25,9 @@ export function normalizationCapacity(
   if (NON_NORMALIZABLE_ALLOCATED_FLOW_TYPES.has(link.flowType)) return null;
   if (!normalizationGroup(link)) return null;
   if (link.institutionId) return capacityMap.get(link.institutionId) ?? null;
+  if (link.flowType === 'health_hospital_operating_costs') {
+    return capacityMap.get(link.source) ?? null;
+  }
   return capacityMap.get(link.target) ?? capacityMap.get(link.source) ?? null;
 }
 
@@ -37,6 +40,19 @@ export function normalizationGroup(link: SankeyLink): string | null {
     link.flowType === 'eu_project_support'
   ) {
     return 'school_pupil';
+  }
+
+  if (
+    link.flowType === 'health_hospital_owner_group' ||
+    link.flowType === 'health_region_group' ||
+    link.flowType === 'health_hospital_provider_costs' ||
+    link.flowType === 'health_hospital_operating_costs'
+  ) {
+    return 'health_billed_procedure';
+  }
+
+  if (link.flowType === 'health_zzs_mixed_financing') {
+    return 'health_zzs_departure';
   }
 
   if (
