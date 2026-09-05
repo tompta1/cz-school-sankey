@@ -1,14 +1,23 @@
 {
   "reporting_year": 2024,
-  "evidence_row_count": 33,
-  "unmatched_source_count": 2,
+  "evidence_row_count": 186,
+  "unmatched_source_count": 27,
   "sources": [
     {
       "founder_id": "founder:00063941",
       "source_url": "https://praha10.cz/wp-content/uploads/2025/12/Rozpocet-prisp.-organizaci-odboru-skolstvi-na-rok-2024-a-vyhledy-2025-2026-zverejneno-21.12.2023-dopl.-Bajkal.-II.xlsx",
       "source_row_count": 35,
       "matched_school_count": 33,
+      "evidence_row_count": 33,
       "unmatched_source_count": 2
+    },
+    {
+      "founder_id": "founder:70890692",
+      "source_url": "https://www.msk.cz/kraj/zastupitelstvo/prilohy_usneseni.html?cp=4&cu=1454&d=2023-12-07&rz=z&s=14",
+      "source_row_count": 178,
+      "matched_school_count": 153,
+      "evidence_row_count": 153,
+      "unmatched_source_count": 25
     }
   ]
 }

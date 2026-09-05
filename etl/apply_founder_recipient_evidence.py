@@ -53,7 +53,7 @@ def apply_year(
             institution_id = row["institution_id"]
             founder_id = row["founder_id"]
             amount = int(row["amount"])
-            if amount <= 0 or row["certainty"] != "observed":
+            if amount < 0 or row["certainty"] != "observed":
                 raise RuntimeError(f"Invalid recipient evidence for {institution_id}")
 
             payload = Jsonb(

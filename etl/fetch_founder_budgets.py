@@ -716,8 +716,8 @@ def apply_recipient_evidence(
                 f"{evidence_founder} != {expected_founder}"
             )
         amount = to_int(evidence.get("amount"))
-        if amount <= 0:
-            raise RuntimeError(f"Recipient evidence has non-positive amount for {institution_id}")
+        if amount < 0:
+            raise RuntimeError(f"Recipient evidence has negative amount for {institution_id}")
         rows_by_institution[institution_id] = {
             "institution_id": institution_id,
             "founder_id": evidence_founder,

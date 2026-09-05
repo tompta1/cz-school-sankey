@@ -37,3 +37,38 @@ def test_load_evidence_reads_compact_snapshot(tmp_path: Path) -> None:
         rows = apply_evidence.load_evidence(2025)
 
     assert rows == [{"institution_id": "school:1", "amount": "2600000"}]
+
+
+def test_apply_year_accepts_source_backed_zero() -> None:
+    class Cursor:
+        rowcount = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def execute(self, query, params) -> None:
+            assert params[0] == 0
+            self.rowcount = 1
+
+    class Connection:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    evidence = [
+        {
+            "institution_id": "school:1",
+            "founder_id": "founder:12345678",
+            "amount": "0",
+            "basis": "budgeted",
+            "certainty": "observed",
+            "attribution_method": "recipient_reported_founder_budget",
+            "source_document_kind": "approved_city_school_budget",
+            "source_url": "https://example.test/budget.xls",
+            "note": "Explicit zero operating transfer",
+        }
+    ]
+
+    assert apply_evidence.apply_year(Connection(), 2025, evidence) == (1, 1)

@@ -77,6 +77,8 @@ Ministries sourced directly from Monitor MF:
 
 **Monitor MF: FIN 2-12 M** — realized own-budget support from municipalities and regions, restricted to education paragraphs and items 5331/6351. Pass-through items 5336/6356 are excluded because they can contain MŠMT money already represented by the direct-school flow. Founder totals are allocated to individual schools by their share of the MŠMT allocation and are therefore labelled inferred.
 
+**Official founder budget annexes** provide a source-priority replacement where a complete founder-year schedule is available. Current coverage is Praha 10 in 2024 and 2025, all 153 Moravian-Silesian Region registry schools in 2024, and 135 Prague HMP registry schools with a stated operating component in 2025: 186 source-backed schools in 2024 and 168 in 2025. Prague's own operating component `000000091` is reconciled against direct education component `000033353` and the latter is excluded to avoid duplicating MŠMT funding. The companion workbook cross-checks all 160 HMP-founded registry schools, but the 25 Prague art schools have no `000000091` line. They remain region-founded and retain the nationwide inferred fallback rather than being assigned a false zero. Later targeted grants are not folded in without a complete recipient schedule.
+
 **Monitor MF: VYKZZ** — realized per-school costs from public-sector income statements. School detail separates materials, energy, repairs and maintenance, services (including rent), personnel, depreciation, and other net costs. Rent cannot be isolated from account 518 in the national extract. Rare negative accounting adjustments can make the displayed positive categories slightly exceed the reported net total.
 
 **Years:** 2024, 2025.
@@ -592,7 +594,7 @@ Domain readiness summary:
 | Domain | Automation status | Current years | Main remaining gap |
 |---|---|---|---|
 | `state` | Scheduled | `2024`, `2025` | exact MF envelope is automated; mixed public-fund scope is disclosed separately |
-| `school` | Manual only | `2024`, `2025` | founder own-budget support and observed operating-cost profiles are covered; refresh still depends on tracked workbooks and bundled fallbacks |
+| `school` | Manual only | `2024`, `2025` | source-backed founder overlays cover 186 schools in 2024 and 168 in 2025; remaining schools use the inferred nationwide fallback |
 | `health` | Scheduled | `2024`, `2025` | ordered multi-step pipeline; Monitor fetch depends on prior loaded data |
 | `social` | Scheduled | `2024`, `2025` budget; recipients `2024` | 2025 benefit recipient denominators are not yet integrated |
 | `justice` | Scheduled | `2024`, `2025`; activity mainly `2024` | realized MF root is reconciled to budget-based branches; activity coverage is still limited |

@@ -32,7 +32,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install parser dependencies
-        run: python -m pip install openpyxl
+        run: python -m pip install openpyxl pypdf xlrd
 
       - name: Build founder evidence queue
         env:

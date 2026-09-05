@@ -15,6 +15,8 @@ from typing import Any
 from urllib.request import Request, urlopen
 
 from openpyxl import load_workbook
+from pypdf import PdfReader
+from xlrd import open_workbook as open_xls_workbook
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,12 +52,21 @@ def read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def download_source(source: dict[str, str], no_cache: bool) -> Path:
-    url = source["source_url"]
-    suffix = f".{source.get('source_format') or 'bin'}"
+def download_source(
+    source: dict[str, str],
+    no_cache: bool,
+    *,
+    url_field: str = "source_url",
+    source_format: str | None = None,
+) -> Path:
+    url = source[url_field]
+    suffix = f".{source_format or source.get('source_format') or 'bin'}"
     digest = hashlib.sha256(url.encode()).hexdigest()[:10]
     founder_ico = source["founder_id"].removeprefix("founder:")
-    target = CACHE_DIR / f"{source['reporting_year']}-{founder_ico}-{digest}{suffix}"
+    role = "source" if url_field == "source_url" else url_field.removesuffix("_url")
+    target = CACHE_DIR / (
+        f"{source['reporting_year']}-{founder_ico}-{role}-{digest}{suffix}"
+    )
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     if target.exists() and not no_cache:
         return target
@@ -105,6 +116,176 @@ def parse_school_budget_workbook(
     return rows
 
 
+def parse_regional_operating_budget_pdf(
+    path: Path,
+    *,
+    unit_multiplier: int,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    reached_total = False
+    for page in PdfReader(path).pages:
+        text = (page.extract_text(extraction_mode="layout") or "").replace("\u00a0", " ")
+        if "Tabulka č. 6:" not in text or reached_total:
+            continue
+        for line in text.splitlines():
+            if line.strip().startswith("Celkem"):
+                reached_total = True
+                break
+            match = re.match(
+                r"^\s*(\d{8})\s{2,}(.+?)\s{2,}([\d ]+)\s*$",
+                line,
+            )
+            if not match:
+                continue
+            recipient_ico, recipient_name, amount = match.groups()
+            rows.append(
+                {
+                    "source_recipient_ico": recipient_ico,
+                    "source_recipient_name": " ".join(recipient_name.split()),
+                    "amount": int(amount.replace(" ", "")) * unit_multiplier,
+                }
+            )
+    if not reached_total or not rows:
+        raise RuntimeError(f"Could not find complete school operating-budget table in {path.name}")
+    if len({row["source_recipient_ico"] for row in rows}) != len(rows):
+        raise RuntimeError(f"Duplicate recipient IČO in {path.name}")
+    return rows
+
+
+def normalize_ico(value: object) -> str:
+    if isinstance(value, (int, float)):
+        text = str(int(value))
+    else:
+        text = str(value or "").strip().removesuffix(".0")
+    return text.zfill(8) if text.isdigit() and len(text) <= 8 else ""
+
+
+def parse_prague_direct_identity_workbook(
+    path: Path,
+    *,
+    unit_multiplier: int,
+) -> list[dict[str, Any]]:
+    workbook = load_workbook(path, data_only=True, read_only=True)
+    rows: list[dict[str, Any]] = []
+    for worksheet in workbook.worksheets:
+        values = list(worksheet.iter_rows(values_only=True))
+        header = next(
+            (
+                row
+                for row in values[:5]
+                if "IČO" in row and "Přímé NIV celkem" in row
+            ),
+            None,
+        )
+        if header is None:
+            continue
+        ico_column = header.index("IČO")
+        amount_column = header.index("Přímé NIV celkem")
+        for row in values:
+            if not row or not isinstance(row[0], str):
+                continue
+            ico = normalize_ico(row[ico_column] if len(row) > ico_column else None)
+            amount = row[amount_column] if len(row) > amount_column else None
+            if not ico or not isinstance(amount, (int, float)):
+                continue
+            rows.append(
+                {
+                    "source_recipient_ico": ico,
+                    "source_recipient_name": row[0].strip(),
+                    "direct_amount": int(round(float(amount) * unit_multiplier)),
+                }
+            )
+    if not rows or len({row["source_recipient_ico"] for row in rows}) != len(rows):
+        raise RuntimeError(f"Invalid or duplicate Prague recipient identities in {path.name}")
+    return rows
+
+
+def parse_prague_founder_budget(
+    path: Path,
+    *,
+    identity_path: Path,
+    year: int,
+    unit_multiplier: int,
+) -> list[dict[str, Any]]:
+    worksheet = open_xls_workbook(path).sheet_by_name("04")
+    year_column = None
+    for row_number in range(min(15, worksheet.nrows)):
+        year_column = next(
+            (
+                column
+                for column, value in enumerate(worksheet.row_values(row_number))
+                if f"r. {year}" in str(value)
+            ),
+            None,
+        )
+        if year_column is not None:
+            break
+    if year_column is None:
+        raise RuntimeError(f"Could not find {year} budget column in {path.name}")
+
+    blocks: list[dict[str, Any]] = []
+    for row_number in range(worksheet.nrows):
+        row = worksheet.row_values(row_number)
+        if row[0] != "D1" or str(row[3]) != "0091651":
+            continue
+        block = {
+            "source_budget_name": str(row[2]).strip(),
+            "total_amount": int(round(float(row[year_column]) * unit_multiplier)),
+            "direct_amount": None,
+            "amount": None,
+        }
+        for child_number in range(row_number + 1, worksheet.nrows):
+            child = worksheet.row_values(child_number)
+            if child[0] == "D1" or str(child[0]).startswith("H8"):
+                break
+            if child[0] != "D2":
+                continue
+            code = str(child[4]).strip().split(" - ", 1)[0]
+            amount = int(round(float(child[year_column]) * unit_multiplier))
+            if code == "000000091":
+                block["amount"] = amount
+            elif code == "000033353":
+                block["direct_amount"] = amount
+        if block["direct_amount"] is None:
+            raise RuntimeError(f"Missing direct-cost cross-check for {block['source_budget_name']}")
+        if block["total_amount"] != (block["amount"] or 0) + block["direct_amount"]:
+            raise RuntimeError(f"Prague budget components do not reconcile for {block['source_budget_name']}")
+        blocks.append(block)
+    if not blocks:
+        raise RuntimeError(f"Could not find Prague education organization blocks in {path.name}")
+
+    identities_by_amount: dict[int, list[dict[str, Any]]] = {}
+    for identity in parse_prague_direct_identity_workbook(
+        identity_path,
+        unit_multiplier=unit_multiplier,
+    ):
+        identities_by_amount.setdefault(identity["direct_amount"], []).append(identity)
+
+    rows: list[dict[str, Any]] = []
+    used_icos: set[str] = set()
+    for block in blocks:
+        candidates = identities_by_amount.get(block["direct_amount"], [])
+        if len(candidates) != 1:
+            raise RuntimeError(
+                f"Expected one Prague identity for direct amount {block['direct_amount']}; "
+                f"found {len(candidates)}"
+            )
+        identity = candidates[0]
+        ico = identity["source_recipient_ico"]
+        if ico in used_icos:
+            raise RuntimeError(f"Duplicate Prague recipient IČO {ico}")
+        used_icos.add(ico)
+        rows.append(
+            {
+                "source_recipient_ico": ico,
+                "source_recipient_name": identity["source_recipient_name"],
+                "source_budget_name": block["source_budget_name"],
+                "amount": block["amount"],
+            }
+        )
+    return rows
+
+
 def match_recipients(
     *,
     source_rows: list[dict[str, Any]],
@@ -125,8 +306,13 @@ def match_recipients(
         match = None
         method = ""
 
+        recipient_ico = str(source_row.get("source_recipient_ico") or "").strip()
+        ico_id = f"school:{recipient_ico}" if recipient_ico else ""
         alias_id = aliases.get(normalized_source)
-        if alias_id:
+        if ico_id and ico_id in registry_by_id:
+            match = registry_by_id[ico_id]
+            method = "ico_exact"
+        elif alias_id:
             match = registry_by_id.get(alias_id)
             method = "catalog_alias"
         elif len(registry_by_name.get(normalized_source, [])) == 1:
@@ -181,17 +367,37 @@ def build_year(year: int, catalog: Path, aliases_path: Path, no_cache: bool) -> 
     unmatched: list[dict[str, Any]] = []
     metadata_sources: list[dict[str, Any]] = []
     used_institutions: set[str] = set()
+    matched_school_count = 0
 
     for source in sources:
         founder_registry = [row for row in registry if row["founder_id"] == source["founder_id"]]
         archive = download_source(source, no_cache)
-        if source["parser_profile"] != "school_budget_revenue_column":
+        if source["parser_profile"] == "school_budget_revenue_column":
+            source_rows = parse_school_budget_workbook(
+                archive,
+                year=year,
+                unit_multiplier=int(source["unit_multiplier"]),
+            )
+        elif source["parser_profile"] == "regional_operating_budget_pdf":
+            source_rows = parse_regional_operating_budget_pdf(
+                archive,
+                unit_multiplier=int(source["unit_multiplier"]),
+            )
+        elif source["parser_profile"] == "prague_education_budget_components":
+            identity_archive = download_source(
+                source,
+                no_cache,
+                url_field="identity_source_url",
+                source_format="xlsx",
+            )
+            source_rows = parse_prague_founder_budget(
+                archive,
+                identity_path=identity_archive,
+                year=year,
+                unit_multiplier=int(source["unit_multiplier"]),
+            )
+        else:
             raise RuntimeError(f"Unsupported parser profile: {source['parser_profile']}")
-        source_rows = parse_school_budget_workbook(
-            archive,
-            year=year,
-            unit_multiplier=int(source["unit_multiplier"]),
-        )
         matched, unmatched_source, unmatched_registry = match_recipients(
             source_rows=source_rows,
             registry_rows=founder_registry,
@@ -202,12 +408,17 @@ def build_year(year: int, catalog: Path, aliases_path: Path, no_cache: bool) -> 
             raise RuntimeError(
                 f"{source['founder_id']} {year} leaves {len(unmatched_registry)} registry schools unmatched: {names}"
             )
+        matched_school_count += len(matched)
 
+        source_evidence_count = 0
         for row in matched:
+            if row["amount"] is None:
+                continue
             institution_id = row["institution_id"]
             if institution_id in used_institutions:
                 raise RuntimeError(f"Multiple founder sources matched {institution_id} in {year}")
             used_institutions.add(institution_id)
+            source_evidence_count += 1
             evidence.append(
                 {
                     "institution_id": institution_id,
@@ -222,7 +433,7 @@ def build_year(year: int, catalog: Path, aliases_path: Path, no_cache: bool) -> 
                     "source_url": source["source_url"],
                     "note": (
                         f"{source['founder_name']} approved {year} school budget; "
-                        "recipient-level revenue from the founder budget"
+                        f"{source['notes']}"
                     ),
                 }
             )
@@ -243,6 +454,7 @@ def build_year(year: int, catalog: Path, aliases_path: Path, no_cache: bool) -> 
                 "source_url": source["source_url"],
                 "source_row_count": len(source_rows),
                 "matched_school_count": len(matched),
+                "evidence_row_count": source_evidence_count,
                 "unmatched_source_count": len(unmatched_source),
             }
         )
@@ -297,8 +509,8 @@ def build_year(year: int, catalog: Path, aliases_path: Path, no_cache: bool) -> 
         handle.write("\n")
 
     print(
-        f"Founder recipient evidence {year}: {len(evidence)} matched schools, "
-        f"{len(unmatched)} source-only recipients"
+        f"Founder recipient evidence {year}: {len(evidence)} evidence rows from "
+        f"{matched_school_count} matched schools, {len(unmatched)} source-only recipients"
     )
     print(f"Wrote {output_path.relative_to(ROOT)}")
 

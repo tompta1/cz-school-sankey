@@ -33,7 +33,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest openpyxl pypdf requests "psycopg[binary]"
+          python -m pip install pytest openpyxl pypdf xlrd requests "psycopg[binary]"
 
       - name: Run frontend tests
         run: npm test

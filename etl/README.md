@@ -152,12 +152,19 @@ Discovered recipient-level documents belong in
 founder-year source, not an individual school override.
 
 Run `npm run etl:founders:evidence` to download and normalize cataloged
-recipient-level workbooks. The parser requires every school registered under a
-cataloged founder to match exactly once. Historical organization renames are
-kept separately in `etl/data/founder_source_aliases.csv`; amounts never belong
-in the alias file. The resulting `founder_recipient_evidence.csv` is a
-reviewable source-priority overlay: `fetch_founder_budgets.py` uses it for
-matched schools and retains the inferred nationwide fallback everywhere else.
+recipient-level workbooks or official budget annexes. The parser requires every
+school registered under a cataloged founder to match exactly once, preferably
+by IČO. Historical organization renames are kept separately in
+`etl/data/founder_source_aliases.csv`; amounts never belong in the alias file.
+The Prague parser reconciles the city-funded operating component against the
+separately published direct-education component before joining recipients by
+IČO. A published zero is valid source evidence, but an omitted city-funded
+component is not converted into zero; the nationwide inferred fallback remains
+for that school. Neither case removes or changes the school's registered
+regional founder. The resulting `founder_recipient_evidence.csv` is a
+reviewable source-priority overlay:
+`fetch_founder_budgets.py` uses it for matched schools and retains the inferred
+nationwide fallback everywhere else.
 For an existing Neon database, the `Apply school founder evidence` workflow
 updates only source-backed raw rows and matching core flows. It does not create
 a new dataset release or rebuild the 16,000-row founder table, which keeps the

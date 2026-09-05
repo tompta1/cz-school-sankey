@@ -417,6 +417,38 @@ class TestApplyRecipientEvidence:
         assert rows[0]["certainty"] == "observed"
         assert rows[0]["attribution_method"] == "recipient_reported_founder_budget"
 
+    def test_explicit_zero_replaces_inference_without_changing_founder(self):
+        entities = {
+            "11111111": {
+                "institution_id": "school:a",
+                "founder_id": "founder:12345678",
+            }
+        }
+        base = [
+            {
+                "institution_id": "school:a",
+                "founder_id": "founder:12345678",
+                "amount": 9_000,
+                "basis": "realized",
+                "certainty": "inferred",
+            }
+        ]
+        evidence = [
+            {
+                "institution_id": "school:a",
+                "founder_id": "founder:12345678",
+                "amount": "0",
+                "basis": "budgeted",
+                "certainty": "observed",
+            }
+        ]
+
+        rows = fb.apply_recipient_evidence(base, evidence, entities)
+
+        assert rows[0]["amount"] == 0
+        assert rows[0]["founder_id"] == "founder:12345678"
+        assert rows[0]["certainty"] == "observed"
+
     def test_rejects_evidence_for_wrong_founder(self):
         entities = {
             "11111111": {

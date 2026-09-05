@@ -1,14 +1,23 @@
 {
   "reporting_year": 2025,
-  "evidence_row_count": 33,
-  "unmatched_source_count": 3,
+  "evidence_row_count": 168,
+  "unmatched_source_count": 30,
   "sources": [
     {
       "founder_id": "founder:00063941",
       "source_url": "https://praha10.cz/wp-content/uploads/2025/12/Rozpocet-prisp_-organizaci-odboru-skolstvi-na-rok-2025-a-vyhledy-2026-2027.xlsx",
       "source_row_count": 36,
       "matched_school_count": 33,
+      "evidence_row_count": 33,
       "unmatched_source_count": 3
+    },
+    {
+      "founder_id": "founder:00064581",
+      "source_url": "https://praha.eu/documents/d/praha/priloha-c-2c-k-usneseni-zhmp-bezne-vydaje-1",
+      "source_row_count": 187,
+      "matched_school_count": 160,
+      "evidence_row_count": 135,
+      "unmatched_source_count": 27
     }
   ]
 }
