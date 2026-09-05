@@ -17,7 +17,6 @@ Výchozí rok je **2025**. Rok 2024 zůstává pro srovnání a pro oblasti, kde
 | `db/` | PostgreSQL schéma, migrace a lokální nástroje | Neon warehouse `meta`, `raw`, `core`, `mart` |
 | `.github/workflows/` | CI, ETL, deploy a smoke testy | Bezobslužný produkční tok |
 | `scripts/` | DQ, smoke a lokální DB utility | Ověření produkce a reconciliation |
-| [`TODO.md`](TODO.md) | Prioritizované chyby a datové mezery | Jediné místo pro otevřený backlog |
 
 ## Pokrytí
 
