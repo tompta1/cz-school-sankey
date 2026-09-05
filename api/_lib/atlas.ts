@@ -254,6 +254,7 @@ interface SocialMpsvAggregate {
 }
 
 interface SocialRecipientMetric {
+  sourceUrl: string;
   year: number;
   metricCode: string;
   metricName: string;

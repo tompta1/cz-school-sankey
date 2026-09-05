@@ -128,7 +128,12 @@ function buildActiveOption(
             : formatCompactCzk(amountCzk);
           const sourceName = escapeTooltipHtml(idToDisplay.get(source) ?? source);
           const targetName = escapeTooltipHtml(idToDisplay.get(target) ?? target);
-          return `<strong>${sourceName} → ${targetName}</strong><br/>${amt}`;
+          const metricNode = nodes.find((node) => node.id === (rawLink?.institutionId ?? target));
+          const denominator = perPupil && metricNode?.metadata?.denominatorYear
+            ? `<br/><small>${escapeTooltipHtml(String(metricNode.metadata.denominatorLabel ?? 'Srovnávací údaj'))} (${metricNode.metadata.denominatorYear})</small>`
+            : '';
+          const note = rawLink?.note ? `<br/><small>${escapeTooltipHtml(rawLink.note)}</small>` : '';
+          return `<strong>${sourceName} → ${targetName}</strong><br/>${amt}${denominator}${note}`;
         }
         const nodeId = (p.data as { name: string }).name;
         const displayName = idToDisplay.get(nodeId) ?? nodeId;

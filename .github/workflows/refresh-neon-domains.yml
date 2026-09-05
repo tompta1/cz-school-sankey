@@ -367,6 +367,7 @@ jobs:
                   ;;
                 2025)
                   social_budget_year_args+=(--year "${year}")
+                  social_recipient_year_args+=(--year "${year}")
                   ;;
               esac
             done
@@ -394,7 +395,7 @@ jobs:
                 if (( ${#social_recipient_year_args[@]} > 0 )); then
                   if ! python3 etl/social/fetch_recipient_metrics.py "${social_recipient_year_args[@]}"; then
                     if find etl/data/raw/social/social_recipient_metrics -maxdepth 1 -name '*__social-recipient-metrics.csv' | grep -q .; then
-                      echo "Falling back to tracked social recipient metrics snapshot for 2024" >&2
+                      echo "Falling back to tracked social recipient metrics snapshot; verification checks requested years" >&2
                     else
                       echo "Missing fallback social recipient metrics snapshot under etl/data/raw/social/social_recipient_metrics" >&2
                       exit 1
@@ -420,6 +421,7 @@ jobs:
                   ;;
                 2025)
                   justice_budget_year_args+=(--year "${year}")
+                  justice_has_activity=true
                   ;;
               esac
             done
@@ -438,7 +440,7 @@ jobs:
                   python3 etl/justice/fetch_budget_aggregates.py "${justice_budget_year_args[@]}"
                 fi
                 if [[ "${justice_has_activity}" == "true" ]]; then
-                  python3 etl/justice/fetch_activity_aggregates.py --year 2024
+                  python3 etl/justice/fetch_activity_aggregates.py "${justice_budget_year_args[@]}"
                 fi
               fi
 

@@ -20,6 +20,7 @@ import {
   TOP_SCHOOLS,
 } from '../lib/graph';
 import { formatCompactCzk } from '../lib/format';
+import { metricCoverage } from '../lib/metricCoverage';
 import type { ApiGraph, AtlasSearchHit, AtlasSearchResponse, AtlasYearsResponse, HoverInfo, SankeyNode } from '../types';
 import { AtlasReferencePanel } from './AtlasReferencePanel';
 import { SankeyChartCard } from './SankeyChartCard';
@@ -675,6 +676,7 @@ function handleMvNodeClick(node: SankeyNode) {
   if (!graph || !selectedYear) return <div className="centered">Zatim neni k dispozici sjednoceny pohled.</div>;
 
   const backLabel = atlasBackLabel(viewStack, ROOT_TITLE);
+  const coverage = metricCoverage(graph);
 
   return (
     <div className="dashboard-shell">
@@ -783,10 +785,17 @@ function handleMvNodeClick(node: SankeyNode) {
       </div>
 
       <div className="chart-area">
+        {perPerson && (
+          <p role="status" className="metric-coverage">
+            {coverage.available === 0
+              ? 'Srovnávací údaje pro tento pohled chybí. Graf zobrazuje celkové částky v Kč; N/A neznamená nulové výdaje.'
+              : `Srovnávací údaj je dostupný pro ${coverage.available} z ${coverage.total} zobrazených toků. Chybějící údaje nejsou nula.`}
+          </p>
+        )}
         <SankeyChartCard
           nodes={graph.nodes}
           links={graph.links}
-          perPupil={perPerson}
+          perPupil={perPerson && coverage.available > 0}
           perUnitLabel="srovnávací jednotku"
           metricModeLabel="Srovnávací metrika"
           unitCountLabel="žáků / pacientů / příjemců / případů / zásahů / cestujících / příjemců dotace"

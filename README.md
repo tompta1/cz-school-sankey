@@ -24,8 +24,8 @@ Výchozí rok je **2025**. Rok 2024 zůstává pro srovnání a pro oblasti, kde
 |---|---|---|---|
 | Školství | `school` | kraj → zřizovatel → škola → náklad | 2024, 2025 |
 | Zdraví | `health` | nemocnice, ZZS, veřejné zdraví, ambulance | 2024, 2025; výkony nemocnic do 2024 |
-| Sociální věci | `social` | skupiny dávek | rozpočet 2024–2025; příjemci hlavně 2024 |
-| Spravedlnost | `justice` | soudy, vězeňství, zastupitelství | rozpočet 2024–2025; výkon hlavně 2024 |
+| Sociální věci | `social` | skupiny dávek | rozpočet a čtyři srovnávací údaje 2024–2025 |
+| Spravedlnost | `justice` | soudy, vězeňství, zastupitelství | rozpočet a stavy vězňů 2024–2025; soudní výkon 2024 |
 | Zemědělství | `agriculture` | typ podpory → příjemce | rozpočet 2024–2025; detail hlavně 2024 |
 | Životní prostředí | `environment` | SFŽP program → příjemce | 2024, 2025 |
 | Regionální rozvoj | `mmr` / `regions` | IROP → kraj → příjemce | 2024, 2025 |

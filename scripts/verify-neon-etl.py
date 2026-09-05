@@ -86,9 +86,9 @@ def expected_datasets(domain: str, years: set[int]) -> set[str]:
             "health_zzs_activity_aggregates",
         }
     if domain == "social":
-        return {"social_mpsv_aggregates"} | ({"social_recipient_metrics"} if 2024 in supported else set())
+        return {"social_mpsv_aggregates", "social_recipient_metrics"}
     if domain == "justice":
-        return {"justice_budget_aggregates"} | ({"justice_activity_aggregates"} if 2024 in supported else set())
+        return {"justice_budget_aggregates", "justice_activity_aggregates"}
     if domain == "agriculture":
         return {"agriculture_budget_entities"} | (
             {"agriculture_szif_payments", "agriculture_lpis_user_area"} if 2024 in supported else set()
@@ -190,6 +190,26 @@ def main() -> None:
         ).fetchall()
 
         school_rows = []
+        metric_errors = []
+        for domain, view, column, codes in [
+            ("social", "mart.social_recipient_metric_latest", "recipient_count", {
+                "pensions_recipients_year_end", "unemployment_support_year_end_recipients",
+                "care_allowance_december_recipients", "substitute_alimony_december_recipients",
+            }),
+            ("justice", "mart.justice_activity_aggregate_latest", "count_value", {
+                "prison_average_daily_inmates_total",
+            }),
+        ]:
+            if domain not in selected_domains:
+                continue
+            for year in sorted(requested_years & SUPPORTED_YEARS[domain]):
+                rows = conn.execute(
+                    f"select metric_code from {view} where reporting_year = %s and {column} > 0 and source_url <> ''",
+                    (year,),
+                ).fetchall()
+                missing = codes - {row[0] for row in rows}
+                if missing:
+                    metric_errors.append(f"{domain}/{year}: missing positive, sourced metrics: {', '.join(sorted(missing))}")
         if args.verify_school_transforms and "school" in selected_domains:
             school_rows = conn.execute(
                 """
@@ -261,7 +281,7 @@ def main() -> None:
     print("| Domain | Dataset | Snapshot | Rows | Status | Covered years | Fetched at |")
     print("|---|---|---|---:|---|---|---|")
 
-    errors: list[str] = []
+    errors: list[str] = metric_errors
     for domain in selected_domains:
         datasets = expected_datasets(domain, requested_years)
         if domain == "school" and args.school_finance_only:

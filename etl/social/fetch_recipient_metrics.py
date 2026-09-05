@@ -22,6 +22,7 @@ OUTPUT_FILE_NAME = "social-recipient-metrics.csv"
 PENSIONS_URL = "https://data.cssz.cz/dump/duchodci-v-cr-krajich-okresech.csv"
 UNEMPLOYMENT_PAGE_URL = "https://data.mpsv.cz/mesicni-statistiky-uchazecu-o-zamestnani-a-volnych-pracovnich-mist-od-roku-2014"
 MPSV_BENEFITS_PDF_URLS = {
+    2025: "https://mpsv.gov.cz/cms/documents/b4f5f6d9-0379-7d8d-9bfb-6920365cbc20/Informace%20o%20vyplacen%C3%BDch%20d%C3%A1vk%C3%A1ch%20v%20prosinci%202025.pdf",
     2024: "https://data.mpsv.cz/documents/20142/7393973/Informace%2Bo%2Bvyplacen%C3%BDch%2Bd%C3%A1vk%C3%A1ch%2Bv%2Bprosinci%2B2024.pdf/a8e89cce-b4a6-d562-2e2c-d4ee4e043a9f?t=1738832892949",
 }
 NUMBER_TIS_RE = re.compile(r"(\d+,\d)\s+(\d+,\d)\s+\d+,\d")
@@ -87,16 +88,16 @@ def load_mpsv_benefits_pdf_text(year: int) -> tuple[str, str]:
     if not url:
         raise RuntimeError(f"No MPSV benefits PDF is configured for {year}")
 
-    pdf_path = Path(f"/tmp/mpsv-benefits-{year}.pdf")
-    pdf_path.write_bytes(fetch_bytes(url))
-    reader = PdfReader(str(pdf_path))
+    reader = PdfReader(io.BytesIO(fetch_bytes(url)))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    if not re.search(rf"v\s+prosinci\s+{year}\b", text[:500]):
+        raise RuntimeError(f"MPSV PDF does not identify December {year}")
     return text, url
 
 
 def parse_unemployment_supported_year_end_count(pdf_text: str, year: int) -> int:
     pattern = re.compile(
-        rf"Počet uchazečů o zaměstnání .*? prosince {year} .*? dosáhl cca (\d+,\d) tis",
+        rf"Počet uchazečů o zaměstnání\s*,?.*?prosince\s+{year}\b.*?dosáhl cca\s+(\d+,\d)\s+tis",
         re.DOTALL,
     )
     match = pattern.search(pdf_text)
@@ -106,11 +107,11 @@ def parse_unemployment_supported_year_end_count(pdf_text: str, year: int) -> int
 
 
 def parse_paid_count_tis(pdf_text: str, label: str) -> int:
-    idx = pdf_text.find(label)
-    if idx == -1:
-        raise RuntimeError(f"Could not find table row for {label!r}")
-    excerpt = pdf_text[idx : idx + 240]
-    match = NUMBER_TIS_RE.search(excerpt)
+    # Anchor the actual table row; prose mentions must not select unrelated numbers.
+    match = re.search(
+        rf"^\s*{re.escape(label)}\s*(?:\d+\))?\s*(\d+,\d)\s+(\d+,\d)\s+\d+,\d",
+        pdf_text, re.MULTILINE,
+    )
     if not match:
         raise RuntimeError(f"Could not parse paid-count row for {label!r}")
     return int(round(float(match.group(2).replace(",", ".")) * 1000))
@@ -121,7 +122,7 @@ def build_rows(years: list[int]) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
 
     for year in years:
-        pdf_text, pdf_url = load_mpsv_benefits_pdf_text(year) if year in MPSV_BENEFITS_PDF_URLS else ("", "")
+        pdf_text, pdf_url = load_mpsv_benefits_pdf_text(year)
         rows.append(
             {
                 "reporting_year": year,
@@ -133,7 +134,7 @@ def build_rows(years: list[int]) -> list[dict[str, object]]:
             }
         )
 
-        if year <= 2024:
+        if pdf_text:
             rows.append(
                 {
                     "reporting_year": year,
@@ -148,8 +149,8 @@ def build_rows(years: list[int]) -> list[dict[str, object]]:
                 {
                     "reporting_year": year,
                     "metric_code": "care_allowance_december_recipients",
-                    "metric_name": "Příjemci příspěvku na péči v prosinci",
-                    "denominator_kind": "persons_month_end",
+                    "metric_name": "Vyplacené příspěvky na péči v prosinci",
+                    "denominator_kind": "payments_december",
                     "recipient_count": parse_paid_count_tis(pdf_text, "Příspěvek na péči"),
                     "source_url": pdf_url,
                 }
@@ -158,8 +159,8 @@ def build_rows(years: list[int]) -> list[dict[str, object]]:
                 {
                     "reporting_year": year,
                     "metric_code": "substitute_alimony_december_recipients",
-                    "metric_name": "Příjemci náhradního výživného v prosinci",
-                    "denominator_kind": "persons_month_end",
+                    "metric_name": "Vyplacené dávky náhradního výživného v prosinci",
+                    "denominator_kind": "payments_december",
                     "recipient_count": parse_paid_count_tis(pdf_text, "Náhradní výživné"),
                     "source_url": pdf_url,
                 }
@@ -192,10 +193,7 @@ def write_snapshot(*, out_dir: Path, snapshot: str, rows: list[dict[str, object]
         "row_count": len(rows),
         "generator": "etl/social/fetch_recipient_metrics.py",
         "user_agent": USER_AGENT,
-        "sources": [
-            PENSIONS_URL,
-            UNEMPLOYMENT_PAGE_URL,
-        ],
+        "sources": sorted({str(row["source_url"]) for row in rows}),
     }
     sidecar_path = data_path.with_suffix(data_path.suffix + ".download.json")
     sidecar_path.write_text(json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")

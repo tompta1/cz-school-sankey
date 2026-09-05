@@ -27,6 +27,18 @@ async function main() {
   assert(years.years.some((entry) => entry.year === 2024), 'atlas years endpoint is missing 2024');
   assert(years.years.some((entry) => entry.year === 2025), 'atlas years endpoint is missing 2025');
 
+  const overview2025 = await fetchJson('/api/atlas/overview?year=2025&metric=cost');
+  for (const id of [
+    'social:benefit:pensions', 'social:benefit:unemployment',
+    'social:benefit:care-allowance', 'social:benefit:substitute-alimony',
+    'justice:prison-service',
+  ]) {
+    const node = overview2025.nodes.find((entry) => entry.id === id);
+    assert(node?.metadata?.capacity > 0, `2025 metric missing: ${id}`);
+    assert(node?.metadata?.denominatorYear === 2025, `2025 metric uses wrong source year: ${id}`);
+    assert(node?.metadata?.denominatorSourceUrl?.startsWith('https://'), `2025 metric has no source: ${id}`);
+  }
+
   const overview2024 = await fetchJson('/api/atlas/overview?year=2024&metric=cost');
   assert(Array.isArray(overview2024.nodes) && overview2024.nodes.length > 20, 'overview 2024 has too few nodes');
   assert(

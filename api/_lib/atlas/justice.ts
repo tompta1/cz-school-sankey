@@ -33,6 +33,7 @@ interface JusticeBudgetAggregate {
 }
 
 interface JusticeActivityAggregate {
+  sourceUrl?: string;
   year: number;
   activityDomain: string;
   metricCode: string;
@@ -109,7 +110,12 @@ function createJusticeBranchNode(
   id: string,
   name: string,
   capacity: number | null = null,
+  activityRows: JusticeActivityAggregate[] = [],
 ): AtlasNode {
+  const metricCode = id === 'justice:prison-service'
+    ? 'prison_average_daily_inmates_total'
+    : id === 'justice:courts' ? 'courts_disposed_total' : null;
+  const metric = activityRows.find((row) => row.metricCode === metricCode);
   return {
     id,
     name,
@@ -117,6 +123,11 @@ function createJusticeBranchNode(
     level: 2,
     metadata: {
       ...(capacity ? { capacity } : {}),
+      ...(metric ? {
+        denominatorYear: metric.year,
+        denominatorSourceUrl: metric.sourceUrl ?? null,
+        denominatorLabel: metric.metricName,
+      } : {}),
       focus: 'justice',
     },
   };
@@ -200,8 +211,8 @@ function buildJusticeBranchRows(
         id: 'justice:prison-service',
         name: 'Vězeňská služba',
         amount: prisonServiceAmount,
-        capacity: null,
-        note: 'Ostatní výdaje vězeňské části',
+        capacity: prisonCapacity,
+        note: 'Rozpočtové ostatní výdaje vězeňské části; jmenovatel je průměr stavů z měsíčních hlášení, nikoli počet unikátních osob za rok.',
       },
       {
         id: 'justice:social',
@@ -271,7 +282,8 @@ export async function getJusticeActivityAggregates(year: number): Promise<Justic
         activity_domain,
         metric_code,
         metric_name,
-        count_value
+        count_value,
+        source_url
       from mart.justice_activity_aggregate_latest
       where reporting_year = $1
       order by activity_domain, metric_code
@@ -285,6 +297,7 @@ export async function getJusticeActivityAggregates(year: number): Promise<Justic
     metricCode: String(row.metric_code),
     metricName: String(row.metric_name),
     countValue: toNumber(row.count_value),
+    sourceUrl: String(row.source_url),
     sourceDataset: 'justice_activity_aggregates',
   }));
 }
@@ -318,7 +331,7 @@ export function appendJusticeBranch(
 
   for (const branch of buildJusticeBranchRows(justiceBudgetRows, justiceActivityRows)) {
     if (branch.amount <= 0) continue;
-    addNode(nodes, createJusticeBranchNode(branch.id, branch.name, branch.capacity));
+    addNode(nodes, createJusticeBranchNode(branch.id, branch.name, branch.capacity, justiceActivityRows));
     links.push(
       makeLink(
         JUSTICE_MINISTRY_ID,
@@ -346,7 +359,7 @@ export function buildJusticeRootGraph(
 
   for (const branch of buildJusticeBranchRows(budgetRows, activityRows)) {
     if (branch.amount <= 0) continue;
-    addNode(nodes, createJusticeBranchNode(branch.id, branch.name, branch.capacity));
+    addNode(nodes, createJusticeBranchNode(branch.id, branch.name, branch.capacity, activityRows));
     links.push(
       makeLink(
         JUSTICE_MINISTRY_ID,

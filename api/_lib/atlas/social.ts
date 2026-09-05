@@ -31,6 +31,7 @@ interface SocialMpsvAggregate {
 }
 
 interface SocialRecipientMetric {
+  sourceUrl: string;
   year: number;
   metricCode: string;
   metricName: string;
@@ -141,7 +142,8 @@ export async function getSocialRecipientMetrics(year: number): Promise<SocialRec
         metric_code,
         metric_name,
         denominator_kind,
-        recipient_count
+        recipient_count,
+        source_url
       from mart.social_recipient_metric_latest
       where reporting_year = $1
       order by metric_code
@@ -155,6 +157,7 @@ export async function getSocialRecipientMetrics(year: number): Promise<SocialRec
     metricName: String(row.metric_name),
     denominatorKind: String(row.denominator_kind),
     recipientCount: toNumber(row.recipient_count),
+    sourceUrl: String(row.source_url),
     sourceDataset: 'social_recipient_metrics',
   }));
 }
@@ -288,7 +291,21 @@ export function appendSocialBranch(
   ];
 
   for (const bucket of benefitBuckets.filter((entry) => entry.amount > 0)) {
-    addNode(nodes, createSocialBenefitNode(bucket.id, bucket.name, bucket.capacity ?? null));
+    const node = createSocialBenefitNode(bucket.id, bucket.name, bucket.capacity ?? null);
+    const metricCodes: Record<string, string> = {
+      'social:benefit:pensions': 'pensions_recipients_year_end',
+      'social:benefit:unemployment': 'unemployment_support_year_end_recipients',
+      'social:benefit:care-allowance': 'care_allowance_december_recipients',
+      'social:benefit:substitute-alimony': 'substitute_alimony_december_recipients',
+    };
+    const metric = socialRecipientMetrics.find((row) => row.metricCode === metricCodes[bucket.id]);
+    if (metric) Object.assign(node.metadata!, {
+      denominatorYear: metric.year,
+      denominatorSourceUrl: metric.sourceUrl,
+      denominatorLabel: metric.metricName,
+      denominatorPeriod: metric.denominatorKind,
+    });
+    addNode(nodes, node);
     links.push(
       makeLink(
         SOCIAL_MINISTRY_ID,

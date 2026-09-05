@@ -1167,3 +1167,10 @@ button, select, input { font: inherit; }
     flex-direction: column;
   }
 }
+.metric-coverage {
+  margin: 0;
+  padding: 12px 20px;
+  color: #cbd5e1;
+  background: #132238;
+  font-size: 0.875rem;
+}

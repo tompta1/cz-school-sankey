@@ -21,6 +21,10 @@ PRISON_SOURCE_URL = (
     "https://www.vscr.cz/media/organizacni-jednotky/generalni-reditelstvi/odbor-spravni/"
     "statistiky/rocenky/statisticka-rocenka-vezenske-sluzby-ceske-republiky-za-rok-2024.pdf"
 )
+PRISON_SOURCE_URLS = {
+    2024: PRISON_SOURCE_URL,
+    2025: "https://www.vs.gov.cz/media/organizacni-jednotky/generalni-reditelstvi/odbor-spravni/statistiky/rocenky/statisticka-rocenka-vezenske-sluzby-ceske-republiky-za-rok-2025-1.pdf",
+}
 
 DECIMAL_RE = re.compile(r"\d[\d ]*,\d+")
 
@@ -45,7 +49,7 @@ COURT_SHEETS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch justice activity denominators from official court and prison sources")
-    parser.add_argument("--year", type=int, default=2024, help="Reporting year currently supported")
+    parser.add_argument("--year", type=int, action="append", choices=[2024, 2025], help="Repeat for each reporting year")
     parser.add_argument("--snapshot", default=None, help="Snapshot label, defaults to YYYYMMDD")
     parser.add_argument(
         "--out-dir",
@@ -119,28 +123,41 @@ def court_activity_rows(workbook_path: Path) -> list[dict[str, object]]:
     ]
 
 
-def prison_activity_rows(pdf_path: Path) -> list[dict[str, object]]:
-    reader = PdfReader(str(pdf_path))
-    page_text = (reader.pages[76].extract_text() or "").replace("\xa0", " ")
-    target_line = None
-    for line in page_text.splitlines():
-        if line.strip().startswith("Celkem "):
-            target_line = " ".join(line.split())
-            break
-    if target_line is None:
-        raise RuntimeError("Could not find average daily prison population line in prison yearbook")
+def parse_prison_population(page_text: str, year: int) -> float:
+    heading = " ".join(page_text.split())
+    if "Průměrné ubytovací kapacity" not in heading or f"za rok {year}" not in heading:
+        raise RuntimeError(f"Not the prison average-population table for {year}")
+    match = re.search(r"^Celkem\s+(.+)$", page_text, re.MULTILINE)
+    if not match:
+        raise RuntimeError("Missing prison population total")
+    tokens = DECIMAL_RE.findall(match.group(1))
+    if len(tokens) != 9:
+        raise RuntimeError("Unexpected prison population columns")
+    values = [float(token.replace(" ", "").replace(",", ".")) for token in tokens]
+    if values[5] <= 0 or abs(values[3] + values[4] - values[5]) > 1:
+        raise RuntimeError("Prison population components do not reconcile")
+    return values[5]
 
-    numeric_tokens = DECIMAL_RE.findall(target_line)
-    average_daily_inmates = float(numeric_tokens[5].replace(" ", "").replace(",", "."))
+
+def prison_activity_rows(pdf_path: Path, year: int = 2024) -> list[dict[str, object]]:
+    reader = PdfReader(str(pdf_path))
+    population = None
+    for page in reader.pages:
+        page_text = (page.extract_text() or "").replace("\xa0", " ")
+        if "Průměrné ubytovací kapacity" in " ".join(page_text.split()) and re.search(r"^Celkem\s", page_text, re.MULTILINE):
+            population = parse_prison_population(page_text, year)
+            break
+    if population is None:
+        raise RuntimeError("Could not find average daily prison population line in prison yearbook")
 
     return [
         {
-            "reporting_year": 2024,
+            "reporting_year": year,
             "activity_domain": "prison_service",
             "metric_code": "prison_average_daily_inmates_total",
-            "metric_name": "Průměrný denní stav vězněných osob",
-            "count_value": average_daily_inmates,
-            "source_url": PRISON_SOURCE_URL,
+            "metric_name": "Průměrný stav vězněných osob z měsíčních hlášení",
+            "count_value": population,
+            "source_url": PRISON_SOURCE_URLS[year],
         },
     ]
 
@@ -169,41 +186,32 @@ def write_snapshot(*, out_dir: Path, snapshot: str, rows: list[dict[str, object]
 
 def main() -> None:
     args = parse_args()
-    if args.year != 2024:
-        raise SystemExit("Justice activity denominators are currently implemented for 2024 only")
+    years = sorted(set(args.year or [2024]))
 
     snapshot = timestamp_label(args.snapshot)
     out_dir = args.out_dir
 
-    court_bytes = fetch_bytes(COURT_SOURCE_URL)
-    court_path = Path("/tmp/justice_courts_2024.xlsm")
-    court_path.write_bytes(court_bytes)
-
-    prison_bytes = fetch_bytes(PRISON_SOURCE_URL)
-    prison_path = Path("/tmp/justice_prisons_2024.pdf")
-    prison_path.write_bytes(prison_bytes)
-
-    rows = [*court_activity_rows(court_path), *prison_activity_rows(prison_path)]
+    rows = []
+    sources = []
+    if 2024 in years:
+        court_bytes = fetch_bytes(COURT_SOURCE_URL)
+        court_path = Path("/tmp/justice_courts_2024.xlsm")
+        court_path.write_bytes(court_bytes)
+        rows.extend(court_activity_rows(court_path))
+        sources.append({"reporting_year": 2024, "source_url": COURT_SOURCE_URL, "sha256": sha256_bytes(court_bytes)})
+    for year in years:
+        prison_bytes = fetch_bytes(PRISON_SOURCE_URLS[year])
+        prison_path = Path(f"/tmp/justice_prisons_{year}.pdf")
+        prison_path.write_bytes(prison_bytes)
+        rows.extend(prison_activity_rows(prison_path, year))
+        sources.append({"reporting_year": year, "source_url": PRISON_SOURCE_URLS[year], "sha256": sha256_bytes(prison_bytes)})
 
     metadata = {
         "dataset_code": DATASET_CODE,
         "downloaded_at": datetime.now(UTC).isoformat(),
         "row_count": len(rows),
-        "years": [args.year],
-        "sources": [
-            {
-                "reporting_year": args.year,
-                "source_url": COURT_SOURCE_URL,
-                "sha256": sha256_bytes(court_bytes),
-                "size_bytes": len(court_bytes),
-            },
-            {
-                "reporting_year": args.year,
-                "source_url": PRISON_SOURCE_URL,
-                "sha256": sha256_bytes(prison_bytes),
-                "size_bytes": len(prison_bytes),
-            },
-        ],
+        "years": years,
+        "sources": sources,
         "generator": "etl/justice/fetch_activity_aggregates.py",
         "user_agent": USER_AGENT,
     }
