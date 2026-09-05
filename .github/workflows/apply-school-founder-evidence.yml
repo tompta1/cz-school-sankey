@@ -28,9 +28,9 @@ jobs:
       INPUT_YEARS: ${{ inputs.years }}
       MAX_DB_SIZE_MB: ${{ inputs.max_db_size_mb }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

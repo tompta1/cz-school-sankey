@@ -1,4 +1,3 @@
-import * as echarts from 'echarts';
 import { useEffect, useRef } from 'react';
 
 import { formatCompactCzk, formatInteger, formatPerPupil, formatPerUnit } from '../lib/format';
@@ -286,7 +285,13 @@ export function SankeyChartCard({
         .filter((n) => typeof n.metadata?.capacity === 'number')
         .map((n) => [n.id, n.metadata!.capacity as number]),
     );
-    const chart = echarts.init(el, undefined, { renderer: 'canvas' });
+    let cancelled = false;
+    let chart: import('echarts').ECharts | null = null;
+    let ro: ResizeObserver | null = null;
+
+    import('echarts').then((echarts) => {
+      if (cancelled) return;
+      chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
     function resolveClickedNodeId(params: unknown): string | null {
       const p = params as {
@@ -329,14 +334,19 @@ export function SankeyChartCard({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       : buildActiveOption(nodes, links, idToDisplay, perPupil, capacityMap, w, perUnitLabel, metricModeLabel, unitCountLabel, totalAmountLabel) as any;
 
-    chart.setOption(buildOption(el.clientWidth));
-
-    const ro = new ResizeObserver(() => {
       chart.setOption(buildOption(el.clientWidth));
-      chart.resize();
+
+      ro = new ResizeObserver(() => {
+        chart?.setOption(buildOption(el.clientWidth));
+        chart?.resize();
+      });
+      ro.observe(el);
     });
-    ro.observe(el);
-    return () => { ro.disconnect(); chart.dispose(); };
+    return () => {
+      cancelled = true;
+      ro?.disconnect();
+      chart?.dispose();
+    };
   }, [nodes, links, prevActive, perPupil, perUnitLabel, metricModeLabel, unitCountLabel, totalAmountLabel]);
 
   // Previous-year chart
@@ -349,7 +359,13 @@ export function SankeyChartCard({
         .filter((n) => typeof n.metadata?.capacity === 'number')
         .map((n) => [n.id, n.metadata!.capacity as number]),
     );
-    const chart = echarts.init(el, undefined, { renderer: 'canvas' });
+    let cancelled = false;
+    let chart: import('echarts').ECharts | null = null;
+    let ro: ResizeObserver | null = null;
+
+    import('echarts').then((echarts) => {
+      if (cancelled) return;
+      chart = echarts.init(el, undefined, { renderer: 'canvas' });
 
     function resolveClickedNodeId(params: unknown): string | null {
       const p = params as {
@@ -395,14 +411,19 @@ export function SankeyChartCard({
       return buildGhostOption(prevNodes, prevLinks, perPupil, capacityMap, w) as any;
     };
 
-    chart.setOption(buildOption(el.clientWidth));
-
-    const ro = new ResizeObserver(() => {
       chart.setOption(buildOption(el.clientWidth));
-      chart.resize();
+
+      ro = new ResizeObserver(() => {
+        chart?.setOption(buildOption(el.clientWidth));
+        chart?.resize();
+      });
+      ro.observe(el);
     });
-    ro.observe(el);
-    return () => { ro.disconnect(); chart.dispose(); };
+    return () => {
+      cancelled = true;
+      ro?.disconnect();
+      chart?.dispose();
+    };
   }, [prevNodes, prevLinks, prevActive, perPupil, perUnitLabel, metricModeLabel, unitCountLabel, totalAmountLabel]);
 
   const curHeight  = Math.min(Math.max(500, nodes.length * 38), 16_000);
