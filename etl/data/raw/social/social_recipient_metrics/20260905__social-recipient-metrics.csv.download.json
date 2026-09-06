@@ -1,0 +1,16 @@
+{
+  "dataset_code": "social_recipient_metrics",
+  "downloaded_at": "2026-09-05T14:28:57.563468+00:00",
+  "years": [
+    2024,
+    2025
+  ],
+  "row_count": 8,
+  "generator": "etl/social/fetch_recipient_metrics.py",
+  "user_agent": "cz-school-sankey-social-etl/0.1",
+  "sources": [
+    "https://data.cssz.cz/dump/duchodci-v-cr-krajich-okresech.csv",
+    "https://data.mpsv.cz/documents/20142/7393973/Informace%2Bo%2Bvyplacen%C3%BDch%2Bd%C3%A1vk%C3%A1ch%2Bv%2Bprosinci%2B2024.pdf/a8e89cce-b4a6-d562-2e2c-d4ee4e043a9f?t=1738832892949",
+    "https://mpsv.gov.cz/cms/documents/b4f5f6d9-0379-7d8d-9bfb-6920365cbc20/Informace%20o%20vyplacen%C3%BDch%20d%C3%A1vk%C3%A1ch%20v%20prosinci%202025.pdf"
+  ]
+}
