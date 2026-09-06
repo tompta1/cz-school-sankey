@@ -23,8 +23,8 @@ SOURCE_SPECS = {
         "basis": "realized",
     },
     2025: {
-        "url": "https://msp.gov.cz/documents/d/msp/zavazne-ukazatele-2025-pdf",
-        "basis": "budgeted",
+        "url": "https://msp.gov.cz/documents/d/msp/zu-kapitoly-za-rok-2025-pdf",
+        "basis": "realized",
     },
 }
 
@@ -136,6 +136,21 @@ def build_rows_2024(pages: list[str], source_url: str) -> list[dict[str, object]
 
 
 def build_rows_2025(pages: list[str], source_url: str) -> list[dict[str, object]]:
+    summary = [page for page in pages if "Tabulka č. 3d" in page
+               and "12.2021 - 12.2025" in page and "542 Soudni ctví" in page]
+    if len(summary) != 1:
+        raise RuntimeError("Expected one 2025 five-year functional expenditure table")
+    # Table 3d uses the same fifth numeric column and categories as 2024.
+    rows = build_rows_2024(summary, source_url)
+    for row in rows:
+        row["reporting_year"] = 2025
+    total = rows[0]["amount_czk"]
+    if total <= 0 or sum(row["amount_czk"] for row in rows[1:]) != total:
+        raise RuntimeError("2025 justice spending categories do not reconcile")
+    return rows
+
+
+def build_budgeted_rows_2025(pages: list[str], source_url: str) -> list[dict[str, object]]:
     line = normalize_space(" ".join(pages))
 
     def extract_amount(label: str) -> int:
