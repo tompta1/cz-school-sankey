@@ -227,8 +227,8 @@ def main() -> None:
         "row_count": len(rows),
         "years": years,
         "source_urls": {str(year): SOURCE_URLS[year] for year in years},
-        "sha256": {str(year): sha256_bytes(pdf_bytes) for year, pdf_bytes in downloads},
-        "size_bytes": {str(year): len(pdf_bytes) for year, pdf_bytes in downloads},
+        "sha256": sha256_bytes(b"".join(pdf_bytes for _, pdf_bytes in downloads)),
+        "size_bytes": sum(len(pdf_bytes) for _, pdf_bytes in downloads),
         "generator": "etl/mv/fetch_fire_rescue_activity_aggregates.py",
         "user_agent": USER_AGENT,
     }
