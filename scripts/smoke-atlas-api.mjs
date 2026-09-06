@@ -153,6 +153,14 @@ async function main() {
   assert(hzs2025?.metadata?.denominatorYear === 2025, 'MV 2025 HZS denominator has wrong source year');
   assert(hzs2025?.metadata?.denominatorSourceUrl?.startsWith('https://'), 'MV 2025 HZS denominator has no source');
 
+  const mvFireRescue2025 = await fetchJson('/api/atlas/mv?year=2025&nodeId=security%3Afire-rescue');
+  assert(
+    mvFireRescue2025.nodes.some(
+      (node) => node.id === 'security:fire-rescue:region:CZ020' && Number(node.metadata?.capacity) === 19354,
+    ),
+    'MV 2025 HZS regional drilldown is missing Stredocesky total',
+  );
+
   const justice2024 = await fetchJson('/api/atlas/justice?year=2024');
   assert(
     justice2024.nodes.some((node) => node.id === 'justice:courts'),
