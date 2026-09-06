@@ -841,7 +841,11 @@ jobs:
             python3 ./scripts/vacuum-neon-etl-tables.py \
               --database-url "$DATABASE_URL" | tee -a "$GITHUB_STEP_SUMMARY"
 
-            python3 ./scripts/check-neon-db-size.py \
-              --database-url "$DATABASE_URL" \
-              --max-size-mb "${max_db_size_mb}" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Check Neon storage after refresh
+        if: always()
+        run: |
+          python3 ./scripts/check-neon-db-size.py \
+            --database-url "$DATABASE_URL" \
+            --max-size-mb "${INPUT_MAX_DB_SIZE_MB:-440}" | tee -a "$GITHUB_STEP_SUMMARY"

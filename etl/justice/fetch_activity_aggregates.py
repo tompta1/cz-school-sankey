@@ -133,10 +133,12 @@ def court_activity_rows(workbook_path: Path) -> list[dict[str, object]]:
 
 def disposed_total_from_2025_pdf(page_text: str, court_type: str) -> int:
     normalized = " ".join(page_text.replace("\xa0", " ").split())
-    value_pattern = r"\d+ \d+ \d+" if court_type == "Okresní soudy" else r"\d+ \d+"
+    if court_type not in {"Okresní soudy", "Krajské soudy"}:
+        raise ValueError(f"Unsupported court type: {court_type}")
+    value_pattern = r"[1-9]\d{0,2} \d{3} \d{3}" if court_type == "Okresní soudy" else r"[1-9]\d{0,2} \d{3}"
     pattern = re.compile(
         rf"{re.escape(court_type)} 2021 2022 2023 2024 2025 "
-        rf"Počet vyřízených věcí ({value_pattern}) ({value_pattern}) ({value_pattern}) ({value_pattern}) ({value_pattern})"
+        rf"Počet vyřízených věcí ({value_pattern}) ({value_pattern}) ({value_pattern}) ({value_pattern}) ({value_pattern}) Výdaje celkem"
     )
     match = pattern.search(normalized)
     if not match:

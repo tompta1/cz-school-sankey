@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "justice"))
 import fetch_activity_aggregates as justice
@@ -17,3 +18,9 @@ def test_2025_final_account_completed_court_totals():
 
     assert justice.disposed_total_from_2025_pdf(text, "Okresní soudy") == 2_067_110
     assert justice.disposed_total_from_2025_pdf(text, "Krajské soudy") == 226_500
+    with pytest.raises(RuntimeError):
+        justice.disposed_total_from_2025_pdf(text.replace("2 067 110", "2 067"), "Okresní soudy")
+    with pytest.raises(RuntimeError):
+        justice.disposed_total_from_2025_pdf(text.replace("226 500", "226 500 123"), "Krajské soudy")
+    with pytest.raises(ValueError):
+        justice.disposed_total_from_2025_pdf(text, "Unknown")
