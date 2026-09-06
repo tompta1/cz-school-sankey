@@ -111,7 +111,7 @@ def expected_datasets(domain: str, years: set[int]) -> set[str]:
         return {"transport_budget_entities", "transport_sfdi_projects", "transport_activity_metrics"}
     if domain == "security":
         return {"mv_budget_aggregates", "mv_police_crime_aggregates"} | (
-            {"mv_fire_rescue_activity_aggregates"} if 2024 in supported else set()
+            {"mv_fire_rescue_activity_aggregates"} if supported else set()
         )
     if domain == "mf":
         return {"mf_budget_entities", "mf_activity_metrics"}

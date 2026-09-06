@@ -293,6 +293,7 @@ interface MvFireRescueActivityAggregate {
   indicatorName: string;
   countValue: number;
   sourceDataset: string;
+  sourceUrl: string | null;
 }
 
 interface OutpatientDirectoryRow {

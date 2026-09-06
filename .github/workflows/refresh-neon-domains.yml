@@ -728,12 +728,10 @@ jobs:
 
           if contains_domain mv; then
             mv_year_args=()
-            mv_has_2024=false
             for year in ${requested_years}; do
               case "${year}" in
                 2024)
                   mv_year_args+=(--year "${year}")
-                  mv_has_2024=true
                   ;;
                 2025)
                   mv_year_args+=(--year "${year}")
@@ -745,18 +743,14 @@ jobs:
               if [[ "${refresh_sources}" == "true" ]]; then
                 python3 etl/mv/fetch_budget_aggregates.py "${mv_year_args[@]}"
                 python3 etl/mv/fetch_police_crime_aggregates.py "${mv_year_args[@]}"
-                if [[ "${mv_has_2024}" == "true" ]]; then
-                  python3 etl/mv/fetch_fire_rescue_activity_aggregates.py --year 2024
-                fi
+                python3 etl/mv/fetch_fire_rescue_activity_aggregates.py "${mv_year_args[@]}"
               fi
 
               mv_load_args=(
                 --dataset mv_budget_aggregates
                 --dataset mv_police_crime_aggregates
+                --dataset mv_fire_rescue_activity_aggregates
               )
-              if [[ "${mv_has_2024}" == "true" ]]; then
-                mv_load_args+=(--dataset mv_fire_rescue_activity_aggregates)
-              fi
 
               python3 etl/load_mv_raw.py "${mv_load_args[@]}" --database-url "$DATABASE_URL"
             else

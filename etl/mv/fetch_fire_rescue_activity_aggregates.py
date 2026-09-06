@@ -14,9 +14,14 @@ from pypdf import PdfReader
 from _common import RAW_ROOT, USER_AGENT, fetch_bytes, sha256_bytes, timestamp_label
 
 DATASET_CODE = "mv_fire_rescue_activity_aggregates"
-SOURCE_URL = "https://hzscr.gov.cz/hasicien/ViewFile.aspx?docid=22436114"
+SOURCE_URLS = {
+    2024: "https://hzscr.gov.cz/hasicien/ViewFile.aspx?docid=22436114",
+    2025: "https://hzscr.gov.cz/documents/rocenka2025?disposition=attachment",
+}
+# Keep the old constant for callers that imported it before multi-year support.
+SOURCE_URL = SOURCE_URLS[2024]
 OUTPUT_FILE_NAME = "mv-fire-rescue-activity-aggregates.csv"
-SUPPORTED_YEAR = 2024
+SUPPORTED_YEARS = frozenset(SOURCE_URLS)
 
 REGION_MAP = {
     "Hl. m. Praha": ("CZ010", "Hlavní město Praha"),
@@ -49,7 +54,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Fetch HZS activity aggregates from the official HZS statistical yearbook"
     )
-    parser.add_argument("--year", type=int, default=SUPPORTED_YEAR, help="Reporting year, currently only 2024 is supported")
+    parser.add_argument(
+        "--year",
+        type=int,
+        action="append",
+        choices=sorted(SUPPORTED_YEARS),
+        help="Reporting year; may be supplied more than once",
+    )
     parser.add_argument("--snapshot", default=None, help="Snapshot label, defaults to YYYYMMDD")
     parser.add_argument(
         "--out-dir",
@@ -104,52 +115,74 @@ def extract_region_rows(reader: PdfReader) -> list[dict[str, object]]:
     return rows
 
 
-def extract_national_rows(reader: PdfReader) -> list[dict[str, object]]:
+def extract_national_rows(reader: PdfReader, reporting_year: int) -> list[dict[str, object]]:
     text = reader.pages[29].extract_text() or ""
     national_line = None
     for line in text.splitlines():
         candidate = line.strip()
-        if candidate.startswith("Celkem 135 632 148 836 110"):
+        if candidate.startswith("Celkem ") and (
+            (reporting_year == 2024 and "148 836" in candidate)
+            or (reporting_year == 2025 and "142 029" in candidate)
+        ):
             national_line = candidate
             break
     if not national_line:
         raise RuntimeError("Could not find national HZS totals in the HZS yearbook")
 
-    tokens = national_line.split()[1:]
-    if len(tokens) < 24:
-        raise RuntimeError(f"Unexpected national HZS totals layout: {national_line}")
-
-    national_hzs_2024 = parse_int(" ".join(tokens[2:4]))
-    national_jpo_total_2024 = parse_int(" ".join(tokens[21:23]))
+    if reporting_year == 2025:
+        # The 2025 table has two years plus an index for each unit type. The
+        # explicit groups avoid confusing thousands separators with columns.
+        match = re.match(
+            r"^Celkem\s+"
+            r"(\d+\s+\d+)\s+(\d+\s+\d+)\s+\d+\s+"
+            r"(\d+\s+\d+)\s+(\d+\s+\d+)\s+\d+\s+"
+            r"(\d+\s+\d+)\s+(\d+\s+\d+)\s+\d+\s+"
+            r"(\d+\s+\d+)\s+(\d+\s+\d+)\s+\d+\s+"
+            r"(\d+\s+\d+)\s+(\d+\s+\d+)\s+\d+$",
+            national_line,
+        )
+        if not match:
+            raise RuntimeError(f"Unexpected national HZS totals layout: {national_line}")
+        national_hzs = parse_int(match.group(2))
+        national_jpo_total = parse_int(match.group(10))
+    else:
+        tokens = national_line.split()[1:]
+        if len(tokens) < 24:
+            raise RuntimeError(f"Unexpected national HZS totals layout: {national_line}")
+        national_hzs = parse_int(" ".join(tokens[2:4]))
+        national_jpo_total = parse_int(" ".join(tokens[21:23]))
     return [
         {
             "region_name": "Česko",
             "region_code": "CZ",
             "indicator_code": "hzs_interventions",
             "indicator_name": "Počet zásahů HZS ČR",
-            "count_value": national_hzs_2024,
+            "count_value": national_hzs,
         },
         {
             "region_name": "Česko",
             "region_code": "CZ",
             "indicator_code": "jpo_total_interventions",
             "indicator_name": "Počet zásahů jednotek požární ochrany celkem",
-            "count_value": national_jpo_total_2024,
+            "count_value": national_jpo_total,
         },
     ]
 
 
 def build_rows(pdf_bytes: bytes, reporting_year: int) -> list[dict[str, object]]:
-    if reporting_year != SUPPORTED_YEAR:
-        raise RuntimeError("Only 2024 HZS activity parsing is implemented")
+    if reporting_year not in SUPPORTED_YEARS:
+        raise RuntimeError(f"Unsupported HZS activity year: {reporting_year}")
 
     reader = PdfReader(io.BytesIO(pdf_bytes))
     rows = []
-    rows.extend(extract_national_rows(reader))
-    rows.extend(extract_region_rows(reader))
+    rows.extend(extract_national_rows(reader, reporting_year))
+    # The 2025 yearbook changed this appendix to district-level rows. Keep the
+    # verified 2024 regional split, but do not infer a 2025 regional mapping.
+    if reporting_year == 2024:
+        rows.extend(extract_region_rows(reader))
     for row in rows:
         row["reporting_year"] = reporting_year
-        row["source_url"] = SOURCE_URL
+        row["source_url"] = SOURCE_URLS[reporting_year]
     return rows
 
 
@@ -179,17 +212,23 @@ def write_snapshot(*, out_dir: Path, snapshot: str, rows: list[dict[str, object]
 def main() -> None:
     args = parse_args()
     snapshot = timestamp_label(args.snapshot)
-    pdf_bytes = fetch_bytes(SOURCE_URL)
-    rows = build_rows(pdf_bytes, args.year)
+    years = sorted(set(args.year or [max(SUPPORTED_YEARS)]))
+    rows: list[dict[str, object]] = []
+    downloads: list[tuple[int, bytes]] = []
+    for year in years:
+        pdf_bytes = fetch_bytes(SOURCE_URLS[year])
+        downloads.append((year, pdf_bytes))
+        rows.extend(build_rows(pdf_bytes, year))
 
     metadata = {
         "dataset_code": DATASET_CODE,
-        "source_url": SOURCE_URL,
+        "source_url": SOURCE_URLS[years[-1]],
         "downloaded_at": datetime.now(UTC).isoformat(),
         "row_count": len(rows),
-        "years": [args.year],
-        "sha256": sha256_bytes(pdf_bytes),
-        "size_bytes": len(pdf_bytes),
+        "years": years,
+        "source_urls": {str(year): SOURCE_URLS[year] for year in years},
+        "sha256": {str(year): sha256_bytes(pdf_bytes) for year, pdf_bytes in downloads},
+        "size_bytes": {str(year): len(pdf_bytes) for year, pdf_bytes in downloads},
         "generator": "etl/mv/fetch_fire_rescue_activity_aggregates.py",
         "user_agent": USER_AGENT,
     }

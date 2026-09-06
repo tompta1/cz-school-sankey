@@ -52,6 +52,7 @@ interface MvFireRescueActivityAggregate {
   indicatorName: string;
   countValue: number;
   sourceDataset: string;
+  sourceUrl: string | null;
 }
 
 const STATE_ID = 'state:cr';
@@ -120,6 +121,8 @@ function createMvBranchNode(
   name: string,
   capacity: number | null = null,
   drilldownAvailable = false,
+  denominatorYear: number | null = null,
+  denominatorSourceUrl: string | null = null,
 ): AtlasNode {
   return {
     id,
@@ -128,6 +131,8 @@ function createMvBranchNode(
     level: 2,
     metadata: {
       ...(capacity ? { capacity } : {}),
+      ...(denominatorYear ? { denominatorYear } : {}),
+      ...(denominatorSourceUrl ? { denominatorSourceUrl } : {}),
       drilldownAvailable,
       focus: 'security',
     },
@@ -319,7 +324,8 @@ export async function getMvFireRescueActivityAggregates(year: number): Promise<M
         region_code,
         indicator_code,
         indicator_name,
-        count_value
+        count_value,
+        source_url
       from mart.mv_fire_rescue_activity_aggregate_latest
       where reporting_year = $1
       order by region_name, indicator_code
@@ -335,6 +341,7 @@ export async function getMvFireRescueActivityAggregates(year: number): Promise<M
     indicatorName: String(row.indicator_name),
     countValue: toNumber(row.count_value),
     sourceDataset: 'mv_fire_rescue_activity_aggregates',
+    sourceUrl: row.source_url == null ? null : String(row.source_url),
   }));
 }
 
@@ -362,6 +369,9 @@ export function appendMvBranch(
   const policeCapacity = mvNationalCrimeCount(mvPoliceCrimeRows, 'Počet registrovaných skutků');
   const policeDrilldownAvailable = buildMvPoliceRegionRows(mvPoliceCrimeRows).length > 0;
   const fireRescueCapacity = mvNationalFireRescueCount(mvFireRescueRows, 'hzs_interventions');
+  const fireRescueSource = mvFireRescueRows.find(
+    (row) => row.regionCode === 'CZ' && row.indicatorCode === 'hzs_interventions',
+  );
   const fireRescueDrilldownAvailable = buildMvFireRescueRegionRows(mvFireRescueRows).length > 0;
 
   addNode(nodes, createMvMinistryNode());
@@ -392,6 +402,8 @@ export function appendMvBranch(
       amount: fireRescueAmount,
       capacity: fireRescueCapacity,
       drilldownAvailable: fireRescueDrilldownAvailable,
+      denominatorYear: fireRescueSource?.year ?? null,
+      denominatorSourceUrl: fireRescueSource?.sourceUrl ?? null,
       note: 'Specifický ukazatel kapitoly 314: Výdaje Hasičského záchranného sboru ČR',
     },
     {
@@ -421,7 +433,17 @@ export function appendMvBranch(
   ];
 
   for (const bucket of buckets.filter((entry) => entry.amount > 0)) {
-    addNode(nodes, createMvBranchNode(bucket.id, bucket.name, bucket.capacity, bucket.drilldownAvailable));
+    addNode(
+      nodes,
+      createMvBranchNode(
+        bucket.id,
+        bucket.name,
+        bucket.capacity,
+        bucket.drilldownAvailable,
+        'denominatorYear' in bucket ? bucket.denominatorYear : null,
+        'denominatorSourceUrl' in bucket ? bucket.denominatorSourceUrl : null,
+      ),
+    );
     links.push(
       makeLink(
         MV_MINISTRY_ID,
@@ -640,7 +662,20 @@ export function buildMvFireRescueRegionGraph(
 
   addNode(nodes, createStateNode(null));
   addNode(nodes, createMvMinistryNode());
-  addNode(nodes, createMvBranchNode(MV_FIRE_RESCUE_ID, 'HZS CR', nationalInterventionCount, true));
+  const fireRescueSource = mvFireRescueRows.find(
+    (row) => row.regionCode === 'CZ' && row.indicatorCode === 'hzs_interventions',
+  );
+  addNode(
+    nodes,
+    createMvBranchNode(
+      MV_FIRE_RESCUE_ID,
+      'HZS CR',
+      nationalInterventionCount,
+      true,
+      fireRescueSource?.year ?? null,
+      fireRescueSource?.sourceUrl ?? null,
+    ),
+  );
 
   links.push(
     makeLink(

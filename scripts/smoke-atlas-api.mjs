@@ -147,6 +147,12 @@ async function main() {
     'MV 2024 is missing police branch',
   );
 
+  const mv2025 = await fetchJson('/api/atlas/mv?year=2025');
+  const hzs2025 = mv2025.nodes.find((node) => node.id === 'security:fire-rescue');
+  assert(Number(hzs2025?.metadata?.capacity) === 142029, 'MV 2025 is missing HZS intervention denominator');
+  assert(hzs2025?.metadata?.denominatorYear === 2025, 'MV 2025 HZS denominator has wrong source year');
+  assert(hzs2025?.metadata?.denominatorSourceUrl?.startsWith('https://'), 'MV 2025 HZS denominator has no source');
+
   const justice2024 = await fetchJson('/api/atlas/justice?year=2024');
   assert(
     justice2024.nodes.some((node) => node.id === 'justice:courts'),
