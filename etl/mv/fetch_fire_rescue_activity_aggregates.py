@@ -49,6 +49,14 @@ REGION_LINE_RE = re.compile(
     r"(?P<total>\d[\d ]*)\s+\d+$"
 )
 
+HZS_2025_REGION_LINE_RE = re.compile(
+    r"^(?P<hzs>\d+(?: \d{3})?)\s+\d+\s+\d+(?:,\d+)?\s+"
+    r"(?P<jsdh>\d+(?: \d{3})?)\s+\d+\s+\d+(?:,\d+)?\s+"
+    r"(?P<hzs_podnik>\d+(?: \d{3})?)\s+\d+\s+\d+(?:,\d+)?\s+"
+    r"(?P<jsdh_podnik>\d+(?: \d{3})?)\s+\d+(?:,\d+)?\s+"
+    r"(?P<total>\d+(?: \d{3})?)\s+\d+$"
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -115,6 +123,46 @@ def extract_region_rows(reader: PdfReader) -> list[dict[str, object]]:
     return rows
 
 
+def extract_2025_region_rows(reader: PdfReader) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for page_index in (32, 33):
+        text = reader.pages[page_index].extract_text() or ""
+        for line in text.splitlines():
+            candidate = line.strip()
+            region_key = next((key for key in REGION_MAP if candidate.startswith(f"{key} ")), None)
+            if region_key is None:
+                continue
+            match = HZS_2025_REGION_LINE_RE.match(candidate[len(region_key) + 1 :])
+            if not match:
+                continue
+            region_code, region_name = REGION_MAP[region_key]
+            rows.extend(
+                [
+                    {
+                        "region_name": region_name,
+                        "region_code": region_code,
+                        "indicator_code": "hzs_interventions",
+                        "indicator_name": "Počet zásahů HZS ČR",
+                        "count_value": parse_int(match.group("hzs")),
+                    },
+                    {
+                        "region_name": region_name,
+                        "region_code": region_code,
+                        "indicator_code": "jpo_total_interventions",
+                        "indicator_name": "Počet zásahů jednotek požární ochrany celkem",
+                        "count_value": parse_int(match.group("total")),
+                    },
+                ]
+            )
+
+    found_regions = {row["region_name"] for row in rows if row["indicator_code"] == "hzs_interventions"}
+    expected_regions = {region_name for _, region_name in REGION_MAP.values()}
+    if found_regions != expected_regions:
+        missing = sorted(expected_regions - found_regions)
+        raise RuntimeError(f"Missing 2025 HZS region rows for: {', '.join(missing)}")
+    return rows
+
+
 def extract_national_rows(reader: PdfReader, reporting_year: int) -> list[dict[str, object]]:
     text = reader.pages[29].extract_text() or ""
     national_line = None
@@ -176,10 +224,10 @@ def build_rows(pdf_bytes: bytes, reporting_year: int) -> list[dict[str, object]]
     reader = PdfReader(io.BytesIO(pdf_bytes))
     rows = []
     rows.extend(extract_national_rows(reader, reporting_year))
-    # The 2025 yearbook changed this appendix to district-level rows. Keep the
-    # verified 2024 regional split, but do not infer a 2025 regional mapping.
     if reporting_year == 2024:
         rows.extend(extract_region_rows(reader))
+    else:
+        rows.extend(extract_2025_region_rows(reader))
     for row in rows:
         row["reporting_year"] = reporting_year
         row["source_url"] = SOURCE_URLS[reporting_year]
