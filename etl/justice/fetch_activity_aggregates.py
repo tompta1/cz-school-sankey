@@ -17,6 +17,10 @@ DATASET_CODE = "justice_activity_aggregates"
 OUTPUT_FILE_NAME = "justice-activity-aggregates.csv"
 
 COURT_SOURCE_URL = "https://msp.gov.cz/documents/d/msp/data_soudy_2024-xlsm"
+COURT_SOURCE_URLS = {
+    2024: COURT_SOURCE_URL,
+    2025: "https://msp.gov.cz/documents/d/msp/zu-kapitoly-za-rok-2025-pdf",
+}
 PRISON_SOURCE_URL = (
     "https://www.vscr.cz/media/organizacni-jednotky/generalni-reditelstvi/odbor-spravni/"
     "statistiky/rocenky/statisticka-rocenka-vezenske-sluzby-ceske-republiky-za-rok-2024.pdf"
@@ -27,6 +31,10 @@ PRISON_SOURCE_URLS = {
 }
 
 DECIMAL_RE = re.compile(r"\d[\d ]*,\d+")
+
+
+def parse_int(text: str) -> int:
+    return int(text.replace(" ", ""))
 
 COURT_SHEETS = {
     "courts_district_disposed_total": [
@@ -123,6 +131,54 @@ def court_activity_rows(workbook_path: Path) -> list[dict[str, object]]:
     ]
 
 
+def disposed_total_from_2025_pdf(page_text: str, court_type: str) -> int:
+    normalized = " ".join(page_text.replace("\xa0", " ").split())
+    value_pattern = r"\d+ \d+ \d+" if court_type == "Okresní soudy" else r"\d+ \d+"
+    pattern = re.compile(
+        rf"{re.escape(court_type)} 2021 2022 2023 2024 2025 "
+        rf"Počet vyřízených věcí ({value_pattern}) ({value_pattern}) ({value_pattern}) ({value_pattern}) ({value_pattern})"
+    )
+    match = pattern.search(normalized)
+    if not match:
+        raise RuntimeError(f"Could not find 2025 completed-court total for {court_type}")
+    return parse_int(match.group(5))
+
+
+def court_activity_rows_2025(pdf_path: Path) -> list[dict[str, object]]:
+    reader = PdfReader(str(pdf_path))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    district_total = disposed_total_from_2025_pdf(text, "Okresní soudy")
+    regional_total = disposed_total_from_2025_pdf(text, "Krajské soudy")
+    total = district_total + regional_total
+    source_url = COURT_SOURCE_URLS[2025]
+    return [
+        {
+            "reporting_year": 2025,
+            "activity_domain": "courts",
+            "metric_code": "courts_disposed_total",
+            "metric_name": "Vyřízené věci celkem",
+            "count_value": total,
+            "source_url": source_url,
+        },
+        {
+            "reporting_year": 2025,
+            "activity_domain": "courts",
+            "metric_code": "courts_district_disposed_total",
+            "metric_name": "Vyřízené věci okresních soudů",
+            "count_value": district_total,
+            "source_url": source_url,
+        },
+        {
+            "reporting_year": 2025,
+            "activity_domain": "courts",
+            "metric_code": "courts_regional_disposed_total",
+            "metric_name": "Vyřízené věci krajských soudů",
+            "count_value": regional_total,
+            "source_url": source_url,
+        },
+    ]
+
+
 def parse_prison_population(page_text: str, year: int) -> float:
     heading = " ".join(page_text.split())
     if "Průměrné ubytovací kapacity" not in heading or f"za rok {year}" not in heading:
@@ -199,6 +255,16 @@ def main() -> None:
         court_path.write_bytes(court_bytes)
         rows.extend(court_activity_rows(court_path))
         sources.append({"reporting_year": 2024, "source_url": COURT_SOURCE_URL, "sha256": sha256_bytes(court_bytes)})
+    if 2025 in years:
+        court_2025_bytes = fetch_bytes(COURT_SOURCE_URLS[2025])
+        court_2025_path = Path("/tmp/justice_courts_2025.pdf")
+        court_2025_path.write_bytes(court_2025_bytes)
+        rows.extend(court_activity_rows_2025(court_2025_path))
+        sources.append({
+            "reporting_year": 2025,
+            "source_url": COURT_SOURCE_URLS[2025],
+            "sha256": sha256_bytes(court_2025_bytes),
+        })
     for year in years:
         prison_bytes = fetch_bytes(PRISON_SOURCE_URLS[year])
         prison_path = Path(f"/tmp/justice_prisons_{year}.pdf")

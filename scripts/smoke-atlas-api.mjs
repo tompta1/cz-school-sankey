@@ -167,6 +167,12 @@ async function main() {
     'justice 2024 is missing courts branch',
   );
 
+  const justice2025 = await fetchJson('/api/atlas/justice?year=2025');
+  const courts2025 = justice2025.nodes.find((node) => node.id === 'justice:courts');
+  assert(Number(courts2025?.metadata?.capacity) === 2293610, 'justice 2025 is missing court activity denominator');
+  assert(courts2025?.metadata?.denominatorYear === 2025, 'justice 2025 court denominator has wrong source year');
+  assert(courts2025?.metadata?.denominatorSourceUrl?.startsWith('https://'), 'justice 2025 court denominator has no source');
+
   const agriculture2024 = await fetchJson('/api/atlas/agriculture?year=2024');
   assert(
     agriculture2024.nodes.some((node) => node.id === 'agriculture:subsidy:total'),
